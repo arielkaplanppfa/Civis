@@ -1,0 +1,8 @@
+SELECT 'Legacy Society',upper(x.current_giving_level), c.race, count(n.id) FROM vansync.catalist_appends_mym c 
+join rounddata.alternate_id a on c.vanid = a.valuex and typex = 'Van'
+join rounddata.contact n on a.contact = n.id
+join rounddata.accountx x on n.accountid = x.id
+where n.delete_flag <> 'Y' and x.delete_flag <> 'Y' and
+exists (select 'x' from rounddata.rc_bios__preference p where x.id = p.rc_bios__account and p.rc_bios__subcategory = 'National Legacy Society')
+group by 1,upper(x.current_giving_level), c.race
+order by 1,2,3;
