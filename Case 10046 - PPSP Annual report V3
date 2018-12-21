@@ -1,0 +1,23 @@
+with temp as (
+  select f.accountid, sum(f.amount)
+  from rounddata.rd_ppfa_fytd_transactions_fy18 f
+  where (f.SOURCE_CODE like '3P%' or (f.SOURCE_CODE like '3N%' and f.AFFILIATE_NUMBER = '091460'))
+  group by f.accountid
+  having sum(f.amount) >= 100
+)
+select 'Hard Credit',a.NAMEX "Account Name", a.RC_BIOS__PREFERRED_CONTACT_EMA "Email", a.SHIPPINGADDRESS "Address", f.RC_GIVING__CURRENT_GIVING_AMOU "Gift Amount", f.Closedate "Gift Date", f.ORIGINAL_SOURCE_CODE "Source", a.last_fiscal_year_giving_amount "FY18 Giving Amount" 
+from rounddata.opportunity f 
+join rounddata.accountx a on f.ACCOUNTID = a.ID
+join rounddata.recordtype r on f.RECORDTYPEID = r.id
+where r.DEVELOPERNAME in ('Donation', 'Pledge')
+and f.CLOSEDATE >= '2017-07-01' and f.CLOSEDATE <= '2018-06-30'
+and (f.ORIGINAL_SOURCE_CODE like '3P%' or (f.ORIGINAL_SOURCE_CODE like '3N%' and f.AFFILIATE_NUMBER = '091460')) 
+and exists (select 'x' from temp t where t.accountid = f.accountid) 
+and not exists (select 'x' from rounddata.rc_bios__preference p where f.Accountid = p.RC_BIOS__ACCOUNT and p.RC_BIOS__SUBCATEGORY = 'Giving Vehicle' and p.RC_BIOS__ACTIVE = 'true' )
+UNION
+select 'Soft Credit',a.NAMEX "Account Name", a.RC_BIOS__PREFERRED_CONTACT_EMA "Email", a.SHIPPINGADDRESS "Address", c.RC_GIVING__AMOUNT "Gift Amount", c.CREDIT_CLOSE_DATE "Gift Date", f.SOURCE_CODE "Source", a.last_fiscal_year_giving_amount "FY18 Giving Amount" 
+from rounddata.rc_giving__opportunity_credit c
+join rounddata.rd_ppfa_fytd_transactions_fy18 f on c.RC_GIVING__OPPORTUNITY = f.RC_GIVING__PARENT
+join rounddata.accountx a on c.ACCOUNT_ID = a.ID
+where  c.AFFILIATE_NUMBER = '091460'
+and c.RC_GIVING__AMOUNT >= 100
