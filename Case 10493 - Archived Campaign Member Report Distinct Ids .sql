@@ -1,4 +1,4 @@
-SELECT distinct c.id
+SELECT distinct c.id, c.accountid
 FROM rounddata.contact c 
 join rounddata.campaignmember cm on c.id = cm.contactid 
 join rounddata.campaign p on cm.campaignid = p.id
