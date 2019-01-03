@@ -1,0 +1,8 @@
+drop table if exists rounddata.civis_contact_match;
+create table rounddata.civis_contact_match as (
+Select  c.ID "Contact GUID", AUTO_CONTACT_NUMBER "Contact Number", TITLE "Title", firstname "First", rc_bios__middle_name "Middle", lastname "Last",
+suffix_multi "Suffix", mailingstreet "Street", mailingcity "City", mailingstate "State", mailingcountry "Country", mailingpostalcode "Zip",MAILINGPOSTALCODE5DIGIT "Zip 5 Digit",
+c.Phone "Phone", c.Email "Email", CASE WHEN preferred_pronouns = 'He, Him, His' THEN 'M' WHEN preferred_pronouns = 'She, Her, Hers' THEN 'F' ELSE 'U' END as "Pronouns", Birthdate "Birth Date", accountid "Household ID"
+from rounddata.contact c join rounddata.accountx a on c.accountid = a.ID
+where c.RC_BIOS__ACTIVE = 'true' and c.delete_flag <> 'Y'
+and a.RECORDTYPEID <> '01236000000Ke8lAAC');
