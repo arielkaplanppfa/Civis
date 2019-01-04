@@ -1,0 +1,12 @@
+select o.closedate as "Gift Date", o.rc_giving__closed_amount as "Gift Amount", o.original_source_code as "Source Code", a.accountnumber "Account Number", a.id as "Account ID", a.namex as "Account Name", a.current_giving_level as "Giving Level", p.rc_bios__start_date as "Start Date",
+a.Largest_previous_contribution, a.Largest_previous_contributio0, a.Largest_previous_contributio1,a.last_gift_date "Last Gift Date", a.last_gift_amount as "Last Gift Amount", a.last_gift_source_code as "Last Gift Source", fyx.FY16 as "FY16 Giving", fyv.FY17 as "FY17 Giving"   
+from rounddata.opportunity o 
+join rounddata.rc_giving__opportunity_credit c on c.rc_giving__opportunity = o.id
+join rounddata.rc_bios__preference p on c.rc_giving__account = p.rc_bios__account
+join rounddata.accountx a on p.rc_bios__account = a.id
+left join ( select oo.accountid, sum(oo.rc_giving__closed_amount) as "FY16" from rounddata.opportunity oo where oo.recordtypeid in ('01236000001HtyQAAS','01236000001HtyVAAS') and 
+      oo.closedate between '01-JUl-15' and '30-JUN-16' group by oo.accountid) as fyx on a.id = fyx.accountid 
+left join ( select oo.accountid, sum(oo.rc_giving__closed_amount) as "FY17" from rounddata.opportunity oo where oo.recordtypeid in ('01236000001HtyQAAS','01236000001HtyVAAS') and 
+      oo.closedate between '01-JUl-16' and '30-JUN-17' group by oo.accountid) as fyv on a.id = fyv.accountid
+where o.accountid = '0013600001avq94AAA' and c.credit_close_date between '01-JUl-15' and '30-JUN-17'
+and p.rc_bios__category = 'Giving Level' and p.rc_bios__subcategory like 'Mid%' and p.rc_bios__active = 'true'
