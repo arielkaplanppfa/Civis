@@ -3,7 +3,7 @@ with temp as
   select rc_giving__opportunity, id from rounddata.rc_giving__opportunity_credit o where o.credit_close_date between '2015-07-01' and '2018-06-30'
 )
 SELECT 'Hard Credit' as "Credit Type", o.accountid "Account ID",a.namex "Account Name", a.accountnumber "Account Number", a.rc_bios__category "Category",
-o.id "Giving ID",o.deposit_date "Deposit Date", o.closedate "Close Date",o.rc_giving__expected_giving_amo "Expected Giving Amount",  o.rc_giving__source_code "Source Code",r.developername "Record Type", o.rc_giving_payment_method "Payment Method", o.gau_credit_code "Credit Code", o.gau_debit_code "Debit Code", CASE 
+o.id "Giving ID",o.deposit_date "Deposit Date", o.closedate "Close Date",o.rc_giving__expected_giving_amo "Expected Giving Amount",  o.rc_giving__source_code "Source Code",r.developername "Record Type", o.rc_giving__payment_method "Payment Method", o.gau_credit_code "Credit Code", o.gau_debit_code "Debit Code", CASE 
 when o.closedate between '2017-07-01' and '2018-06-30' then 'FY18'
 when o.closedate between '2016-07-01' and '2017-06-30' then 'FY17'
 when o.closedate between '2015-07-01' and '2016-06-30' then 'FY16'
