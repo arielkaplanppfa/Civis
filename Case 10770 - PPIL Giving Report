@@ -1,9 +1,10 @@
 with temp as 
 (
   select rc_giving__opportunity, id from rounddata.rc_giving__opportunity_credit o where o.credit_close_date between '2015-07-01' and '2018-06-30'
+  and o.affiliate_number = '090430'
 )
 SELECT 'Hard Credit' as "Credit Type", o.accountid "Account ID",a.namex "Account Name", a.accountnumber "Account Number", a.rc_bios__category "Category",
-o.id "Giving ID",o.deposit_date "Deposit Date", o.closedate "Close Date",o.rc_giving__expected_giving_amo "Expected Giving Amount",  o.rc_giving__source_code "Source Code",r.developername "Record Type", o.rc_giving__payment_method "Payment Method", o.gau_credit_code "Credit Code", o.gau_debit_code "Debit Code", CASE 
+o.id "Giving ID",o.deposit_date "Deposit Date", o.closedate "Close Date",o.rc_giving__expected_giving_amo "Amount",  o.rc_giving__source_code "Source Code",r.developername "Record Type", o.rc_giving__payment_method "Payment Method", o.gau_credit_code "Credit Code", o.gau_debit_code "Debit Code", CASE 
 when o.closedate between '2017-07-01' and '2018-06-30' then 'FY18'
 when o.closedate between '2016-07-01' and '2017-06-30' then 'FY17'
 when o.closedate between '2015-07-01' and '2016-06-30' then 'FY16'
@@ -11,15 +12,22 @@ else 'NONE' END AS "Fiscal Year", o.rc_giving__comments "Comments", o.originator
 FROM rounddata.opportunity o 
 join rounddata.recordtype r on o.recordtypeid = r.id
 join rounddata.accountx a on o.accountid = a.id
-where (r.developername in ('Transaction','Pledge_Payment') or (r.developername = 'Pledge' and o.rc_giving__is_bookable = 'true')  )
-and (o.amount > 0) and 
+where (r.developername in ('Donation') or (r.developername = 'Pledge' and o.rc_giving__is_bookable = 'true')  )
+and (o.rc_giving__expected_giving_amo > 0) and 
 ( o.rc_giving__source_code like '3L%' or (o.rc_giving__source_code like '3N%' and o.affiliate_number = '090430' ) ) 
 and o.closedate between '2015-07-01' and '2018-06-30'
 and (not exists (select 'x' from temp cr where cr.rc_giving__opportunity = o.id)
      and 
      not exists (select 'x' from temp cr where cr.rc_giving__opportunity = o.rc_giving__parent) )
-/*
 UNION
-select *
-from rounddata.rc_giving__opportunity_credit cr join temp t on cr.rc_giving__opportunity = o.id
-*/
+select 'Soft Credit' as "Credit Type", a.id "Account ID", a.namex "Account Name", a.accountnumber "Account Number", a.rc_bios__category "Category",
+cr.id "Giving ID", o.deposit_date "Deposit Date", o.Closedate "Close Date", cr.rc_giving__amount "Amount",  o.rc_giving__source_code "Source Code", 'Soft Credit' as "Record Type", o.rc_giving__payment_method "Payment Method", cr.GAU_Code_Credit "Credit Code", o.gau_debit_code "Debit Code", 
+CASE 
+when o.closedate between '2017-07-01' and '2018-06-30' then 'FY18'
+when o.closedate between '2016-07-01' and '2017-06-30' then 'FY17'
+when o.closedate between '2015-07-01' and '2016-06-30' then 'FY16'
+else 'NONE' END AS "Fiscal Year", cr.comments "Comments", o.originator "Originator"
+from rounddata.rc_giving__opportunity_credit cr
+join rounddata.accountx on cr.rc_giving__account = o.id
+join rounddata.opportunity o on cr.rc_giving__opportunity = id
+where exists (select 'x' from temp t where t.id = cr.id)
