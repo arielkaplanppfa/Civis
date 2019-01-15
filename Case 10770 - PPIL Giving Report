@@ -28,6 +28,6 @@ when o.closedate between '2016-07-01' and '2017-06-30' then 'FY17'
 when o.closedate between '2015-07-01' and '2016-06-30' then 'FY16'
 else 'NONE' END AS "Fiscal Year", cr.comments "Comments", o.originator "Originator"
 from rounddata.rc_giving__opportunity_credit cr
-join rounddata.accountx on cr.rc_giving__account = o.id
-join rounddata.opportunity o on cr.rc_giving__opportunity = id
+join rounddata.accountx a on cr.rc_giving__account = a.id
+join rounddata.opportunity o on cr.rc_giving__opportunity = o.id
 where exists (select 'x' from temp t where t.id = cr.id)
