@@ -1,0 +1,37 @@
+With oneplus as (
+  select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 group by o.accountid having count(*) >=1  ),
+     twoplus as (
+select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where  r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2009-01-29' group by o.accountid having count(o.etl_id) >=2 and sum(o.amount) >2   ),
+		 threeplus as (
+select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2009-01-29' group by o.accountid having count(o.etl_id) >=3 and sum(o.amount) >35  ),
+		 fiveten as (
+select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2009-01-29' group by o.accountid having count(o.etl_id) >=5 and sum(o.amount) > 5  ),
+		 fivefive as (
+select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2014-01-29' group by o.accountid having count(o.etl_id) >=5 and sum(o.amount) >5  ),
+		 sevenfive as (
+select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where  r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2014-01-29' group by o.accountid having count(o.etl_id) >=7 and sum(o.amount) >50  )
+select c.accountid,
+CASE
+WHEN rc_bios__birth_year is null THEN 'No Birthday' 
+WHEN Age Between 40 and 45 THEN '40-45'
+WHEN Age Between 46 and 55 THEN '46-55'
+WHEN Age Between 56 and 60 THEN '56-60'
+WHEN Age Between 61 and 69 THEN '61-69'
+WHEN Age Between 70 and 79 THEN '70-79'
+WHEN Age Between 80 and 89 THEN '80-89'
+WHEN Age Between 90 and 105 THEN '90-105'
+ELSE 'Too Young or Old'
+END AS "Age Bucket",
+CASE 
+WHEN c.accountid in ( select accountid from sevenfive s ) THEN '7+ gifts of $50+ last 5 years'
+WHEN c.accountid in ( select accountid from fivefive s  ) THEN '5+ gifts of $5+ last 5 years'
+WHEN c.accountid in ( select accountid from fiveten s  ) THEN '5+ gifts of $5+ last 10 years'
+WHEN c.accountid in ( select accountid from threeplus s  ) THEN '3+ gifts of $25+ last 10 years'
+WHEN c.accountid in ( select accountid from twoplus s ) THEN '2+ gifts of $2+ last 10 years'
+WHEN c.accountid in ( select accountid from oneplus s ) THEN '1+ gift ever'
+Else 'No Qualifying Giving' END As "Loyalty"
+from rounddata.contact c
+where c.rc_bios__deceased = 'false'
+and c.delete_flag <> 'Y'
+and rc_bios__preferred_contact = 'true'
+limit 10000
