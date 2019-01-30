@@ -9,7 +9,7 @@ select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o
 		 fivefive as (
 select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2014-01-29' group by o.accountid having count(o.etl_id) >=5 and sum(o.amount) >5  ),
 		 sevenfive as (
-select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where  r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2014-01-29' group by o.accountid having count(o.etl_id) >=7 and sum(o.amount) >50  )
+select o.accountid from rounddata.opportunity o join rounddata.recordtype r on o.recordtypeid = r.id where  r.developername in ('Pledge_Payment','Transaction') and o.rc_giving__source_code like '_N%' and o.amount > 0 and o.closedate >= '2014-01-29' group by o.accountid having count(o.etl_id) >=7 and sum(o.amount) >50  ), base as (
 select c.accountid,
 CASE
 WHEN rc_bios__birth_year is null THEN 'No Birthday' 
@@ -21,7 +21,7 @@ WHEN Age Between 70 and 79 THEN '70-79'
 WHEN Age Between 80 and 89 THEN '80-89'
 WHEN Age Between 90 and 105 THEN '90-105'
 ELSE 'Too Young or Old'
-END AS "Age Bucket",
+END AS "Age_Bucket",
 CASE 
 WHEN c.accountid in ( select accountid from sevenfive s ) THEN '7+ gifts of $50+ last 5 years'
 WHEN c.accountid in ( select accountid from fivefive s  ) THEN '5+ gifts of $5+ last 5 years'
@@ -34,4 +34,25 @@ from rounddata.contact c
 where c.rc_bios__deceased = 'false'
 and c.delete_flag <> 'Y'
 and rc_bios__preferred_contact = 'true'
-limit 10000
+)
+select
+case when Loyalty = '7+ gifts of $50+ last 5 years' then 6
+     when Loyalty = '5+ gifts of $5+ last 5 years' then 5
+     when Loyalty = '5+ gifts of $5+ last 10 years' then 4
+     when Loyalty = '3+ gifts of $25+ last 10 years' then 3
+     when Loyalty = '2+ gifts of $2+ last 10 years' then 2
+     when Loyalty = '1+ gift ever' then 1
+end as "order_count" 
+, Loyalty
+,sum(case when Age_Bucket = 'No Birthday' then 1 else 0 end) as "No Birthday"
+,sum(case when Age_Bucket = '40-45' then 1 else 0 end) as "40-45"
+,sum(case when Age_Bucket = '46-55' then 1 else 0 end) as "46-55"
+,sum(case when Age_Bucket = '56-60' then 1 else 0 end) as "56-60"
+,sum(case when Age_Bucket = '61-69' then 1 else 0 end) as "61-69"
+,sum(case when Age_Bucket = '70-79' then 1 else 0 end) as "70-79"
+,sum(case when Age_Bucket = '80-89' then 1 else 0 end) as "80-89"
+,sum(case when Age_Bucket = '90-105' then 1 else 0 end) as "90-105"
+,sum(case when Age_Bucket = 'Too Young or Old' then 1 else 0 end) as "Too Young or Old"
+from base
+group by Loyalty
+order by order_count;
