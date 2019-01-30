@@ -34,6 +34,7 @@ from rounddata.contact c
 where c.rc_bios__deceased = 'false'
 and c.delete_flag <> 'Y'
 and rc_bios__preferred_contact = 'true'
+Limit 10000000
 )
 select
 case when Loyalty = '7+ gifts of $50+ last 5 years' then 6
