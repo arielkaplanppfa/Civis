@@ -2,7 +2,17 @@ drop table if exists rounddata.civis_contact_match;
 create table rounddata.civis_contact_match as (
 Select  c.ID "Contact GUID", AUTO_CONTACT_NUMBER "Contact Number", TITLE "Title", firstname "First", rc_bios__middle_name "Middle", lastname "Last",
 suffix_multi "Suffix", mailingstreet "Street", mailingcity "City", mailingstate "State", mailingcountry "Country", mailingpostalcode "Zip",MAILINGPOSTALCODE5DIGIT "Zip 5 Digit",
-c.Phone "Phone", c.Email "Email", CASE WHEN preferred_pronouns = 'He, Him, His' THEN 'M' WHEN preferred_pronouns = 'She, Her, Hers' THEN 'F' ELSE 'U' END as "Pronouns", Birthdate "Birth Date", accountid "Household ID"
+c.Phone "Phone", c.Email "Email", CASE WHEN preferred_pronouns = 'He, Him, His' THEN 'M' WHEN preferred_pronouns = 'She, Her, Hers' THEN 'F' ELSE 'U' END as "Pronouns", Birthdate "Birth Date", accountid "Household ID", Concat(firstname,c.email) as "Concat", upper(Concat(firstname,c.email)) as "UpperConcat"
 from rounddata.contact c join rounddata.accountx a on c.accountid = a.ID
 where c.RC_BIOS__ACTIVE = 'true' and c.delete_flag <> 'Y'
-and a.RECORDTYPEID <> '01236000000Ke8lAAC');
+and (
+upper(a.namex) not like '%_FUND_%' or
+upper(a.namex) not like '%_FOUNDATION_%' or
+upper(a.namex) not like '%_TRUST_%' or
+upper(a.namex) not like '%_Corporation_%' )
+and a.RECORDTYPEID <> '01236000000Ke8lAAC' and c.recordtypeid = '01236000000Ke8fAAC'
+and (
+(upper(firstname) = 'MIKE' and upper(lastname) = 'PENCE') and ( (upper(mailingstreet) like '%WASHINGTON%' and mailingstate = 'IN') or ( (upper(mailingstreet) like '%PENNSYLVANIA%')  and  mailingstate = 'DC') )     
+)
+and (upper(firstname) like '%DONALD%' and upper(lastname) like '%TRUMP%')
+);
