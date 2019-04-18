@@ -1,0 +1,18 @@
+with temp as 
+(Select i.resolved_id, i.source_primary_key as "contact id", c.id as "address_id", c.rc_bios__street_line_1, c.rc_bios__street_line_2, c.rc_bios__additional_line_1, c.rc_bios__city, c.rc_bios__state, c.rc_bios__country, c.rc_bios__postal_code, c.rc_bios__do_not_mail, c.rc_bios__type, c.rc_bios__preferred_mailing, c.rc_bios__verified, c.createddate,
+CASE
+WHEN c.rc_bios__preferred_mailing = 'true' and c.rc_bios__do_not_mail = 'false' and c.rc_bios__verified = 'true' THEN 1
+WHEN c.rc_bios__preferred_mailing = 'true' and c.rc_bios__do_not_mail = 'false' and c.rc_bios__verified = 'false' THEN 2-- Preferred Address
+WHEN c.rc_bios__preferred_mailing = 'true' and c.rc_bios__do_not_mail = 'true' THEN  3 -- Preferred Addresses unmailable
+WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'false' and c.rc_bios__verified = 'true' THEN 4 -- Active Addresses
+WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'false' THEN 5 -- Other Active Addresses 
+WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'true' THEN 99 -- Non-preferred Unmailable
+ELSE 4
+END as "Address_Rank",  
+ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY Address_rank asc, createddate desc) as "golden_rank"
+from idres_analytics."20190215_9_thresh" i 
+join rounddata.rc_bios__contact_address c on i.source_primary_key = c.rc_bios__contact 
+where c.delete_flag <> 'Y' and c.isdeleted = 'false' and c.rc_bios__active = 'true' 
+and rc_bios__street_line_1 is not null -- Test suppression, why include these?
+order by  i.resolved_id, i.source_primary_key,Address_Rank asc, c.createddate desc)
+select * from temp order by resolved_id, golden_rank asc
