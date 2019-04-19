@@ -12,7 +12,7 @@ upper(a.namex) not like '%_TRUST_%' or
 upper(a.namex) not like '%_Corporation_%' )
 and a.RECORDTYPEID <> '01236000000Ke8lAAC' and c.recordtypeid = '01236000000Ke8fAAC'
 and (
-(upper(firstname) = 'MIKE' and upper(lastname) = 'PENCE') and ( (upper(mailingstreet) like '%WASHINGTON%' and mailingstate = 'IN') or ( (upper(mailingstreet) like '%PENNSYLVANIA%')  and  mailingstate = 'DC') )     
+(upper(firstname) <> 'MIKE' and upper(lastname) <> 'PENCE') and ( (upper(mailingstreet) not like '%WASHINGTON%' and mailingstate <> 'IN') or ( (upper(mailingstreet) not like '%PENNSYLVANIA%')  and  mailingstate <> 'DC') )     
 )
-and (upper(firstname) like '%DONALD%' and upper(lastname) like '%TRUMP%')
+and (upper(firstname) not like '%DONALD%' and upper(lastname) not like '%TRUMP%')
 );
