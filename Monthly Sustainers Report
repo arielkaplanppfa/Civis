@@ -1,24 +1,24 @@
 with temp as (
-   select accountx as "account",max(createddate) as "date" from rounddata.alternate_id i
+   select distinct accountx as "account",max(createddate) as "date" from rounddata.alternate_id i
   where typex = 'Van' and accountx is not null
   group by accountx
 ), 
 pop as (
-  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type like 'National%'
+  select distinct rc_bios__account, rc_bios__type from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type like 'National%'
   ),
 offc3 as (
-select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C3 Sustainer'
+select distinct rc_bios__account, rc_bios__type from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C3 Sustainer'
 ),
 offc4 as(
-  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C4 Sustainer'
+  select distinct rc_bios__account, rc_bios__type from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C4 Sustainer'
   ),
 onc3 as (
-  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C3 Online'
+  select distinct rc_bios__account, rc_bios__type from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C3 Online'
   ),
 onc4 as(
-  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C4 Online'
+  select distinct rc_bios__account, rc_bios__type from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C4 Online'
   )
-Select t2.valuex as "Van ID", a.id "accountid", a.auto_account_number as "Account number",a.current_giving_level "giving Level",c.firstname as "First Name", c.lastname as "Last Name",a.shippingstreet as "Street", a.shippingcity as "City", a.shippingstate as "State",
+Select Distinct t2.valuex as "Van ID", a.id "accountid", a.auto_account_number as "Account number",a.current_giving_level "giving Level",c.firstname as "First Name", c.lastname as "Last Name",a.shippingstreet as "Street", a.shippingcity as "City", a.shippingstate as "State",
 left(a.shippingpostalcode,5) as "Zip",
 CASE when length(a.shippingpostalcode) = 10 then Right(a.shippingpostalcode,4) Else Null End as "Plus Four",  
 a.rC_Bios__Preferred_Contact_Ema as "Email", offc3.rc_bios__type as "Offline C3", offc4.rc_bios__type as "Offline C4", onc3.rc_bios__type as "Online C3", onc4.rc_bios__type as "Online C4"
