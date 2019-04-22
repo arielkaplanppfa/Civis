@@ -1,0 +1,18 @@
+with temp as (
+   select accountx as "account",max(createddate) as "date" from rounddata.alternate_id i
+  where typex = 'Van' and accountx is not null
+  group by accountx
+)
+Select t2.valuex as "Van ID", a.id "accountid", a.auto_account_number as "Account number",a.current_giving_level "giving Level",c.firstname as "First Name", c.lastname as "Last Name",a.shippingstreet as "Street", a.shippingcity as "City", a.shippingstate as "State",
+left(a.shippingpostalcode,5) as "Zip",
+CASE when length(a.shippingpostalcode) = 10 then Right(a.shippingpostalcode,4) Else Null End as "Plus Four",  
+a.rC_Bios__Preferred_Contact_Ema as "Email", a.largest_previous_contribution as "HPC Amount", to_char(a.largest_previous_contributio0 :: Date, 'MM/DD/YY') as "HPC Date"
+from rounddata.accountx a
+left join rounddata.contact c on a.rc_bios__preferred_contact = c.id
+left join (select * from temp t join rounddata.alternate_id i on t.account = i.accountx and t.date = i.createddate) t2 on a.id = t2.accountx
+where a.rC_Bios__Preferred_Contact_Ema is not null and a.rc_bios__active = 'true' and a.delete_flag <> 'Y' 
+and not exists (select 'x' from rounddata.rc_bios__preference p1 where a.id = p1.rc_bios__account and p1.rc_bios__active = 'true' and p1.rc_bios__subcategory in ('Do Not Solicit - National','	Do Not Email - National') )
+and a.largest_previous_contributio0 >= (select max(last_run_date) from rounddata_dev.HPC_run_date)
+and a.largest_previous_contribution >=5 and a.largest_previous_contribution < 10000
+and not exists ( select 'x' from rounddata.rc_bios__preference g where a.id = g.rc_bios__account and g.rc_bios__active = 'true' and g.rc_bios__category = 'Giving Level' and rc_bios__subcategory = 'Major Donor' );
+
