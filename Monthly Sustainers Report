@@ -1,0 +1,40 @@
+with temp as (
+   select accountx as "account",max(createddate) as "date" from rounddata.alternate_id i
+  where typex = 'Van' and accountx is not null
+  group by accountx
+), 
+pop as (
+  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type like 'National%'
+  ),
+offc3 as (
+select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C3 Sustainer'
+),
+offc4 as(
+  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C4 Sustainer'
+  ),
+onc3 as (
+  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C3 Online'
+  ),
+onc4 as(
+  select * from rounddata.rc_bios__preference where rc_bios__active = 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type = 'National C4 Online'
+  )
+Select t2.valuex as "Van ID", a.id "accountid", a.auto_account_number as "Account number",a.current_giving_level "giving Level",c.firstname as "First Name", c.lastname as "Last Name",a.shippingstreet as "Street", a.shippingcity as "City", a.shippingstate as "State",
+left(a.shippingpostalcode,5) as "Zip",
+CASE when length(a.shippingpostalcode) = 10 then Right(a.shippingpostalcode,4) Else Null End as "Plus Four",  
+a.rC_Bios__Preferred_Contact_Ema as "Email", offc3.rc_bios__type as "Offline C3", offc4.rc_bios__type as "Offline C4", onc3.rc_bios__type as "Online C3", onc4.rc_bios__type as "Online C4"
+from rounddata.accountx a
+join pop on a.id = pop.rc_bios__account
+left join rounddata.contact c on a.rc_bios__preferred_contact = c.id
+left join (select * from temp t join rounddata.alternate_id i on t.account = i.accountx and t.date = i.createddate) t2 on a.id = t2.accountx
+left join offc3 on a.id = offc3.rc_bios__account
+left join offc4 on a.id = offc4.rc_bios__account
+left join onc3 on a.id = onc3.rc_bios__account
+left join onc4 on a.id = onc4.rc_bios__account
+where a.rC_Bios__Preferred_Contact_Ema is not null and a.rc_bios__active = 'true' and a.delete_flag <> 'Y' 
+and not exists (select 'x' from rounddata.rc_bios__preference p1 where a.id = p1.rc_bios__account and p1.rc_bios__active = 'true' and p1.rc_bios__subcategory in ('Do Not Solicit - National','	Do Not Email - National') )
+
+
+/*and exists (select 'x' from rounddata.rc_bios__preference p2 where p2.rc_bios__account = a.id and p2.rc_bios__active = 'true' and p2.rc_bios__subcategory = 'Sustainer' and p2.rc_bios__type like 'National%')*/
+
+
+/*A)First last, and address B) 4 different columns one for each sustainer preference C) remove all convio Ids*/
