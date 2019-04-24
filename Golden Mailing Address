@@ -1,5 +1,5 @@
-Drop table if exists ppfa_golden.mailing_address;
-create table ppfa_golden.mailing_address as 
+Drop table if exists ppfa_golden.staging_mailing_address;
+create table ppfa_golden.staging_mailing_address as 
 with temp as 
 (Select i.resolved_id, i.source_primary_key , c.id as "address_id", c.rc_bios__street_line_1, c.rc_bios__street_line_2, c.rc_bios__additional_line_1, c.rc_bios__city, c.rc_bios__state, c.rc_bios__country, c.rc_bios__postal_code, c.rc_bios__do_not_mail, c.rc_bios__type, c.rc_bios__preferred_mailing, c.rc_bios__verified, c.createddate,
 CASE
@@ -10,12 +10,50 @@ WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'false'
 WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'false' THEN 5 -- Other Active Addresses 
 WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'true' THEN 99 -- Non-preferred Unmailable
 ELSE 4
-END as "Address_Rank",  
-ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY Address_rank asc, createddate desc) as "golden_rank"
+END as "Address_Rank", 'Contact Address' as "Source"
 from idres_analytics."20190215_9_thresh" i 
 join rounddata.rc_bios__contact_address c on i.source_primary_key = c.rc_bios__contact 
 where c.delete_flag <> 'Y' and c.isdeleted = 'false' and c.rc_bios__active = 'true' 
 and rc_bios__street_line_1 is not null -- Test suppression, why include these?
-order by  i.resolved_id, i.source_primary_key,Address_Rank asc, c.createddate desc)
-select resolved_id, source_primary_key, address_id, rc_bios__street_line_1, rc_bios__street_line_2, rc_bios__additional_line_1, rc_bios__city, rc_bios__state, rc_bios__country, rc_bios__postal_code, rc_bios__do_not_mail, rc_bios__type, createddate 
-from temp where golden_rank = 1 order by resolved_id, golden_rank asc;
+),
+temptwo as (
+Select i.resolved_id, i.source_primary_key , aa.id as "address_id", aa.rc_bios__street_line_1, aa.rc_bios__street_line_2, aa.rc_bios__additional_line_1, aa.rc_bios__city, aa.rc_bios__state, aa.rc_bios__country, aa.rc_bios__postal_code, aa.rc_bios__do_not_mail, aa.rc_bios__type, aa.rc_bios__preferred_shipping, aa.rc_bios__verified, aa.createddate,
+CASE
+WHEN aa.rc_bios__preferred_shipping = 'true' and aa.rc_bios__do_not_mail = 'false' and aa.rc_bios__verified = 'true' THEN 1
+WHEN aa.rc_bios__preferred_shipping = 'true' and aa.rc_bios__do_not_mail = 'false' and aa.rc_bios__verified = 'false' THEN 2-- Preferred Address
+WHEN aa.rc_bios__preferred_shipping = 'true' and aa.rc_bios__do_not_mail = 'true' THEN  3 -- Preferred Addresses unmailable
+WHEN aa.rc_bios__preferred_shipping = 'false' and aa.rc_bios__do_not_mail = 'false' and aa.rc_bios__verified = 'true' THEN 4 -- Active Addresses
+WHEN aa.rc_bios__preferred_shipping = 'false' and aa.rc_bios__do_not_mail = 'false' THEN 5 -- Other Active Addresses 
+WHEN aa.rc_bios__preferred_shipping = 'false' and aa.rc_bios__do_not_mail = 'true' THEN 99 -- Non-preferred Unmailable
+ELSE 4
+END as "Address_Rank",  
+'Account Address' as "Source"
+from idres_analytics."20190215_9_thresh" i
+join rounddata.civis_contact_match cm on i.source_primary_key = cm."contact guid"
+join rounddata.rc_bios__account_address aa on cm."household id" = aa.rc_bios__account 
+where aa.delete_flag <> 'Y' and aa.isdeleted = 'false' and aa.rc_bios__active = 'true'
+and i.resolved_id not in (select resolved_id from temp) 
+and rc_bios__street_line_1 is not null -- Test suppression, why include these?
+),
+tempthree as
+(
+select * from temp
+UNION
+select * from temptwo
+order by  resolved_id, source_primary_key,Address_Rank asc, createddate desc
+),
+tempfour as (
+select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY Address_rank asc, createddate desc) as "golden_rank" from tempthree 
+)
+select * from tempfour
+;
+
+Drop table if exists ppfa_golden.mailing_address;
+create table ppfa_golden.mailing_address as 
+(
+select resolved_id, source_primary_key, address_id, rc_bios__street_line_1, rc_bios__street_line_2, rc_bios__additional_line_1, rc_bios__city, rc_bios__state, rc_bios__country, rc_bios__postal_code, rc_bios__do_not_mail, rc_bios__type, createddate, source, address_rank, golden_rank 
+from ppfa_golden.staging_mailing_address where golden_rank = 1 order by resolved_id
+);
+/*
+select resolved_id, source_primary_key, address_id, rc_bios__street_line_1, rc_bios__street_line_2, rc_bios__additional_line_1, rc_bios__city, rc_bios__state, rc_bios__country, rc_bios__postal_code, rc_bios__do_not_mail, rc_bios__type, createddate, source, address_rank, golden_rank 
+from temp where golden_rank = 1 order by resolved_id, golden_rank asc*/
