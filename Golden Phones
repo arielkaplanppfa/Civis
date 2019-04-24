@@ -1,1 +1,43 @@
--- Type your SQL here.
+Drop table if exists ppfa_golden.staging_phones; /* Unlike addresses Im not sure we should take the accounts pref phone for these */
+create table ppfa_golden.staging_phones as 
+with temp as (
+ select i.resolved_id, a.current_giving_level as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.accountx a on c.accountid = a.id
+ where a.current_giving_level in ('Major Donor', 'Mid-Level VIP')
+ UNION
+ select i.resolved_id, p.rc_bios__subcategory as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__type = 'Managed Donor'
+ ),
+temptwo as (/*GET VAN NUMBERS IN HERE*/
+select i.resolved_id, c.contact, coalesce(c.subtype,c.field,'None') as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
+CASE
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.verified = 'true' THEN '1' 
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '2'
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.verified = 'true' THEN '3'
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and (c.verified = 'false' or c.verified is null) THEN '4'
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.verified = 'true' THEN '5'
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '6'
+  else '7' END as "Phone_rank", 'roundData' as "Source"
+From ppfa_golden.current_customer_graph i
+join rounddata.additional_contact_info c on i.source_primary_key = c.contact
+left join temp t on i.resolved_id = t.resolved_id
+where c.delete_flag <> 'Y' and c.active = 'true' and c.typex = 'Phone'
+order by i.resolved_id desc
+),
+tempthree as(
+select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id,type ORDER BY phone_rank asc, createddate desc) as "golden_rank" from temptwo order by resolved_id, phone_rank
+)
+select  * from tempthree
+;
+
+select * from ppfa_golden.staging_phones order by resolved_id 
+limit 10000;
+
+/*select * from vansync.ppfa_contactsphones_mym m join vansync.ppfa_iscellstatuses c on m.iscellstatusid = c.iscellstatusid */
+/* maybe one and two iscellstatus becomes mobile types?*/
+
