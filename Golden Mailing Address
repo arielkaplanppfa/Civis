@@ -11,7 +11,7 @@ WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'false'
 WHEN c.rc_bios__preferred_mailing = 'false' and c.rc_bios__do_not_mail = 'true' THEN 99 -- Non-preferred Unmailable
 ELSE 4
 END as "Address_Rank", 'Contact Address' as "Source"
-from idres_analytics."20190215_9_thresh" i 
+from ppfa_golden.current_customer_graph i 
 join rounddata.rc_bios__contact_address c on i.source_primary_key = c.rc_bios__contact 
 where c.delete_flag <> 'Y' and c.isdeleted = 'false' and c.rc_bios__active = 'true' 
 and rc_bios__street_line_1 is not null -- Test suppression, why include these?
@@ -28,7 +28,7 @@ WHEN aa.rc_bios__preferred_shipping = 'false' and aa.rc_bios__do_not_mail = 'tru
 ELSE 4
 END as "Address_Rank",  
 'Account Address' as "Source"
-from idres_analytics."20190215_9_thresh" i
+from ppfa_golden.current_customer_graph i
 join rounddata.civis_contact_match cm on i.source_primary_key = cm."contact guid"
 join rounddata.rc_bios__account_address aa on cm."household id" = aa.rc_bios__account 
 where aa.delete_flag <> 'Y' and aa.isdeleted = 'false' and aa.rc_bios__active = 'true'
