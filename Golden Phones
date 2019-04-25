@@ -13,8 +13,8 @@ with temp as (
  join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
  where p.rc_bios__active = 'true' and p.rc_bios__type = 'Managed Donor'
  ),
-temptwo as (/*GET VAN NUMBERS IN HERE*/
-select i.resolved_id, c.contact, coalesce(c.subtype,c.field,'None') as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
+temptwo as (/*rD Numbers*/
+select i.resolved_id, c.contact as "Contact_key", coalesce(c.subtype,c.field,'None') as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
 CASE
   WHEN c.preferred = 'true' and c.opt_out = 'false' and c.verified = 'true' THEN '1' 
   WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '2'
@@ -27,7 +27,28 @@ From ppfa_golden.current_customer_graph i
 join rounddata.additional_contact_info c on i.source_primary_key = c.contact
 left join temp t on i.resolved_id = t.resolved_id
 where c.delete_flag <> 'Y' and c.active = 'true' and c.typex = 'Phone'
-order by i.resolved_id desc
+UNION /*Van Number*/
+select g.resolved_id, m.vanid:: Varchar as "Contact_Key", Case 
+WHEN m.iscellstatusid = 1 THEN 'Mobile'
+WHEN m.phonetypeid = 'H' THEN 'Home'
+WHEN m.phonetypeid = 'C' then 'Mobile' 
+WHEN m.phonetypeid = 'W' then 'Work'
+WHEN m.phonetypeid = 'F' then 'Fax'
+When m.phonetypeid = 'M' then 'Mobile'
+Else 'Other' End as "Type", '('||substring(m.phone,1,3)||')'||' '||substring(m.phone,4,3)||'-'||substring(m.phone,7,4) as "phone", 
+CASE When m.datesuppressed is not null THEN 'true' Else 'false' END as "Opt_out", t.high_touch, m.datecreated, 
+CASE 
+WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.datesuppressed is null THEN '2'
+WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.datesuppressed is not null THEN '3'
+WHEN s.sourcename not in ('Catalist','User Added','Bulk') and m.datesuppressed is null THEN '4'
+WHEN s.sourcename not in ('Catalist','User Added','Bulk') and m.datesuppressed is not null THEN '6'
+Else '7' End as "Phone_rank", 'Van' as "Source"
+from ppfa_golden.current_customer_graph g
+join vansync.ppfa_contactsphones_mym m on g.source_primary_key = m.vanid
+left join vansync.ppfa_iscellstatuses c on m.iscellstatusid = c.iscellstatusid
+left join vansync.ppfa_phonesources s on m.phonesourceid = s.phonesourceid
+left join temp t on g.resolved_id = t.resolved_id
+order by resolved_id desc
 ),
 tempthree as(
 select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id,type ORDER BY phone_rank asc, createddate desc) as "golden_rank" from temptwo order by resolved_id, phone_rank
