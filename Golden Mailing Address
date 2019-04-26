@@ -48,6 +48,8 @@ select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY Address_rank as
 select * from tempfour
 ;
 
+/* Gotta Work in the country translation */
+
 Drop table if exists ppfa_golden.mailing_address;
 create table ppfa_golden.mailing_address as 
 (
