@@ -50,6 +50,7 @@ left join vansync.ppfa_iscellstatuses c on m.iscellstatusid = c.iscellstatusid
 left join vansync.ppfa_phonesources s on m.phonesourceid = s.phonesourceid
 left join temp t on g.resolved_id = t.resolved_id
 order by resolved_id desc
+/*Need to work in the household accounts*/
 ),
 tempthree as(
 select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id,type ORDER BY phone_rank asc, createddate desc) as "golden_rank" from temptwo order by resolved_id, phone_rank
