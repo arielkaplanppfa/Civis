@@ -60,6 +60,3 @@ select  * from tempthree
 select * from ppfa_golden.staging_phones order by resolved_id 
 limit 10000;
 
-/*select * from vansync.ppfa_contactsphones_mym m join vansync.ppfa_iscellstatuses c on m.iscellstatusid = c.iscellstatusid */
-/* maybe one and two iscellstatus becomes mobile types?*/
-
