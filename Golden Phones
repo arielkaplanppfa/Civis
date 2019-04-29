@@ -13,8 +13,12 @@ with temp as ( /* Does EA have some sort of high touch bucket also? */
  join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
  where p.rc_bios__active = 'true' and p.rc_bios__type = 'Managed Donor'
  ),
-temptwo as (/*rD Numbers*/
-select i.resolved_id, c.contact as "Contact_key", coalesce(c.subtype,c.field,'None') as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
+temptwo as (/*rD contact Numbers*/
+select i.resolved_id, c.contact as "source_key", 
+Case
+  WHEN c.subtype = 'Home' THEN 'Home'
+  When c.subtype = 'Mobile' THEn 'Mobile'
+  Else 'Other' End as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
 CASE
   WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'true' or notes = 'Telematch: Verified') THEN '1' -- Preferred Verified
   WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '2' -- Preferred Unverified
@@ -29,33 +33,63 @@ join rounddata.additional_contact_info c on i.source_primary_key = c.contact
 left join temp t on i.resolved_id = t.resolved_id
 where c.delete_flag <> 'Y' and c.active = 'true' and c.typex = 'Phone'
 UNION /*Van Number*/
-select g.resolved_id, m.vanid:: Varchar as "Contact_Key", Case 
+select g.resolved_id, m.vanid:: Varchar as "source_Key", Case 
 WHEN m.iscellstatusid = 1 THEN 'Mobile'
 WHEN m.phonetypeid = 'H' THEN 'Home'
 WHEN m.phonetypeid = 'C' then 'Mobile' 
-WHEN m.phonetypeid = 'W' then 'Work'
-WHEN m.phonetypeid = 'F' then 'Fax'
-When m.phonetypeid = 'M' then 'Main' -- What is this?
+WHEN m.phonetypeid = 'W' then 'Other'
+WHEN m.phonetypeid = 'F' then 'Other'
+When m.phonetypeid = 'M' then 'Other' -- What is this?
 Else 'Other' End as "Type", '('||substring(m.phone,1,3)||')'||' '||substring(m.phone,4,3)||'-'||substring(m.phone,7,4) as "phone", 
-CASE When m.datesuppressed is not null THEN 'true' Else 'false' END as "Opt_out", t.high_touch, m.datecreated, 
-CASE 
-WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.datesuppressed is null THEN '2' -- Good Source, non-suppressed
-WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.datesuppressed is not null THEN '3' -- Good Source Suppressed
+'false' as "Opt_out", t.high_touch, m.datecreated, /*rework when logic is provided from EA/VAN*/
+CASE  /* is there any other ranking we can implement other than source?*/
+WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.datesuppressed is null THEN '2' -- Good Source, non-suppressed 
 WHEN s.sourcename not in ('Catalist','User Added','Bulk') and m.datesuppressed is null THEN '4' -- Bad Source non-supressed
-WHEN s.sourcename not in ('Catalist','User Added','Bulk') and m.datesuppressed is not null THEN '6' -- Bad Source suppressed
 Else '7' End as "Phone_rank", 'Van' as "Source" -- All others	
 from ppfa_golden.current_customer_graph g
 join vansync.ppfa_contactsphones_mym m on g.source_primary_key = m.vanid
 left join vansync.ppfa_iscellstatuses c on m.iscellstatusid = c.iscellstatusid
 left join vansync.ppfa_phonesources s on m.phonesourceid = s.phonesourceid
 left join temp t on g.resolved_id = t.resolved_id
+where m.datesuppressed is not null
+UNION /*rD household accounts*/
+select g.resolved_id, a.id as "source_key", coalesce(c.subtype,c.field,'None') as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.high_touch,  c.createddate,
+CASE
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'true' or notes = 'Telematch: Verified') THEN '1' -- Preferred Verified
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '2' -- Preferred Unverified
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and (c.verified = 'true' or notes = 'Telematch: Verified')  THEN '3'   -- Preferred Verified opt out
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and (c.verified = 'false' or c.verified is null) THEN '4'  -- preferred unverified opt out
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and (c.verified = 'true' or notes = 'Telematch: Verified') THEN '5' --Active verified
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '6' --Active Unverified
+  else '7' -- All others
+  END as "Phone_rank", 'roundData' as "Source" 
+from ppfa_golden.current_customer_graph g 
+join rounddata.accountx a on g.source_primary_key = a.id
+join rounddata.additional_contact_info c on a.rc_bios__preferred_contact = c.contact
+left join temp t on g.resolved_id = t.resolved_id
+where a.delete_flag <>'Y' and c.delete_flag <>'Y' and c.typex = 'Phone'
 order by resolved_id desc
-/*Need to work in the household accounts*/
 ),
 tempthree as(
 select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id,type ORDER BY phone_rank asc, createddate desc) as "golden_rank" from temptwo order by resolved_id, phone_rank
 )
 select  * from tempthree
+;
+
+Drop table if exists ppfa_golden.golden_phones;
+create table ppfa_golden.golden_phones as
+with temp as (
+select distinct resolved_id from ppfa_golden.staging_phones
+)
+select p.resolved_id, p.phone as "Home_Phone", p.opt_out as "Home_Opt_Out", p.source as "Home_Source", pp.Mobile_phone as "Mobile_Phone", pp.opt_out as "Mobile_Opt_Out", pp.source as "Mobile_Source",
+po.Other_phone as "Other_Phone", po.opt_out as "Other_Opt_Out", po.source as "Other_Source"
+from temp t 
+left join ppfa_golden.staging_phones p on t.resolved_id = p.resolved_id
+left join ( select pm.resolved_id, pm.phone as "Mobile_Phone", pm.opt_out, pm.source from ppfa_golden.staging_phones pm where pm.type = 'Mobile' and pm.golden_rank = 1 
+) as pp on t.resolved_id = pp.resolved_id
+left join ( select pm.resolved_id, pm.phone as "Other_Phone", pm.opt_out, pm.source from ppfa_golden.staging_phones pm where pm.type = 'Other' and pm.golden_rank = 1 
+) as po on t.resolved_id = po.resolved_id
+where p.type = 'Home' and p.golden_rank = 1 
 ;
 
 select * from ppfa_golden.staging_phones order by resolved_id 
