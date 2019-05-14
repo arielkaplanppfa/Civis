@@ -1,37 +1,37 @@
 Drop table if exists ppfa_golden.high_touch; 
 create table ppfa_golden.high_touch as 
 with temp as ( /*might want to break giving levels out into its own temp table and choose the highest and then union back to the rest*/
- select i.resolved_id as "ppid",'Giving Level' as "Category", a.current_giving_level as "High_Touch" 
+ select distinct i.resolved_id as "ppid",'Giving Level' as "Category", a.current_giving_level as "High_Touch" 
  from ppfa_golden.current_customer_graph i 
  join rounddata.contact c on i.source_primary_key = c.id 
  join rounddata.accountx a on c.accountid = a.id
  where a.current_giving_level in ('Major Donor', 'Mid-Level VIP', 'Mid-Level High')
  UNION
- select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ select distinct i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
  from ppfa_golden.current_customer_graph i 
  join rounddata.contact c on i.source_primary_key = c.id 
  join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
  where p.rc_bios__active = 'true' and p.rc_bios__type like '%Managed%'
  UNION
- select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ select distinct i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
  from ppfa_golden.current_customer_graph i 
  join rounddata.contact c on i.source_primary_key = c.id 
  join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
  where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'High Touch Portfolio'
  UNION
- select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ select distinct i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
  from ppfa_golden.current_customer_graph i 
  join rounddata.contact c on i.source_primary_key = c.id 
  join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
  where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Prospect Management'
  UNION
- select i.resolved_id as "ppid", p.rc_bios__category as "Category", p.rc_bios__subcategory as "High_Touch"
+ select distinct i.resolved_id as "ppid", p.rc_bios__category as "Category", p.rc_bios__subcategory as "High_Touch"
  from ppfa_golden.current_customer_graph i 
  join rounddata.contact c on i.source_primary_key = c.id 
  join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
  where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Celebrity'
  UNION
- select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ select distinct i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
  from ppfa_golden.current_customer_graph i 
  join rounddata.contact c on i.source_primary_key = c.id 
  join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
