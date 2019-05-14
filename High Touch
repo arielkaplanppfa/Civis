@@ -1,0 +1,54 @@
+Drop table if exists ppfa_golden.high_touch; /*Board Member, celebrity*/
+create table ppfa_golden.high_touch as 
+with temp as ( /*might want to break giving levels out into its own temp table and choose the highest and then union back to the rest*/
+ select i.resolved_id as "ppid",'Giving Level' as "Category", a.current_giving_level as "High_Touch" 
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.accountx a on c.accountid = a.id
+ where a.current_giving_level in ('Major Donor', 'Mid-Level VIP', 'Mid-Level High')
+ UNION
+ select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__type like '%Managed%'
+ UNION
+ select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'High Touch Portfolio'
+ UNION
+ select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Prospect Management'
+ UNION
+ select i.resolved_id as "ppid", p.rc_bios__category as "Category", p.rc_bios__subcategory as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Celebrity'
+ UNION
+ select i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Board Member'
+ ),
+ temptwo as (
+ select distinct ppid from temp
+ )
+ select w.ppid, listagg(g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", m.high_touch as "Prospect_management", b.high_touch as "Celebrity", listagg(bm.high_touch, '; ') as "Board Member"  
+ from temptwo w
+ left join ( select t.ppid, high_touch from temp t where category = 'Giving Level' ) g on w.ppid = g.ppid /* Giving Levels */
+ left join ( select c.ppid, high_touch from temp c where category = 'Corporations' ) c on w.ppid = c.ppid  /* Corporations */
+ left join ( select f.ppid, high_touch from temp f where category = 'Foundation' ) f on w.ppid = f.ppid  /* Foundations */
+ left join ( select p.ppid, high_touch from temp p where category = 'High Touch Portfolio' ) p on w.ppid = p.ppid  /* Portfolio */
+ left join ( select l.ppid, high_touch from temp l where category = 'Planned Gift' ) l on w.ppid = l.ppid  /* PG */
+ left join ( select m.ppid, high_touch from temp m where category = 'Prospect Management' ) m on w.ppid = m.ppid /*Prospect Management*/
+ left join ( select b.ppid, high_touch from temp b where category = 'Celeberity' ) b on w.ppid = b.ppid /*Celebrity*/
+ left join ( select bm.ppid, high_touch from temp bm where category = 'Board Member' ) bm on w.ppid = bm.ppid /*Board Member*/
+ group by  w.ppid, c.high_touch,  f.high_touch, l.high_touch, m.high_touch,b.high_touch
+ 
