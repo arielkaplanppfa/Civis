@@ -1,4 +1,4 @@
-Drop table if exists ppfa_golden.high_touch; /*Board Member, celebrity*/
+Drop table if exists ppfa_golden.high_touch; 
 create table ppfa_golden.high_touch as 
 with temp as ( /*might want to break giving levels out into its own temp table and choose the highest and then union back to the rest*/
  select i.resolved_id as "ppid",'Giving Level' as "Category", a.current_giving_level as "High_Touch" 
@@ -40,7 +40,7 @@ with temp as ( /*might want to break giving levels out into its own temp table a
  temptwo as (
  select distinct ppid from temp
  )
- select w.ppid, listagg(g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", m.high_touch as "Prospect_management", b.high_touch as "Celebrity", listagg(bm.high_touch, '; ') as "Board Member"  
+ select w.ppid, listagg(g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", m.high_touch as "Prospect_management", b.high_touch as "Celebrity", listagg(bm.high_touch, '; ') as "Board_Member"  
  from temptwo w
  left join ( select t.ppid, high_touch from temp t where category = 'Giving Level' ) g on w.ppid = g.ppid /* Giving Levels */
  left join ( select c.ppid, high_touch from temp c where category = 'Corporations' ) c on w.ppid = c.ppid  /* Corporations */
