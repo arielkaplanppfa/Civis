@@ -40,7 +40,7 @@ with temp as ( /*might want to break giving levels out into its own temp table a
  temptwo as (
  select distinct ppid from temp
  )
- select w.ppid, listagg(g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", listagg(m.high_touch, '; ') as "Prospect_management", b.high_touch as "Celebrity", listagg(bm.high_touch, '; ') as "Board_Member"  
+ select w.ppid, listagg( distinct g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(distinct p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", listagg(distinct m.high_touch, '; ') as "Prospect_management", b.high_touch as "Celebrity", listagg(distinct bm.high_touch, '; ') as "Board_Member"  
  from temptwo w
  left join ( select t.ppid, high_touch from temp t where category = 'Giving Level' ) g on w.ppid = g.ppid /* Giving Levels */
  left join ( select c.ppid, high_touch from temp c where category = 'Corporations' ) c on w.ppid = c.ppid  /* Corporations */
