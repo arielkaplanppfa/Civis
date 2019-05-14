@@ -40,7 +40,7 @@ with temp as ( /*might want to break giving levels out into its own temp table a
  temptwo as (
  select distinct ppid from temp
  )
- select w.ppid, listagg(g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", m.high_touch as "Prospect_management", b.high_touch as "Celebrity", listagg(bm.high_touch, '; ') as "Board_Member"  
+ select w.ppid, listagg(g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", listagg(m.high_touch, '; ') as "Prospect_management", b.high_touch as "Celebrity", listagg(bm.high_touch, '; ') as "Board_Member"  
  from temptwo w
  left join ( select t.ppid, high_touch from temp t where category = 'Giving Level' ) g on w.ppid = g.ppid /* Giving Levels */
  left join ( select c.ppid, high_touch from temp c where category = 'Corporations' ) c on w.ppid = c.ppid  /* Corporations */
@@ -50,5 +50,5 @@ with temp as ( /*might want to break giving levels out into its own temp table a
  left join ( select m.ppid, high_touch from temp m where category = 'Prospect Management' ) m on w.ppid = m.ppid /*Prospect Management*/
  left join ( select b.ppid, high_touch from temp b where category = 'Celeberity' ) b on w.ppid = b.ppid /*Celebrity*/
  left join ( select bm.ppid, high_touch from temp bm where category = 'Board Member' ) bm on w.ppid = bm.ppid /*Board Member*/
- group by  w.ppid, c.high_touch,  f.high_touch, l.high_touch, m.high_touch,b.high_touch
+ group by  w.ppid, c.high_touch,  f.high_touch, l.high_touch, b.high_touch
  
