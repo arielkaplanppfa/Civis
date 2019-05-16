@@ -1,0 +1,36 @@
+with temp as (
+  select ngoc_accountid from rounddata.rd_warehouse_opportunities_new t where closedate >= '2018-05-16'  and is_sustainer = 'online'
+  UNION
+  select ngoc_accountid from rounddata.rd_warehouse_opportunities_new t where closedate >= '2018-05-16' and is_sustainer = 'offline'
+  UNION
+  select ngoc_accountid from rounddata.rd_warehouse_opportunities_new w where closedate >= '2018-05-16' and is_sustainer is null),
+temptwo as ( -- Get the orgs 
+  select distinct ngoc_accountid, g.resolved_id from temp t
+  join ppfa_golden.current_customer_graph g on t.ngoc_accountid = g.resolved_id ),
+tempthree as ( -- get the ind
+  select ngoc_accountid, g.resolved_id from temp t 
+  join rounddata.contact c on t.ngoc_accountid = c.accountid
+  join ppfa_golden.current_customer_graph g on c.id = g.source_primary_key
+   /*where not exists (select 'x' from temptwo w where t.ngoc_accountid = w.ngoc_accountid )*/
+   ),
+tempfour as(
+   select resolved_id from temptwo
+   UNION
+   select resolved_id from tempthree), 
+   donors as (
+   select resolved_id from tempfour),
+takers as (
+  select distinct resolved_id from arhodes.ppde_actions a 
+  join ppfa_golden.current_customer_graph g on a.vanid = g.source_primary_key
+  where action_date >= '2018-05-16'),
+nondonortakers as (
+  select resolved_id from takers
+  MINUS
+  select resolved_id from donors),
+donorsandtakers as (
+   select * from donors
+   UNION
+   select * from nondonortakers),
+finallist as(select distinct resolved_id from donorsandtakers)
+   select count(*) from finallist;
+   
