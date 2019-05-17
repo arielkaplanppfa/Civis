@@ -33,12 +33,23 @@ drop table if exists rounddata_dev.ak_10137_race;
 Create table rounddata_dev.ak_10137_race as 
 with temp as 
 (
-select distinct c.id as "contactid", cast(a.id as varchar) as "accountid", cast(t1.resolved_id as varchar) as "ppid", cast(m.race as varchar) as "race",  cast(m.raceconfidence as varchar) as "confidence", 'EA' as "Source", 
+select distinct c.id as "contactid", 
+  cast(a.id as varchar) as "accountid", 
+  cast(t1.resolved_id as varchar) as "ppid", 
+  cast(m.race as varchar) as "race",  
+  cast(m.raceconfidence as varchar) as "confidence", 
+  'EA' as "Source", 
 case when exists (select 'x' from  rounddata_dev.ak_10137_pg p where p.accountx = a.id)
      then 'Natl PG' else null end as "Natl_PG",
 case when a.current_giving_level is null then 'Low Dollar' else a.current_giving_level end as "Giving Level",
-case when cast(m.raceconfidence as varchar) = 'HighlyLikely' then 1 when cast(m.raceconfidence as varchar) = 'Likely' then 2 when cast(m.raceconfidence as varchar) = 'Possibly' then 3 when cast(m.raceconfidence as varchar) = 'Unknown' then 4 else 5 end as "confidence_rank",
-case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' else 'Old Giver' end as "Recency", c.age as "age"
+case when cast(m.raceconfidence as varchar) = 'HighlyLikely' then 1 
+     when cast(m.raceconfidence as varchar) = 'Likely' then 2 
+     when cast(m.raceconfidence as varchar) = 'Possibly' then 3 
+     when cast(m.raceconfidence as varchar) = 'Unknown' then 4 
+     else 5 end as "confidence_rank",
+case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' 
+     else 'Old Giver' end as "Recency", 
+     c.age as "age"
 from rounddata.accountx a 
 join rounddata.contact c on a.id = c.accountid 
 join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
@@ -46,26 +57,42 @@ join ppfa_golden.current_customer_graph t1 on t.resolved_id = t1.resolved_id
 join vansync.catalist_appends_mym m on t1.source_primary_key = m.vanid
 where c.delete_flag <> 'Y' and a.delete_flag <> 'Y'
 UNION
-select distinct c.id as "contactid",  cast(a.id as varchar) as "accountid", cast(t.resolved_id as varchar) as "ppid", cast(m.race as varchar) as "race", cast(m.confidence as varchar) as "confidence", 'EA' as "Source", 
-case when exists (select 'x' from  rounddata_dev.ak_10137_pg p where p.accountx = a.id)
-     then 'Natl PG' else null end as "Natl_PG",
-case when a.current_giving_level is null then 'Low Dollar' else a.current_giving_level end as "Giving Level",
-  case when m.confidence  >= .9 then 1 when m.confidence  >= .75 and m.confidence <= .89 then 2 when m.confidence <=.74 and m.confidence >=.65 then 3 else 5 end as "confidence_rank",
+select distinct c.id as "contactid",  
+  cast(a.id as varchar) as "accountid", 
+  cast(t.resolved_id as varchar) as "ppid", 
+  cast(m.race as varchar) as "race", 
+  cast(m.confidence as varchar) as "confidence", 
+  'EA' as "Source", 
+case when exists (select 'x' from  rounddata_dev.ak_10137_pg p where p.accountx = a.id) then 'Natl PG' 
+  else null end as "Natl_PG",
+case when a.current_giving_level is null then 'Low Dollar' 
+  else a.current_giving_level end as "Giving Level",
+  case when m.confidence  >= .9 then 1 
+  when m.confidence  >= .75 and m.confidence <= .89 then 2 
+  when m.confidence <=.74 and m.confidence >=.65 then 3 
+  else 5 end as "confidence_rank",
   /*
 case when cast(m.confidence as varchar) = 'HighlyLikely' then 1 when cast(m.confidence as varchar) = 'Likely' then 2 when cast(m.confidence as varchar) = 'Possibly' then 3 when cast(m.confidence as varchar) = 'Unknown' then 4 else 5 end as "confidence_rank",*/
-case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' else 'Old Giver' end as "Recency", c.age as "age"
+  case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' 
+  else 'Old Giver' end as "Recency", c.age as "age"
 from rounddata.accountx a 
 join rounddata.contact c on a.id = c.accountid 
 join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
 join arhodes.catalist_appends_rd m on t.resolved_id = m.ppid
 where c.delete_flag <> 'Y' and a.delete_flag <> 'Y'
 UNION
-select distinct c.id as "contactid",  cast(a.id as varchar) as "accountid",  cast(t.resolved_id as varchar) as "ppid", 'non-match' as "race", 'non-match' as "confidence", 'IDR' as "Source", 
-  case when exists (select 'x' from  rounddata_dev.ak_10137_pg p where p.accountx = a.id)
-     then 'Natl PG' else null end as "Natl_PG",
- case when a.current_giving_level is null then 'Low Dollar' else a.current_giving_level end as "Giving Level",
+select distinct c.id as "contactid",  
+  cast(a.id as varchar) as "accountid",  
+  cast(t.resolved_id as varchar) as "ppid", 
+  'non-match' as "race", 'non-match' as "confidence", 
+  'IDR' as "Source", 
+  case when exists (select 'x' from  rounddata_dev.ak_10137_pg p where p.accountx = a.id) then 'Natl PG' 
+  else null end as "Natl_PG",
+ case when a.current_giving_level is null then 'Low Dollar' 
+  else a.current_giving_level end as "Giving Level",
    6 as "confidence_rank",
-case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' else 'Old Giver' end as "Recency", c.age as "age"
+case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' 
+  else 'Old Giver' end as "Recency", c.age as "age"
 from rounddata.accountx a 
 join rounddata.contact c on a.id = c.accountid
 join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
