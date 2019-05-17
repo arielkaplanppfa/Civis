@@ -2,18 +2,18 @@ drop table if exists rounddata_dev.ak_10137_nomatch;
 Create table rounddata_dev.ak_10137_nomatch as
 (select distinct c.id as "contactid"
 from rounddata.contact c 
-join idres_analytics."20190215_9_thresh" t on c.id = t.source_primary_key 
+join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
 where c.id not in 
 (select c.id
 from rounddata.contact c
-join idres_analytics."20190215_9_thresh" t on c.id = t.source_primary_key 
-join idres_analytics."20190215_9_thresh" t1 on t.resolved_id = t1.resolved_id 
+join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
+join ppfa_golden.current_customer_graph t1 on t.resolved_id = t1.resolved_id 
 join vansync.catalist_appends_mym m on t1.source_primary_key = m.vanid
 where c.delete_flag <> 'Y' 
 UNION
 select c.id
 from rounddata.contact c
-join idres_analytics."20190215_9_thresh" t on c.id = t.source_primary_key 
+join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
 join arhodes.catalist_appends_rd m on t.resolved_id = m.ppid
 where c.delete_flag <> 'Y'
 ) 
@@ -41,8 +41,8 @@ case when cast(m.raceconfidence as varchar) = 'HighlyLikely' then 1 when cast(m.
 case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' else 'Old Giver' end as "Recency", c.age as "age"
 from rounddata.accountx a 
 join rounddata.contact c on a.id = c.accountid 
-join idres_analytics."20190215_9_thresh" t on c.id = t.source_primary_key 
-join idres_analytics."20190215_9_thresh" t1 on t.resolved_id = t1.resolved_id 
+join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
+join ppfa_golden.current_customer_graph t1 on t.resolved_id = t1.resolved_id 
 join vansync.catalist_appends_mym m on t1.source_primary_key = m.vanid
 where c.delete_flag <> 'Y' and a.delete_flag <> 'Y'
 UNION
@@ -56,7 +56,7 @@ case when cast(m.confidence as varchar) = 'HighlyLikely' then 1 when cast(m.conf
 case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' else 'Old Giver' end as "Recency", c.age as "age"
 from rounddata.accountx a 
 join rounddata.contact c on a.id = c.accountid 
-join idres_analytics."20190215_9_thresh" t on c.id = t.source_primary_key 
+join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
 join arhodes.catalist_appends_rd m on t.resolved_id = m.ppid
 where c.delete_flag <> 'Y' and a.delete_flag <> 'Y'
 UNION
@@ -68,7 +68,7 @@ select distinct c.id as "contactid",  cast(a.id as varchar) as "accountid",  cas
 case when (a.last_gift_date >=  date(current_date - cast('24 months' as interval))) or (a.current_giving_level is not null) then 'Recent Giver' else 'Old Giver' end as "Recency", c.age as "age"
 from rounddata.accountx a 
 join rounddata.contact c on a.id = c.accountid
-join idres_analytics."20190215_9_thresh" t on c.id = t.source_primary_key 
+join ppfa_golden.current_customer_graph t on c.id = t.source_primary_key 
 where exists (select 'x' from rounddata_dev.ak_10137_nomatch n where c.id = n.contactid )),
 temptwo as(
 select *,ROW_NUMBER () OVER ( PARTITION BY contactid ORDER BY confidence_rank asc ) from temp)
