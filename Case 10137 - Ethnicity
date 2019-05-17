@@ -74,3 +74,6 @@ temptwo as(
 select *,ROW_NUMBER () OVER ( PARTITION BY contactid ORDER BY confidence_rank asc ) from temp)
 select * from temptwo
 where row_number = 1;
+
+drop table if exists ppfa_race.ak_race;
+Create table ppfa_race.ak_race as (select * from rounddata_dev.ak_10137_race);
