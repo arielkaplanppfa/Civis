@@ -1,0 +1,74 @@
+drop table if exists ppfa_golden.catalist_source;
+create table ppfa_golden.catalist_source as (
+select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%'
+);
+
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN first_name varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN Middle_name  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN last_name  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN street  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN city  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN state  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN zip  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN email  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN phone  Varchar(1024);
+ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN birth_date  Date;
+
+drop table if exists ppfa_golden.catalist_high_touch;
+create table ppfa_golden.catalist_high_touch as
+(
+select distinct g.resolved_id
+from ppfa_golden.current_customer_graph g 
+where exists (select 'x' from ppfa_golden.high_touch t where g.resolved_id = t.ppid and (giving_level = 'Major Donor' or planned_giving is not null) )
+);
+
+drop table if exists ppfa_golden.catalist_rd_only_clusters;
+create table ppfa_golden.catalist_rd_only_clusters as
+(
+select distinct g.resolved_id from ppfa_golden.current_customer_graph g where source = 'round_data' 
+minus 
+select distinct g.resolved_id from ppfa_golden.current_customer_graph g where source = 'van'
+);
+
+drop table if exists ppfa_golden.catalist_van_only_clusters;
+create table ppfa_golden.catalist_van_only_clusters as
+(
+select distinct g.resolved_id from ppfa_golden.current_customer_graph g where source = 'van' 
+minus 
+select distinct g.resolved_id from ppfa_golden.current_customer_graph g where source = 'round_data'
+);
+
+drop table if exists ppfa_golden.catalist_cross_clusters;
+create table ppfa_golden.catalist_cross_clusters as
+(
+select distinct g.resolved_id from ppfa_golden.current_customer_graph g
+where source in ('round_data','van')
+group by resolved_id
+having count(distinct source) >1
+);
+
+
+/*firstnames*/
+Update ppfa_golden.catalist_source  
+set first_name = firstname 
+from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_high_touch t where g.resolved_id = t.resolved_id) ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set first_name = firstname 
+from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set first_name = firstname 
+from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
