@@ -1,6 +1,6 @@
 drop table if exists ppfa_golden.catalist_source;
 create table ppfa_golden.catalist_source as (
-select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%'
+select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%' and resolved_id not like '003%'
 );
 
 ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN first_name varchar(1024);
@@ -54,7 +54,7 @@ set first_name = firstname
 from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
 from ppfa_golden.current_customer_graph g 
 join rounddata.contact c on g.source_primary_key = c.id
-where exists (select 'x' from ppfa_golden.catalist_high_touch t where g.resolved_id = t.resolved_id) ) f 
+where exists (select 'x' from ppfa_golden.catalist_high_touch t where g.resolved_id = t.resolved_id) and firstname is not null ) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
 
 Update ppfa_golden.catalist_source  
@@ -62,7 +62,7 @@ set first_name = firstname
 from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
 from ppfa_golden.current_customer_graph g 
 join rounddata.contact c on g.source_primary_key = c.id
-where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) ) f 
+where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) and firstname is not null ) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
 
 Update ppfa_golden.catalist_source  
@@ -70,5 +70,5 @@ set first_name = firstname
 from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
 from ppfa_golden.current_customer_graph g 
 join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
-where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) ) f 
+where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and firstname is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
