@@ -14,6 +14,7 @@ ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN email  Varchar(1024);
 ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN phone  Varchar(1024);
 ALTER TABLE  ppfa_golden.catalist_source ADD COLUMN birth_date  Date;
 
+/*Need to work in Not exists against the hight touch bucket for the others*/
 drop table if exists ppfa_golden.catalist_high_touch;
 create table ppfa_golden.catalist_high_touch as
 (
@@ -71,4 +72,99 @@ from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolve
 from ppfa_golden.current_customer_graph g 
 join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
 where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and firstname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set first_name = firstname 
+from (select resolved_id, firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
+from (
+select resolved_id, firstname
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+UNION
+select resolved_id, firstname
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+)  g 
+where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and firstname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+/*Last Names*/
+Update ppfa_golden.catalist_source  
+set last_name = lastname 
+from (select resolved_id, c.lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_high_touch t where g.resolved_id = t.resolved_id) and lastname is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set last_name = lastname
+from (select resolved_id, c.lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) and lastname is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set last_name = lastname 
+from (select resolved_id, c.lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and lastname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set last_name = lastname 
+from (select resolved_id, lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from (
+select resolved_id, lastname
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+UNION
+select resolved_id, lastname
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+)  g 
+where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and lastname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+/*Middle Names*/
+Update ppfa_golden.catalist_source  
+set middle_name = rc_bios__middle_name 
+from (select resolved_id, c.rc_bios__middle_name, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(rc_bios__middle_name) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_high_touch t where g.resolved_id = t.resolved_id) and rc_bios__middle_name is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set middle_name = rc_bios__middle_name 
+from (select resolved_id, c.rc_bios__middle_name, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(rc_bios__middle_name) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) and rc_bios__middle_name is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set middle_name = middlename 
+from (select resolved_id, c.middlename, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(middlename) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and middlename is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set middle_name = middlename 
+from (select resolved_id, middlename, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(middlename) desc) as "name_rank"
+from (
+select resolved_id, rc_bios__middle_name as "middlename"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+UNION
+select resolved_id, middlename 
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+)  g 
+where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and middlename is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
