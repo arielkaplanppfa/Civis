@@ -48,6 +48,12 @@ from ppfa_golden.current_customer_graph g
 join vansync.ppfa_contactsaddresses_mym a on g.source_primary_key = a.vanid
 where a.datesuppressed is null and a.addressline1 is not null and 
 not exists (select 'x' from  vanone t where a.contactsaddressid = t.address_id )
+UNION
+select distinct resolved_id as "ppid", source_primary_key, a.contactsaddressid:: varchar as "Address_Id", a.streetno||' '||a.streetname as "Street_line_1", a.addressline2 as "Street_line_2", a.addressline3 as "Street_line_3", a.city, a.state, a.countrycode, a.zip5||'-'||a.zip4 as "postal_code", 'false' as "do_not Mail", 'Home' as "type",'true' as "Preferred_shipping", 'false' as "Verified", a.datemodified as "Date",'4':: integer as "Address_rank",'Van - Unconfirmed' as "Source"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contactsaddresses_mym a on g.source_primary_key = a.vanid
+where a.datesuppressed is null and a.addressline1 is null and (a.vaddress is not null and a.streetno is not null and a.streetname is not null and a.city is not null and a.state is not null) and 
+not exists (select 'x' from  vanone t where a.contactsaddressid = t.address_id )
 ), 
 vanthree as(
 select distinct resolved_id as "ppid", source_primary_key ,  aa.contactsonlineformid:: varchar as "Address_ID", aa.submittedaddressline1 as "Street_line_1",'' as "Street Line 2", '' as "Street Line 3", aa.submittedcity as "City", aa.submittedstateprovince as "state",'US' as "Country", aa.submittedpostalcode as "postal_code", 'false' as "do_not Mail", 'Home' as "type",'true' as "Preferred_shipping", 'false' as "Verified",  aa.datecreated as "Date",'5':: integer as "Address_rank",'Van - Bulk' as "Source"
