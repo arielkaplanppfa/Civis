@@ -35,11 +35,38 @@ where aa.delete_flag <> 'Y' and aa.isdeleted = 'false' and aa.rc_bios__active = 
 and i.resolved_id not in (select resolved_id from temp) 
 and rc_bios__street_line_1 is not null -- Test suppression, why include these?
 ),
+vanone as(
+select distinct resolved_id as "ppid", source_primary_key, a.contactsaddressid:: varchar as "Address_Id", a.addressline1 as "Street_line_1", a.addressline2, a.addressline3, a.city, a.state, a.countrycode, a.zip5||'-'||a.zip4 as "postal_code", 'false' as "do_not Mail", 'Home' as "type", 'true' as "Preferred_shipping", 'true' as "Verified", of.datemodified as "Date",'2':: integer   as "Address_Rank" , 'Van - Confirmed' as "Source"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contactsaddresses_mym a on g.source_primary_key = a.vanid
+join vansync.ppfa_contactsonlineforms_mym of on a.vanid = of.vanid and upper(a.addressline1) = upper(of.submittedaddressline1)
+where a.datesuppressed is null
+), 
+vantwo as (
+select distinct resolved_id as "ppid", source_primary_key, a.contactsaddressid:: varchar as "Address_Id", a.addressline1 as "Street_line_1", a.addressline2 as "Street_line_2", a.addressline3 as "Street_line_3", a.city, a.state, a.countrycode, a.zip5||'-'||a.zip4 as "postal_code", 'false' as "do_not Mail", 'Home' as "type",'true' as "Preferred_shipping", 'false' as "Verified", a.datemodified as "Date",'4':: integer as "Address_rank",'Van - Unconfirmed' as "Source"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contactsaddresses_mym a on g.source_primary_key = a.vanid
+where a.datesuppressed is null and a.addressline1 is not null and 
+not exists (select 'x' from  vanone t where a.contactsaddressid = t.address_id )
+), 
+vanthree as(
+select distinct resolved_id as "ppid", source_primary_key ,  aa.contactsonlineformid:: varchar as "Address_ID", aa.submittedaddressline1 as "Street_line_1",'' as "Street Line 2", '' as "Street Line 3", aa.submittedcity as "City", aa.submittedstateprovince as "state",'US' as "Country", aa.submittedpostalcode as "postal_code", 'false' as "do_not Mail", 'Home' as "type",'true' as "Preferred_shipping", 'false' as "Verified",  aa.datecreated as "Date",'5':: integer as "Address_rank",'Van - Bulk' as "Source"
+from ppfa_golden.current_customer_graph gg 
+join vansync.ppfa_contactsonlineforms_mym aa on gg.source_primary_key = aa.vanid
+where aa.submittedaddressline1 is not null
+order by ppid asc,date desc
+),
 tempthree as
 (
 select * from temp
 UNION
 select * from temptwo
+Union 
+select * from vanone
+union
+select * from vantwo
+union
+select * from vanthree
 order by  resolved_id, source_primary_key,Address_Rank asc, createddate desc
 ),
 tempfour as (
@@ -59,3 +86,27 @@ from ppfa_golden.staging_mailing_address where golden_rank = 1 order by resolved
 /*
 select resolved_id, source_primary_key, address_id, rc_bios__street_line_1, rc_bios__street_line_2, rc_bios__additional_line_1, rc_bios__city, rc_bios__state, rc_bios__country, rc_bios__postal_code, rc_bios__do_not_mail, rc_bios__type, createddate, source, address_rank, golden_rank 
 from temp where golden_rank = 1 order by resolved_id, golden_rank asc*/
+
+/*Van Side*/ -- All Home except user-defined work, false for opt out
+/*
+With temp as(
+select distinct resolved_id as "ppid", source_primary_key,'Van - Confirmed' as "Source", a.contactsaddressid as "Address_Id", a.addressline1 as "Street_line_1", a.addressline2, a.addressline3, a.city, a.state, a.countrycode, a.zip5||'-'||a.zip4 as "postal_code", of.datemodified as "Date"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contactsaddresses_mym a on g.source_primary_key = a.vanid
+join vansync.ppfa_contactsonlineforms_mym of on a.vanid = of.vanid and upper(a.addressline1) = upper(of.submittedaddressline1)
+where a.datesuppressed is null
+), temptwo as (
+select resolved_id as "ppid", source_primary_key,'Van - Unconfirmed' as "Source", a.contactsaddressid as "Address_Id", a.addressline1 as "Street_line_1", a.addressline2 as "Street_line_2", a.addressline3 as "Street_line_3", a.city, a.state, a.countrycode, a.zip5||'-'||a.zip4 as "postal_code", a.datemodified as "Date"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contactsaddresses_mym a on g.source_primary_key = a.vanid
+where a.datesuppressed is null and a.addressline1 is not null and 
+not exists (select 'x' from  temp t where a.contactsaddressid = t.address_id )
+), tempthree as(
+select resolved_id as "ppid", source_primary_key , 'Van - Bulk' as "Source", aa.contactsonlineformid as "Address_ID", aa.submittedaddressline1 as "Street_line_1",'' as "Street Line 2", '' as "Street Line 3", aa.submittedcity as "City", aa.submittedstateprovince as "state",'country' as "Country", aa.submittedpostalcode as "postal_code", aa.datecreated as "Date"
+from ppfa_golden.current_customer_graph gg 
+join vansync.ppfa_contactsonlineforms_mym aa on gg.source_primary_key = aa.vanid
+where aa.submittedaddressline1 is not null
+order by ppid asc,date desc
+)
+select * from temp UNION select * from temptwo UNION select * from tempthree 
+order by ppid, source, date desc*/
