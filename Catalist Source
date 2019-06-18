@@ -1,4 +1,4 @@
-/*drop table if exists ppfa_golden.catalist_source;
+drop table if exists ppfa_golden.catalist_source;
 create table ppfa_golden.catalist_source as (
 select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%' and resolved_id not like '003%'
 );
@@ -173,7 +173,7 @@ where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
 Update ppfa_golden.catalist_source 
 set street = coalesce(m.street_1,'')||' '||coalesce(m.street_2,'')||' '||coalesce(m.street_3,''), city = m.city, state = m.state, zip = m.zip
 from ( select * from ppfa_golden.mailing_address) m where resolved_id = m.ppid;
-*/
+
 --Phones
 update ppfa_golden.catalist_source
 set  phone = p.home_phone
@@ -188,4 +188,36 @@ from (select p.resolved_id, m.phone,  ROW_NUMBER () OVER ( PARTITION BY resolved
 where catalist_source.resolved_id = g.resolved_id
 and catalist_source.phone is null and g.phone_rank = 1;
 
+
+--Birthdates
+update ppfa_golden.catalist_source
+set birth_date = b.birthdate
+from (
+  select g.resolved_id, left(birthdate,11)::date as "birthdate",ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "birth_rank"  
+  from ppfa_golden.current_customer_graph g join rounddata.contact m on g.source_primary_key = m.id
+  where birthdate is not null
+  ) b
+where catalist_source.resolved_id = b.resolved_id
+and catalist_source.birth_date is null and b.birth_rank = 1 ;
+
+update ppfa_golden.catalist_source
+set birth_date = b.birthdate
+from (
+  select g.resolved_id, left(dob,11)::date as "birthdate",ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "birth_rank"  
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym m on g.source_primary_key = m.vanid
+  where dob is not null
+  ) b
+where catalist_source.resolved_id = b.resolved_id
+and catalist_source.birth_date is null and b.birth_rank = 1 ;
+
+
+update ppfa_golden.catalist_source
+set birth_date = b.birthdate
+from (
+  select g.resolved_id, to_date(rc_bios__birth_year,'YYYY') as "birthdate",ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "birth_rank"  
+  from ppfa_golden.current_customer_graph g join rounddata.contact m on g.source_primary_key = m.id
+  where rc_bios__birth_year is not null
+  ) b
+where catalist_source.resolved_id = b.resolved_id
+and catalist_source.birth_date is null and b.birth_rank = 1 ;
 
