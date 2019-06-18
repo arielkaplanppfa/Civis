@@ -221,3 +221,53 @@ from (
 where catalist_source.resolved_id = b.resolved_id
 and catalist_source.birth_date is null and b.birth_rank = 1 ;
 
+-- emails
+update ppfa_golden.catalist_source
+set email = u.email
+From (
+  select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datefirstread desc) as "email_rank"
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contactsemailbatches_mym e on g.source_primary_key = e.vanid
+  where datebounced is null ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1;
+  
+  
+update ppfa_golden.catalist_source
+set email = u.valuex
+From (
+  select g.resolved_id, c.valuex, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "email_rank"
+  from  ppfa_golden.current_customer_graph g join rounddata.additional_contact_info c on g.source_primary_key = c.contact
+  where typex = 'Email' and preferred = 'true'
+  ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+  update ppfa_golden.catalist_source
+set email = u.valuex
+From (
+  select g.resolved_id, c.valuex, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "email_rank"
+  from  ppfa_golden.current_customer_graph g join rounddata.additional_contact_info c on g.source_primary_key = c.contact
+  where typex = 'Email' and preferred = 'false'
+  ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+  update ppfa_golden.catalist_source
+set email = u.email
+From (
+  select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "email_rank"
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contactsemails_mym e on g.source_primary_key = e.vanid
+  where datesuppressed is null ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+  update ppfa_golden.catalist_source
+set email = u.email
+From (
+  select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "email_rank"
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym e on g.source_primary_key = e.vanid
+  where email is not null ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+
