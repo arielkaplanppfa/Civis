@@ -1,0 +1,60 @@
+drop table if exists  pp_keystone.Opportunity_Transactions;
+
+With temp as ( --Transactions
+ select * from pp_keystone.ak_trans_opp_temp
+)
+select 
+a.id as accountid,
+a.id as rc_giving__primary_account__c,
+'PPKEY TEST' as ack_code__c,
+t.affiliate_number__c,
+t.appeal as legacy_appeal__c,
+t.campaign as legacy_campaign__c,
+t.check_amount__c,
+t.closedate,
+c.id as rC_Giving__Primary_Contact__c,
+c.id as rc_giving__hard_credit_contact__c,
+t.deposit_date__c,
+par.id as rc_giving__parent__c,
+t.forecastcategory,
+fund as legacy_fund__c,
+t.isclosed,
+t.iswon,
+t.legacy_created_by__c,
+t.legacy_id__c,
+t.migrated_record__c,
+t.name,
+t.no_acknowledgement__c,
+t.package as legacy_package__c,
+pm.id as rC_Giving__Payment_Method_Selected__c,
+t.processed_date__c,
+t.rc_giving__acknowledged__c,
+t.rc_giving__acknowledged_date__c,
+t.rc_giving__campaign_channel__c,
+t.rc_giving__check_date__c,
+t.rc_giving__check_number__c,
+t.rc_giving__close_date_time__c,
+t.rc_giving__closed_amount__c,
+t.rc_giving__comments__c,
+t.rc_giving__current_giving_amount__c,
+t.rc_giving__expected_giving_amount__c,
+t.rc_giving__giving_amount__c,
+t.rc_giving__is_giving_transaction__c,
+t.rc_giving__payment_method__c,
+t.rc_giving__send_to_gl__c,
+t.rc_givng__is_anonymous__c,
+t.recordtypeid,
+t.stagename,
+'a0g5B0000049FJZQA2' as rC_Giving__GAU__c,   --Harcoded for testing, replace with FY19 Logic
+'PPKEY DEFAULT' as GAU_Credit_Code__c,
+'PPKEY DEFAULT' as GAU_Debit_Code__c,
+'7015B000000LaYfQAK' as CampaignID,
+'3KALZXXXXV1K01' as Original_Source_Code__c,
+'3KALZXXXXV1K01' as rC_Giving__Source_Code__c
+into pp_keystone.Opportunity_Transactions
+from temp t 
+join pp_keystone.pull_account a on t.acct_ext_id = a.external_id__c
+join pp_keystone.pull_contact c on t.contact_ext_id = c.external_id__c
+join pp_keystone.pull_payment_method pm on t.pm_ext_id = pm.external_id__c
+join pp_keystone.pull_opportunity_Parent par on t.don_legacy_id__c = par.legacy_id__c--THIS LAST JOIN IS FOR THE 1K REC TEST
+;
