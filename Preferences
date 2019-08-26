@@ -1,0 +1,225 @@
+drop table if exists pp_keystone.preferences_temp;
+
+create table pp_keystone.preferences_temp (
+contact_ext_id varchar(100),
+acct_ext_id varchar(100),
+rc_bios__category__c varchar(100),
+rc_bios__subcategory__c varchar(100),
+rc_bios__type__c varchar(100),
+rc_bios__active__c boolean,
+rc_bios__end_date__c date,
+rc_bios__start_date__c date, 
+migrated_record__c boolean,
+active_duplicate_detection__c varchar(100),
+rc_bios__external_id__c varchar (100),
+rc_bios__comments__c varchar (1024)  
+);
+
+
+insert into pp_keystone.preferences_temp
+with FrmBrd as ( --Former Board---------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Constituent Type' as rc_bios__category__c, 
+'Board Member' as rc_bios__subcategory__c, 
+'Affiliate Board PPKey C3' as rc_bios_type__c, 
+FALSE as rc_bios__active__c, 
+CASE when length(conscodedateto) = 10 then conscodedateto::date else '8/26/2019'::Date end as rc_bios__end_date__c,
+CASE when length(conscodedatefrom) = 10 then conscodedatefrom::date else '8/26/2018'::Date end as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'       ' as active_duplicate_detection__c,
+'KEY'||conscodeimpid as rc_bios__external_id__c,
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+from pp_keystone.re_conscode code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where conscode = 'FrmBrd'),
+FrmBrdtwo as (-- Former Board -------------------------------------------------
+  select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Constituent Type' as rc_bios__category__c, 
+'Board Member' as rc_bios__subcategory, 
+'Affiliate Board PPKey C3' as rc_bios_type, 
+FALSE as rc_bios__active__c, 
+ '8/26/2019'::Date  as rc_bios__end_date__c,
+'8/26/2018'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+null::varchar as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where  cattrcat = 'Former Board Member'),
+board as ( -- Active Board-------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Constituent Type' as rc_bios__category__c, 
+'Board Member' as rc_bios__subcategory, 
+'Affiliate Board PPKey C3' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+CASE when length(conscodedatefrom) = 10 then conscodedatefrom::date else '8/26/2018'::Date end as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||conscodeimpid as rc_bios__external_id__c,
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+from pp_keystone.re_conscode code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where conscode = 'Board'),
+estate as ( -- Estate-----------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Constituent Type' as rc_bios__category__c, 
+'Planned Gift' as rc_bios__subcategory, 
+'Affiliate Estate PPKEY' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+CASE when length(conscodedatefrom) = 10 then conscodedatefrom::date else '8/26/2018'::Date end as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||conscodeimpid as rc_bios__external_id__c,
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+from pp_keystone.re_conscode code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where conscode = 'ESTATE'
+),
+NoMail as ( -- No Mail--------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Appeal' as rc_bios__category__c, 
+'Do Not Mail' as rc_bios__subcategory, 
+null::varchar as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.importid||ROW_NUMBER () OVER(partition by code.consid) as rc_bios__external_id__c,
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+from pp_keystone.re_conssolicitcode code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where solcode = 'Requests No Mail' ),
+ffc as (-- Fund For Choice ---------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Constituent Type' as rc_bios__category__c, 
+'Committee' as rc_bios__subcategory, 
+'Keystone Committee' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+'Fund For Choice Committee' as rc_bios__comments__c
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where cattrcat = 'FFC Committee'),
+Comm as ( -- Committee----------------------------------------------------
+ select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Constituent Type' as rc_bios__category__c, 
+'Committee' as rc_bios__subcategory, 
+'Keystone Committee' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+cattrdesc as rc_bios__comments__c
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where cattrdesc like  '%Committee%' 
+  ),
+ET as (--Elephants Trunk ---------------------------------------------------
+ select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Group Member' as rc_bios__category__c, 
+'Keystone' as rc_bios__subcategory, 
+'Elephant''s Trunk' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+cattrdesc as rc_bios__comments__c
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where cattrcat like '%Trunk%'),
+Partnership as ( --Partnership Council----------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Group Member' as rc_bios__category__c, 
+'Keystone' as rc_bios__subcategory, 
+'Partnership Council' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+cattrdesc as rc_bios__comments__c
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where  cattrcat like '%Council%'),
+Anon as ( -- Anonymous ---------------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Appeal' as rc_bios__category__c, 
+'Anonymous Known' as rc_bios__subcategory, 
+null::varchar as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+'Anonymous attibute migrated from PP Keystone Database' as rc_bios__comments__c
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where  cattrdesc = 'Anonymous'
+),
+ht as ( -- High Touch -----------------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Constituent Type' as rc_bios__category__c, 
+'High Touch Portfolio' as rc_bios__subcategory, 
+'PPKEY Portfolio' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+cattrcom as rc_bios__comments__c
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where  cattrcat = 'High Touch Donors'  
+),
+combined as (
+select * from ht
+UNION
+select * from Anon
+UNION
+select * from Partnership
+UNION
+select * from ET
+UNION
+select * from Comm
+UNION
+select * from ffc
+UNION
+select * from NoMail
+UNION
+select * from estate
+UNION
+select * from board
+UNION
+select * from FrmBrdtwo
+UNION
+select * from FrmBrd
+)
+select * from combined; 
+
+select rc_bios__category__c,rc_bios__subcategory__c,rc_bios__type__c, count(*) from pp_keystone.preferences_temp group by rc_bios__category__c,rc_bios__subcategory__c,rc_bios__type__c;
