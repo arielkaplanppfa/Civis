@@ -30,8 +30,9 @@ ROW_NUMBER() over (partition by g.adjustedgiftrecordid order by g.giftrecordid d
 g.GiftRecordId, 
 'KEY'||g.GFImpID||'P' as legacy_id__c,
 TRUE as migrated_record__c, 
-Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null end  as rc_giving__acknowledged_date__c,
+Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null::date end  as rc_giving__acknowledged_date__c,
 Case when g.GFAck = 'Do Not Acknowledge' then FALSE when g.GFAck = 'Acknowledged'  then TRUE else FALSE end as rC_Giving__Acknowledged__c,
+Case when g.gfltrcode is not null then left(g.gfltrcode,30) else null::varchar end as ack_code__c,
 Case when g.GFAck = 'Do Not Acknowledge' then TRUE else FALSE end as No_Acknowledgement__c,
 Case when g.GFcheckdate <> 'NULL' then g.GFcheckdate::date else null end  as rC_Giving__Check_Date__c,
 g.gfchecknum as rC_Giving__Check_Number__c,
@@ -59,7 +60,6 @@ g.ConsID||'xx'||Case when g.GFPaymeth in ('Business Check','Personal Check','Cas
      end||Case when g.gfsubtype like '%Merchant%' then 'BB' when g.gfsubtype like '%Convio%' then 'CONV' when g.gfsubtype like 'Square' then 'SQ' when g.gfsubtype like '%Action%' then 'EA'   else '' end||case when g.gfcctype is not null then g.gfcctype else '' end as pm_ext_id, 
 g.gfref as rC_Giving__Comments__c,
 'No Feed' as rC_Giving__Send_to_GL__c,
-'IMRAN TO PRODUCE LIST OTHERWISE KEYSTONE DEFAULT' as ack_code__c,
 g.addedby as legacy_created_by__c, 
 Case when g.GFSubType like 'Every Action%' then 'Web' else 'Other' end as  rC_Giving__Campaign_Channel__c,
 TRUE as isclosed,
@@ -73,7 +73,7 @@ from pp_keystone.re_gift g
 join pp_keystone.ak_contacts c on 'KEY'||g.ConsID = c.external_id__c
 join pp_keystone.re_gift gg on g.AdjustedGiftRecordId = gg.GiftRecordId
 join pp_keystone.ak_account a on c.acct_ext_id = a.external_id__c
-where g.IsAdjustment = 'true' and upper(gg.gftype) not like '%PAY-%' and upper(gg.gftype) not like '%PLEDGE%' and g.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO') 
+where g.IsAdjustment = 'true' and upper(gg.gftype) not like '%PAY-%' and upper(gg.gftype) not like '%PLEDGE%' and g.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO','CONF','JUSTICEFUND','Peer-to-Peer PPOL','PPFA','PPFA Rebate','PPFA Second Century','PPGENX','SECOND CENTURY') 
  ), -------------------------------------------------------------------------------------------------------------------
 temptwo as( --Non adjusted gifts
 select c.acct_ext_id,
@@ -82,8 +82,9 @@ g.adjustedgiftrecordid,
 g.GiftRecordId, 
 'KEY'||g.GFImpID||'P' as legacy_id__c,
 TRUE as migrated_record__c,
-Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null end  as rc_giving__acknowledged_date__c,
-Case when g.GFAck = 'Do Not Acknowledge' then 'FALSE' when g.GFAck = 'Acknowledged'  then TRUE else FALSE end as rC_Giving__Acknowledged__c,
+Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null::date end  as rc_giving__acknowledged_date__c,
+Case when g.GFAck = 'Do Not Acknowledge' then FALSE when g.GFAck = 'Acknowledged'  then TRUE else FALSE end as rC_Giving__Acknowledged__c,
+Case when g.gfltrcode is not null then left(g.gfltrcode,30) else null::varchar end as ack_code__c,
 Case when g.GFAck = 'Do Not Acknowledge' then TRUE else FALSE end as No_Acknowledgement__c,
 Case when g.GFcheckdate <> 'NULL' then g.GFcheckdate::date else null end  as rC_Giving__Check_Date__c,
 g.gfchecknum as rC_Giving__Check_Number__c,
@@ -111,7 +112,6 @@ g.ConsID||'xx'||Case when g.GFPaymeth in ('Business Check','Personal Check','Cas
      end||Case when g.gfsubtype like '%Merchant%' then 'BB' when g.gfsubtype like '%Convio%' then 'CONV' when g.gfsubtype like 'Square' then 'SQ' when g.gfsubtype like '%Action%' then 'EA'   else '' end||case when g.gfcctype is not null then g.gfcctype else '' end as pm_ext_id, 
 g.gfref as rC_Giving__Comments__c,
 'No Feed' as rC_Giving__Send_to_GL__c,
-'IMRAN TO PRODUCE LIST OTHERWISE KEYSTONE DEFAULT' as ack_code__c, --Note character limit on ack code
 g.addedby as legacy_created_by__c,
 Case when g.GFSubType like 'Every Action%' then 'Web' else 'Other' end as  rC_Giving__Campaign_Channel__c,
 TRUE as isclosed,
@@ -124,15 +124,15 @@ FALSE as rC_Giving__Is_Giving_Transaction__c
 from pp_keystone.re_gift g 
 join pp_keystone.ak_contacts c on 'KEY'||g.ConsID = c.external_id__c
 join pp_keystone.ak_account a on c.acct_ext_id = a.external_id__c
-where g.IsAdjustment = 'false' and upper(g.gftype) not like '%PAY-%' and upper(g.gftype) not like '%PLEDGE%' and g.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO') 
+where g.IsAdjustment = 'false' and upper(g.gftype) not like '%PAY-%' and upper(g.gftype) not like '%PLEDGE%' and g.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO','CONF','JUSTICEFUND','Peer-to-Peer PPOL','PPFA','PPFA Rebate','PPFA Second Century','PPGENX','SECOND CENTURY')  
 and not exists (select 'x' from temp t where t.adjustedgiftrecordid = g.GiftRecordId)),
 ---------------------------------------------------------------------------------------------------------------
 tempthree as (
-select acct_ext_id,contact_ext_id,adjustedgiftrecordid,GiftRecordId,legacy_id__c, migrated_record__c,rc_giving__acknowledged_date__c,rC_Giving__Acknowledged__c,
+select acct_ext_id,contact_ext_id,adjustedgiftrecordid,GiftRecordId,legacy_id__c, migrated_record__c,rc_giving__acknowledged_date__c,rC_Giving__Acknowledged__c,ack_code__c,
 No_Acknowledgement__c,rC_Giving__Check_Date__c,rC_Giving__Check_Number__c,check_amount__c,rc_giving__closed_amount__c,rC_Giving__Current_Giving_Amount__c,
  rC_Giving__Expected_Giving_Amount__c,rC_Giving__Giving_Amount__c,rc_givng__is_Anonymous__c,campaign,appeal,fund,package, Deposit_Date__c,closedate,
  processed_date__c,rC_Giving__Close_Date_Time__c,recordtypeid,rC_Giving__Payment_Method__c,pm_ext_id,rC_Giving__Comments__c,
- rC_Giving__Send_to_GL__c,ack_code__c,legacy_created_by__c,rC_Giving__Campaign_Channel__c,isclosed, iswon,name,stagename, ForecastCategory, affiliate_number__c,
+ rC_Giving__Send_to_GL__c,legacy_created_by__c,rC_Giving__Campaign_Channel__c,isclosed, iswon,name,stagename, ForecastCategory, affiliate_number__c,
 rC_Giving__Is_Giving_Transaction__c
 from temp where rownum = 1
 UNION 
@@ -152,8 +152,9 @@ ROW_NUMBER() over (partition by g.adjustedgiftrecordid order by g.giftrecordid d
 g.GiftRecordId, 
 'KEY'||g.GFImpID||'P' as legacy_id__c,
 TRUE as migrated_record__c, 
-Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null end  as rc_giving__acknowledged_date__c,
+Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null::date end  as rc_giving__acknowledged_date__c,
 Case when g.GFAck = 'Do Not Acknowledge' then FALSE when g.GFAck = 'Acknowledged'  then TRUE else FALSE end as rC_Giving__Acknowledged__c,
+Case when g.gfltrcode is not null then left(g.gfltrcode,30) else null::varchar end as ack_code__c,
 Case when g.GFAck = 'Do Not Acknowledge' then TRUE else FALSE end as No_Acknowledgement__c,
 Case when g.GFcheckdate <> 'NULL' then g.GFcheckdate::date else null end  as rC_Giving__Check_Date__c,
 g.gfchecknum as rC_Giving__Check_Number__c,
@@ -181,7 +182,6 @@ g.ConsID||'xx'||Case when g.GFPaymeth in ('Business Check','Personal Check','Cas
      end||Case when g.gfsubtype like '%Merchant%' then 'BB' when g.gfsubtype like '%Convio%' then 'CONV' when g.gfsubtype like 'Square' then 'SQ' when g.gfsubtype like '%Action%' then 'EA'   else '' end||case when g.gfcctype is not null then g.gfcctype else '' end as pm_ext_id, 
 g.gfref as rC_Giving__Comments__c,
 'No Feed' as rC_Giving__Send_to_GL__c,
-'IMRAN TO PRODUCE LIST OTHERWISE KEYSTONE DEFAULT' as ack_code__c,
 g.addedby as legacy_created_by__c, 
 Case when g.GFSubType like 'Every Action%' then 'Web' else 'Other' end as  rC_Giving__Campaign_Channel__c,
 TRUE as isclosed,
@@ -195,7 +195,7 @@ from pp_keystone.re_gift g
 join pp_keystone.ak_contacts c on 'KEY'||g.ConsID = c.external_id__c
 join pp_keystone.re_gift gg on g.AdjustedGiftRecordId = gg.GiftRecordId
 join pp_keystone.ak_account a on c.acct_ext_id = a.external_id__c
-where g.IsAdjustment = 'true' and upper(gg.gftype) like '%PLEDGE%' and gg.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO') 
+where g.IsAdjustment = 'true' and upper(gg.gftype) like '%PLEDGE%' and gg.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO','CONF','JUSTICEFUND','Peer-to-Peer PPOL','PPFA','PPFA Rebate','PPFA Second Century','PPGENX','SECOND CENTURY')  
  ), -------------------------------------------------------------------------------------------------------------------
 temptwo as( --Pledge - Non adjusted gifts
 select c.acct_ext_id,
@@ -204,8 +204,9 @@ g.adjustedgiftrecordid,
 g.GiftRecordId, 
 'KEY'||g.GFImpID||'P' as legacy_id__c,
 TRUE as migrated_record__c,
-Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null end  as rc_giving__acknowledged_date__c,
+Case when g.GFAckDate <> 'NULL' then g.GFAckDate::date else null::date end  as rc_giving__acknowledged_date__c,
 Case when g.GFAck = 'Do Not Acknowledge' then FALSE when g.GFAck = 'Acknowledged'  then TRUE else FALSE end as rC_Giving__Acknowledged__c,
+Case when g.gfltrcode is not null then left(g.gfltrcode,30) else null::varchar end as ack_code__c,
 Case when g.GFAck = 'Do Not Acknowledge' then TRUE else FALSE end as No_Acknowledgement__c,
 Case when g.GFcheckdate <> 'NULL' then g.GFcheckdate::date else null end  as rC_Giving__Check_Date__c,
 g.gfchecknum as rC_Giving__Check_Number__c,
@@ -233,7 +234,6 @@ g.ConsID||'xx'||Case when g.GFPaymeth in ('Business Check','Personal Check','Cas
      end||Case when g.gfsubtype like '%Merchant%' then 'BB' when g.gfsubtype like '%Convio%' then 'CONV' when g.gfsubtype like 'Square' then 'SQ' when g.gfsubtype like '%Action%' then 'EA'   else '' end||case when g.gfcctype is not null then g.gfcctype else '' end as pm_ext_id, 
 g.gfref as rC_Giving__Comments__c,
 'No Feed' as rC_Giving__Send_to_GL__c,
-'IMRAN TO PRODUCE LIST OTHERWISE KEYSTONE DEFAULT' as ack_code__c,
 g.addedby as legacy_created_by__c,
 Case when g.GFSubType like 'Every Action%' then 'Web' else 'Other' end as  rC_Giving__Campaign_Channel__c,
 TRUE as isclosed,
@@ -246,15 +246,15 @@ FALSE as rC_Giving__Is_Giving_Transaction__c
 from pp_keystone.re_gift g 
 join pp_keystone.ak_contacts c on 'KEY'||g.ConsID = c.external_id__c
 join pp_keystone.ak_account a on c.acct_ext_id = a.external_id__c
-where g.IsAdjustment = 'false' and upper(g.gftype)  like '%PLEDGE%' and g.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO') 
+where g.IsAdjustment = 'false' and upper(g.gftype)  like '%PLEDGE%' and g.gfappeal not in ('C407JA','C409SB','C42006','C4ANNA','C4DN06','C409JA','CP_C4,C407JU','C4BOAR','PPPA 18 C4','PPPA 19 C4','C408JA','C4UNSO','CONF','JUSTICEFUND','Peer-to-Peer PPOL','PPFA','PPFA Rebate','PPFA Second Century','PPGENX','SECOND CENTURY')  
 and not exists (select 'x' from temp t where t.adjustedgiftrecordid = g.GiftRecordId)),
 ---------------------------------------------------------------------------------------------------------------
 tempthree as (
-select acct_ext_id,contact_ext_id,adjustedgiftrecordid,GiftRecordId,legacy_id__c, migrated_record__c,rc_giving__acknowledged_date__c,rC_Giving__Acknowledged__c,
+select acct_ext_id,contact_ext_id,adjustedgiftrecordid,GiftRecordId,legacy_id__c, migrated_record__c,rc_giving__acknowledged_date__c,rC_Giving__Acknowledged__c,ack_code__c,
 No_Acknowledgement__c,rC_Giving__Check_Date__c,rC_Giving__Check_Number__c,check_amount__c,rc_giving__closed_amount__c,rC_Giving__Current_Giving_Amount__c,
  rC_Giving__Expected_Giving_Amount__c,rC_Giving__Giving_Amount__c,rc_givng__is_Anonymous__c,campaign,appeal,fund,package, Deposit_Date__c,closedate,
  processed_date__c,rC_Giving__Close_Date_Time__c,recordtypeid,rC_Giving__Payment_Method__c,pm_ext_id,rC_Giving__Comments__c,
- rC_Giving__Send_to_GL__c,ack_code__c,legacy_created_by__c,rC_Giving__Campaign_Channel__c,isclosed, iswon,name,stagename, ForecastCategory, affiliate_number__c,
+ rC_Giving__Send_to_GL__c,legacy_created_by__c,rC_Giving__Campaign_Channel__c,isclosed, iswon,name,stagename, ForecastCategory, affiliate_number__c,
  rC_Giving__Is_Giving_Transaction__c
 from temp where rownum = 1
 UNION 
@@ -294,7 +294,7 @@ select t.external_id__c as contact_ext_id, t.acct_ext_id,
 'KEY'||c.pledgegiftimpid||'P' as pledge_legacy_id__c, 
 'KEY'||c.gfimpid||'C' as legacy_id__c,
 TRUE as migrated_record__c,
-Case when c.GFAckDate <> 'NULL' then c.GFAckDate::date else null end  as rc_giving__acknowledged_date__c,
+Case when c.GFAckDate <> 'NULL' then c.GFAckDate::date else null::date end  as rc_giving__acknowledged_date__c,
 Case when c.GFAck = 'Do Not Acknowledge' then FALSE when c.GFAck = 'Acknowledged'  then TRUE else FALSE end as rC_Giving__Acknowledged__c,
 Case when c.GFAck = 'Do Not Acknowledge' then TRUE else FALSE end as No_Acknowledgement__c,
 Case when c.GFcheckdate <> 'NULL' then c.GFcheckdate::date else null end  as rC_Giving__Check_Date__c,
@@ -318,7 +318,7 @@ Case when c.GFPaymeth in ('Business Check','Personal Check','Cash') then 'Cash/C
  c.pm_ext_id,
 c.gfref as rC_Giving__Comments__c,
 'No Feed' as rC_Giving__Send_to_GL__c,
-c.GFLtrCode as ack_code__c,
+left(c.GFLtrCode,30) as ack_code__c,
 TRUE as isclosed,
 TRUE as iswon,
 a.Name||': Pledge '||date_part(year,gfdate::date )||' Payment '||chr(149)||' '||left(gfdate,10) as Name,
