@@ -1,0 +1,103 @@
+drop table if exists pp_keystone.ak_tasks;
+
+with temp as (
+ select 
+c.id as whoid, 
+c.accountid as whatid, 
+accompletedate::date as closed_date__c,
+accompletedate::date as ActivityDate,
+Case when accomplete = 'True' then TRUE else FALSE end as Isclosed,
+Case when accomplete = 'True' or acstatus in ('Completed','Sent') then 'Completed'
+     when acstatus = 'BOUNCED' then 'Cancelled' 
+	 when acstatus is null then 'Not Started'else 'In Progress' end as Status,
+'KEY'||a.actionrecordid as external_id__c,
+a.acdateadded as createddate,
+canoteauth as legacy_created_by,
+Coalesce(canotedesc, 'Legacy Action from PP Keystone') as Subject,
+'Normal' as priority,
+TRUE as migrated_record__c,
+ CASE when accat = 'Meeting' Then 'Meeting'
+      when accat = 'Phone Call' then 'Call'
+      else  'Other' end as Type,
+ CASE when accat = 'Phone Call' then 'Call'
+      when accat = 'E-mail' then 'Email'
+      else  'Task' end as TaskSubtype,
+ CASE when accat = 'Phone Call' then 'Phone Call'
+      when accat = 'E-mail' then 'Email'
+      when accat = 'Mailing' then 'Mail'
+      when accat = 'Meeting' then 'Visit'
+      else  null end as Contact_method__c,
+Case 
+when actype = 'Appeal' then 'Solicitation'
+when actype = 'Solicitation' then 'Solicitation'
+when actype = 'Invitation Mailed' then 'Cultivation'
+when actype = 'Newsletter' then 'Cultivation'
+when actype = 'Cultivation' then 'Cultivation'
+when actype = 'Letter Written' then 'Stewardship'
+when actype = 'Stewardship' then 'Stewardship'
+when actype = 'Write-a-thon Note sent' then 'Account Notes'
+when actype = 'Phone Call' then 'Account Notes'
+when actype = 'Account Notes' then 'General'
+when actype = 'Invited to House Party' then 'Event'
+when actype = 'Email Sent' then 'Account Notes'
+when actype = 'Goal Created' then 'Cultivation'
+when actype = 'Prospect for PPSV Board' then 'Stewardship'
+when actype = 'Grant Proposal' then 'Foundations'
+when actype = 'Thank You Note Sent' then 'Stewardship'
+when actype = 'Send Letter' then 'Stewardship'
+when actype = 'Telephone Call' then 'Account Notes'
+when actype = 'Visit' then 'Cultivation'
+when actype = 'Email' then 'Account Notes'
+when actype = 'Follow Up' then 'Account Notes'
+when actype = 'Qualification' then 'Stewardship'
+when actype = 'Thank you' then 'Stewardship'
+when actype = 'Letter' then 'Stewardship'
+when actype = 'Matching Gift' then 'Donor Services'
+when actype = 'Former board prospect' then 'Stewardship'
+when actype = 'Meeting' then 'Cultivation'
+when actype = 'Attended PPSV/FFC House Party' then 'Event'
+when actype = 'Attended a PPSV event' then 'Event'
+else 'Account Notes'
+end as task_type__c,
+Case 
+when actype = 'Appeal' then 'General'
+when actype = 'Solicitation' then 'General'
+when actype = 'Invitation Mailed' then 'Invitation'
+when actype = 'Newsletter' then 'Newsletter'
+when actype = 'Cultivation' then 'General'
+when actype = 'Letter Written' then 'Letter'
+when actype = 'Stewardship' then 'General'
+when actype = 'Write-a-thon Note sent' then 'General'
+when actype = 'Phone Call' then 'General'
+when actype = 'Account Notes' then 'General'
+when actype = 'Invited to House Party' then 'Invitation'
+when actype = 'Email Sent' then 'General'
+when actype = 'Goal Created' then 'Strategy'
+when actype = 'Prospect for PPSV Board' then 'Board Outreach'
+when actype = 'Grant Proposal' then 'Proposal'
+when actype = 'Thank You Note Sent' then 'Thank You'
+when actype = 'Send Letter' then 'Letter'
+when actype = 'Telephone Call' then 'General'
+when actype = 'Visit' then 'Visit'
+when actype = 'Email' then 'General'
+when actype = 'Follow Up' then 'General'
+when actype = 'Qualification' then 'General'
+when actype = 'Letter' then 'Letter'
+when actype = 'Matching Gift' then 'Donor Gift'
+when actype = 'Former board prospect' then 'Board Outreach'
+when actype = 'Meeting' then 'Meeting'
+when actype = 'Attended PPSV/FFC House Party' then 'Participant'
+when actype = 'Attended a PPSV event' then 'Participant'
+else 'General'
+end as Task_Sub_Type__c,
+'Legacy Action Type: '||actype||'\n'||'; Legacy Action Note Title: '||Coalesce(canotetitle,'Legacy Action from PP Keystone')||'\n'||'; Legacy Note Body:'||Coalesce(canotenotes, 'Legacy Action from PP Keystone') as description,
+'KEY'||proposalimpid as CallObject,
+sol.id as ownerid,
+sol.id as Alternate_Assignee__c
+from pp_keystone.re_consaction  a
+join pp_keystone.pull_contact c on c.external_id__c = 'KEY'||a.consid
+left join pp_keystone.re_ConsActNote n on n.CALink = a.ACImpID
+left join pp_keystone.re_consactsol s on a.actionrecordid = s.actionrecordid
+left join pp_keystone.re_constituentextended e on e.recordid = s.solicitorconstituentid
+left join pp_keystone.pull_contact sol on 'KEY'||e.consid = sol.external_id__c)
+select * into pp_keystone.ak_tasks from temp;
