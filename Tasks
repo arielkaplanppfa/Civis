@@ -1,4 +1,4 @@
-drop table if exists pp_keystone.ak_tasks;
+drop table if exists pp_keystone.Task;
 
 with temp as (
  select 
@@ -100,4 +100,4 @@ left join pp_keystone.re_ConsActNote n on n.CALink = a.ACImpID
 left join pp_keystone.re_consactsol s on a.actionrecordid = s.actionrecordid
 left join pp_keystone.re_constituentextended e on e.recordid = s.solicitorconstituentid
 left join pp_keystone.pull_contact sol on 'KEY'||e.consid = sol.external_id__c)
-select * into pp_keystone.ak_tasks from temp;
+select * into pp_keystone.Task from temp;
