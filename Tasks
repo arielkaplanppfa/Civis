@@ -90,7 +90,7 @@ when actype = 'Attended PPSV/FFC House Party' then 'Participant'
 when actype = 'Attended a PPSV event' then 'Participant'
 else 'General'
 end as Task_Sub_Type__c,
-'Legacy Action Type: '||actype||'\n'||'; Legacy Action Note Title: '||Coalesce(canotetitle,'Legacy Action from PP Keystone')||'\n'||'; Legacy Note Body:'||Coalesce(canotenotes, 'Legacy Action from PP Keystone') as description,
+'Legacy Action Type: '||coalesce(actype,'Legacy Action Type')||'; Legacy Action Note Title: '||Coalesce(canotetitle,'Legacy Action from PP Keystone')||'; Legacy Note Body:'||Coalesce(substring(canotenotes,1,10000), 'Legacy Action from PPKeystone') as description,
 'KEY'||proposalimpid as CallObject,
 sol.id as ownerid,
 sol.id as Alternate_Assignee__c
