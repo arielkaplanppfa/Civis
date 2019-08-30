@@ -1,5 +1,7 @@
 drop table if exists pp_keystone.preference_temp;
 drop table if exists pp_keystone.preferences_temp;
+drop table if exists pp_keystone.rc_bios__preference__c;
+drop table if exists pp_keystone.rc_bios__preferences__c;
 
 create table pp_keystone.preferences_temp (
 contact_ext_id varchar(100),
