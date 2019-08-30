@@ -1,3 +1,4 @@
+drop table if exists pp_keystone.preference_temp;
 drop table if exists pp_keystone.preferences_temp;
 
 create table pp_keystone.preferences_temp (
@@ -353,6 +354,6 @@ with temp as (
   left join pp_keystone.pull_contact c on c.external_id__c = t.contact_ext_id
    left join pp_keystone.pull_account a on t.acct_ext_id = a.external_id__c)
   select rc_bios__contact__c, rc_bios__account__c, rc_bios__category__c, rc_bios__subcategory__c, rc_bios__type__c,  rc_bios__active__c,  rc_bios__end_date__c, rc_bios__start_date__c, migrated_record__c, active_duplicate_detection__c, rc_bios__external_id__c||row_number() over (partition by rc_bios__contact__c order by rc_bios__subcategory__c desc) as rc_bios__external_id__c ,
-rc_bios__comments__c, recordtypeid into pp_keystone.rc_bios__preferences__c from temp;
+rc_bios__comments__c, recordtypeid into pp_keystone.rc_bios__preference__c from temp;
 
 
