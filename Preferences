@@ -12,7 +12,8 @@ rc_bios__start_date__c date,
 migrated_record__c boolean,
 active_duplicate_detection__c varchar(100),
 rc_bios__external_id__c varchar (100),
-rc_bios__comments__c varchar (1024)  
+rc_bios__comments__c varchar (1024),
+recordtypeid varchar(30)
 );
 
 
@@ -29,7 +30,8 @@ CASE when length(conscodedatefrom) = 10 then conscodedatefrom::date else '8/26/2
 TRUE as migrated_record__c,
 '       ' as active_duplicate_detection__c,
 'KEY'||conscodeimpid as rc_bios__external_id__c,
-'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conscode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where conscode = 'FrmBrd'),
@@ -45,7 +47,8 @@ FALSE as rc_bios__active__c,
 TRUE as migrated_record__c,
 null::varchar as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
-'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where  cattrcat = 'Former Board Member'),
@@ -61,7 +64,8 @@ CASE when length(conscodedatefrom) = 10 then conscodedatefrom::date else '8/26/2
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||conscodeimpid as rc_bios__external_id__c,
-'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conscode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where conscode = 'Board'),
@@ -77,7 +81,8 @@ CASE when length(conscodedatefrom) = 10 then conscodedatefrom::date else '8/26/2
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||conscodeimpid as rc_bios__external_id__c,
-'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conscode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where conscode = 'ESTATE'
@@ -94,7 +99,8 @@ null::date as rc_bios__end_date__c,
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.importid||ROW_NUMBER () OVER(partition by code.consid) as rc_bios__external_id__c,
-'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c
+'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conssolicitcode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where solcode = 'Requests No Mail' ),
@@ -110,7 +116,8 @@ null::date as rc_bios__end_date__c,
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
-'Fund For Choice Committee' as rc_bios__comments__c
+'Fund For Choice Committee' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where cattrcat = 'FFC Committee'),
@@ -126,7 +133,8 @@ null::date as rc_bios__end_date__c,
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
-cattrdesc as rc_bios__comments__c
+cattrdesc as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where cattrdesc like  '%Committee%' 
@@ -143,7 +151,8 @@ null::date as rc_bios__end_date__c,
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
-cattrdesc as rc_bios__comments__c
+cattrdesc as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where cattrcat like '%Trunk%'),
@@ -159,7 +168,8 @@ null::date as rc_bios__end_date__c,
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
-cattrdesc as rc_bios__comments__c
+cattrdesc as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where  cattrcat like '%Council%'),
@@ -175,7 +185,8 @@ null::date as rc_bios__end_date__c,
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
-'Anonymous attibute migrated from PP Keystone Database' as rc_bios__comments__c
+'Anonymous attibute migrated from PP Keystone Database' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where  cattrdesc = 'Anonymous'
@@ -192,11 +203,114 @@ null::date as rc_bios__end_date__c,
 TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
-cattrcom as rc_bios__comments__c
+cattrcom as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
 where  cattrcat = 'High Touch Donors'  
 ),
+prospect  as ( -- Prospect --------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Group Member' as rc_bios__category__c, 
+'Keystone' as rc_bios__subcategory, 
+'Legacy Flags' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+'Prospect Mail Code' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where cattrcat like '%Mail%' and cattrdesc = 'PROSPECT'),
+dp as ( --DP Flags --------------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Group Member' as rc_bios__category__c, 
+'Keystone' as rc_bios__subcategory, 
+'Legacy Flags' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+cattrdesc as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where cattrcat = 'DP Flags' and cattrdesc in ('Advocates for Access','Grantwriter Assignment','Hargrave Education Donor','In-Kind Donor','Keystone Heritage Society','Other provider','Past Escort','Patient Donor','Prospect - Sent Mailing') ),
+interest as ( -- Interests ---------------------------------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Funding Interest' as rc_bios__category__c, 
+CASE When cattrdesc = 'LGBTQA Interest' Then 'LGBTQ' else 'External Philanthropic Interests - Education' end as rc_bios__subcategory, 
+'Somewhat Positive' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+cattrdesc|| '- Migrated from DP Flags for Keystone' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where cattrcat = 'DP Flags' and cattrdesc in ('Education Interest','LGBTQA Interest') ),
+cc as ( ---Capital Campaign Cabinet------------------------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Group member' as rc_bios__category__c, 
+'Keystone'  as rc_bios__subcategory, 
+'Legacy Flags' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+'Past Capital Campaign Cabinet' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where cattrcat = 'DP Flags' and cattrdesc in ('Capital Campaign Cabinet')),
+staff as (-- staff -----------------------------------------------------------------------
+select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Group member' as rc_bios__category__c, 
+'Keystone'  as rc_bios__subcategory, 
+'Legacy Flags' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+'Former Staff' as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where  cattrdesc = 'Former Staff'),
+publish as (----------Publish as -----------------------------------------------------
+ select 'KEY'||code.consid as contact_ext_id, 
+w.acct_ext_id as acct_ext_id,
+'Group member' as rc_bios__category__c, 
+'Keystone'  as rc_bios__subcategory, 
+'Publication Listing' as rc_bios_type, 
+TRUE as rc_bios__active__c, 
+null::date as rc_bios__end_date__c,
+'8/26/2019'::Date  as rc_bios__start_date__c,
+TRUE as migrated_record__c,
+'ACTIVE' as active_duplicate_detection__c,
+'KEY'||code.cattrimpid as rc_bios__external_id__c,
+cattrdesc as rc_bios__comments__c,
+'01236000000Ke8qAAC' as recordtypeid
+from pp_keystone.re_consattrib code
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
+where  cattrcat = 'Publish As Name'),
 combined as (
 select * from ht
 UNION
@@ -219,7 +333,26 @@ UNION
 select * from FrmBrdtwo
 UNION
 select * from FrmBrd
+UNION
+select * from prospect
+UNION
+select * from dp
+UNION
+select * from interest
+UNION
+select * from cc
+UNION
+select * from staff
+UNION
+select * from publish
 )
 select * from combined; 
 
-select rc_bios__category__c,rc_bios__subcategory__c,rc_bios__type__c, count(*) from pp_keystone.preferences_temp group by rc_bios__category__c,rc_bios__subcategory__c,rc_bios__type__c;
+with temp as (
+  select c.id as rc_bios__contact__c, coalesce(c.accountid,a.id) as rc_bios__account__c, t.* from pp_keystone.preferences_temp t
+  left join pp_keystone.pull_contact c on c.external_id__c = t.contact_ext_id
+   left join pp_keystone.pull_account a on t.acct_ext_id = a.external_id__c)
+  select rc_bios__contact__c, rc_bios__account__c, rc_bios__category__c, rc_bios__subcategory__c, rc_bios__type__c,  rc_bios__active__c,  rc_bios__end_date__c, rc_bios__start_date__c, migrated_record__c, active_duplicate_detection__c, rc_bios__external_id__c||row_number() over (partition by rc_bios__contact__c order by rc_bios__subcategory__c desc) as rc_bios__external_id__c ,
+rc_bios__comments__c, recordtypeid into pp_keystone.rc_bios__preferences__c from temp;
+
+
