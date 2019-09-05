@@ -330,7 +330,7 @@ cattrdesc as rc_bios__comments__c,
 null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
-join pp_keystone.ak_crosswalk w on co
+join pp_keystone.ak_crosswalk w on code.consid = w.consid
   where  cattrdesc = 'Former Staff'),
 geo as (----------Geo Codes       ----------------------------------------------------
  select 'KEY'||code.consid as contact_ext_id, 
