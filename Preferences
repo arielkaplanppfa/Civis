@@ -35,7 +35,7 @@ TRUE as migrated_record__c,
 '       ' as active_duplicate_detection__c,
 'KEY'||conscodeimpid as rc_bios__external_id__c,
 'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conscode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -53,7 +53,7 @@ TRUE as migrated_record__c,
 null::varchar as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -71,7 +71,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||conscodeimpid as rc_bios__external_id__c,
 'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conscode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -89,7 +89,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||conscodeimpid as rc_bios__external_id__c,
 'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conscode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -108,7 +108,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.importid||ROW_NUMBER () OVER(partition by code.consid) as rc_bios__external_id__c,
 'Migrated from PPKeystone raisers edge database. the start and end dates may not be accurate if they were null in the source database' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_conssolicitcode code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -126,7 +126,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 'Fund For Choice Committee' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -144,7 +144,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 cattrdesc as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -163,7 +163,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 cattrdesc as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -181,7 +181,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 cattrdesc as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -199,7 +199,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 'Anonymous attibute migrated from PP Keystone Database' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -218,7 +218,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 cattrcom as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -237,7 +237,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 'Prospect Mail Code' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -255,7 +255,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 cattrdesc as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -273,7 +273,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 cattrdesc|| '- Migrated from DP Flags for Keystone' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -291,7 +291,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 'Past Capital Campaign Cabinet' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -309,7 +309,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 'Former Staff' as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
@@ -327,7 +327,7 @@ TRUE as migrated_record__c,
 'ACTIVE' as active_duplicate_detection__c,
 'KEY'||code.cattrimpid as rc_bios__external_id__c,
 cattrdesc as rc_bios__comments__c,
-null:varchar as rc_bios__subtype__c,
+null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on co
