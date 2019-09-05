@@ -349,7 +349,7 @@ cattrdesc as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
-where  cattrcat = 'Geo Codes')
+where  cattrcat = 'Geo Codes'),
 combined as (
 select * from ht
 UNION
