@@ -1,0 +1,74 @@
+drop table if exists pp_keystone.ak_proposals;
+
+with sol as (
+  select  p.proposalrecordid,x.id, row_number() over (partition by l.proposalrecordid order by prsolimpid desc ) as rownum
+from pp_keystone.re_proposal p 
+join pp_keystone.re_proposalsolicitor l on l.proposalrecordid = p.proposalrecordid
+left join pp_keystone.re_constituent con on l.prsolimpid = con.importid
+left join pp_keystone.pull_contact x on 'KEY'||con.consid = x.external_id__c),
+temp as (
+select * from pp_keystone.re_proposal p 
+left join   pp_keystone.re_ProposalAttrib a on p.PRImpID = a.PRAttrPRImpID
+left join  pp_keystone.re_ProposalNote n on p.PRImpID = n.PRLink)
+select 
+a.id as accountid,
+t.prname as name,
+case when t.prisinactive =  'False' then 'TRUE' else 'FALSE' end as Plan_Active__c,
+'01236000001HtyXAAS' as recordtypeid,
+Case when t.prstatus = 'Approved'  then 'Committed'
+		 when t.prstatus = 'Research/Writing'  then 'Planned'
+     when t.prstatus = 'Declined'  then 'Declined'
+     when t.prstatus = 'Internal Review'  then 'Planned'
+     when t.prstatus = 'Submitted- Awaiting Response'  then 'Pending'
+     when t.prstatus = 'Partial Funding'  then 'Committed'
+     else null end as rC_Giving__Solicitation_Status__c,
+Case when t.prstatus = 'Approved'  then 'Completed'
+		 when t.prstatus = 'Research/Writing'  then 'Identification'
+     when t.prstatus = 'Declined'  then 'Declined'
+     when t.prstatus = 'Internal Review'  then 'Qualification'
+     when t.prstatus = 'Submitted- Awaiting Response'  then 'Solicitation'
+     when t.prstatus = 'Partial Funding'  then 'Completed'
+     when t.prstatus = 'Meeting'  then 'Stewardship'
+     when t.prstatus = 'Negotiation'  then 'Stewardship'
+     else 'Qualification' end as StageName,
+Case when prpurpose = 'Major Gift' then 'Major Giving'
+     when prpurpose = 'Capital Campaign' then 'Capital Campaign'
+     when prpurpose = 'Planned Gift' then 'Planned Giving'
+     else 'Discovery' end as Proposal_Type__c,
+Case when prpurpose = 'Major Gift' then 'Major Giving'
+     when prpurpose = 'Capital Campaign' then 'Capital Campaign'
+     when prpurpose = 'Planned Gift' then 'Planned Giving'
+     else 'Discovery' end as rC_Giving__Solicitation_Type__c,
+'Legacy Purpose: '
+||Coalesce(t.prpurpose,'None')
+||' - Legacy Status: '
+||Coalesce(prstatus, 'None')
+||' - Legacy Campaign: '
+||Coalesce(prcampid, 'None')
+||' - Legacy Fund: '
+||Coalesce(prfundid, 'None')
+||' - Legacy Proposale Contact: '
+||Coalesce(c.orgname, c.primaddtext, 'None')
+||', ConstituentID: '
+||coalesce(rtrim(prcontact,'-0'),'None')
+||' - Legacy Note: ' 
+||Coalesce(substring(t.prnotenotes,1,600), 'None') as rC_Giving__Comments__c,
+'Ineligible' as rC_Giving__Send_to_GL__c,
+p.id as portfolio__c,
+coalesce(t.prdatefund::date, t.prdeadline::date, '01/01/2020'::date)::date as closedate,
+t.pramtask as rC_Giving__Requested_Amount__c,
+t.pramtexp as rC_Giving__Projected_Amount__c,
+t.pramtfund as committed_amount__c,
+t.prdateexp::date as Projected_Amount_Date__c,
+t.prdateask::date as Requested_Date__c,
+(select id from sol where t.proposalrecordid = sol.proposalrecordid and rownum = 1 ) as Primary_Plan_Manager__c,
+(select id from sol where t.proposalrecordid = sol.proposalrecordid and rownum = 2 ) as Secondary_Plan_Manager__c, 
+'KEY'||primpid as legacy_id__c,
+'C3 PPKey' as site_affiliation__c
+into pp_keystone.ak_proposals
+from temp t
+join pp_keystone.pull_account a on 'HHKEY'||t.consid = a.external_id__c
+left join pp_keystone.pull_portfolio p on p.external_id__c = 'PV'||t.consid
+left join pp_keystone.re_constituent c on rtrim(prcontact,'-0') = c.consid;
+
+Select * from pp_keystone.ak_proposals;
