@@ -331,7 +331,8 @@ null::varchar as rc_bios__subtype__c,
 '01236000000Ke8qAAC' as recordtypeid
 from pp_keystone.re_consattrib code
 join pp_keystone.ak_crosswalk w on code.consid = w.consid
-  where  cattrdesc = 'Former Staff'),
+where upper(cattrcat) like '%PUBLISH%'    /*  where  cattrdesc = 'Former Staff' -- IMRAN Found issue... here it is*/
+),
 geo as (----------Geo Codes       ----------------------------------------------------
  select 'KEY'||code.consid as contact_ext_id, 
 w.acct_ext_id as acct_ext_id,
