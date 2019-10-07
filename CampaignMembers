@@ -1,0 +1,37 @@
+/*
+with temp as (select p.regfirstname,p.reglastname, c.firstname, c.lastname, t.namex, Coalesce(t.id,ms.masterrecordid) as contact_id 
+from pp_keystone.re_eventpart p 
+join pp_keystone.re_constituent c on p.importid = c.importid
+left join rounddata.contact t on 'KEY'||c.consid = t.external_id and t.delete_flag = 'N'
+left join rounddata.merge_log ms on 'KEY'||c.consid = ms.external_id
+)
+select count(*) from temp where contact_id is not null
+
+Add Campaign External id */
+
+
+select p.regfirstname,p.reglastname, c.firstname, c.lastname,Coalesce(t.id,ms.masterrecordid) as contact_id, campaign.id as campaignid, '01236000001Htz4AAC' as recordtypeid,  p.regaddrlines as street, p.regaddrcity as city, p.regaddrstate as state, 'Contact' as type,
+CASE when p.regattended = 't' then 'Attended' else null::varchar end as rC_Event__Attendance_Status__c,'USA' as country,
+CASE 
+when regregistration = 'Registered' then 'Registered'
+when regregistration <> 'Registered' and reginvite = 'Invited' then 'Invited'
+when regregistration = 'Not Registered' and reginvite = 'Not Invited' then null::varchar
+when regregistration in ('Not Registered', 'Do Not Register') then 'Declined'
+when reginvite = 'Invited' then 'Invited'
+else null::varchar end as rC_Event__Registered_Status__c,
+CASE 
+when regregistration = 'Registered' then 'Responded'
+when regregistration <> 'Registered' and reginvite = 'Invited' then 'Sent'
+when regregistration = 'Not Registered' and reginvite = 'Not Invited' then null::varchar
+when regregistration in ('Not Registered', 'Do Not Register') and reginvite = 'Not Invited' then null::varchar
+when reginvite = 'Invited' then 'Sent'
+else null::varchar end as status,
+'KEY'||p.regimpid as external_id__c, 
+regtitl1 as salutation,
+'TRUE' as Migrated_record__c,
+'Legacy Participation: '||Coalesce(p.regparticipation,'None')||' - Legacy Type: '||Coalesce(p.regtype,'None') as Long_comments__c
+from pp_keystone.re_eventpart p 
+join pp_keystone.re_constituent c on p.importid = c.importid
+left join rounddata.contact t on 'KEY'||c.consid = t.external_id and t.delete_flag = 'N'
+left join rounddata.merge_log ms on 'KEY'||c.consid = ms.external_id
+join rounddata.campaign on 'KEY'||p.eventid = campaign.external_id
