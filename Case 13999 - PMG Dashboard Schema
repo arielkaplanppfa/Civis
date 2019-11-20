@@ -1,0 +1,96 @@
+/*
+Accounts that are Major Givng and/or High Touch Portfolio. -- Done!
+
+All related giving and Credits (SC to any HC) -- Done!
+
+Preferences: Prospect Group member, Board member, AF membership, Leadership Council, Funding Interests, portfolio preference -- DONE!
+
+TAG Scores -- DONE!
+
+Prospect Team Members -- DONE!
+
+city state c3 affil, Giving Level, current prospect manager from account pref contact age --Done!
+
+All tasks that are attached to any giving and prospect views
+*/
+
+/*
+Drop table if exists ppfa_pmg_dashboard.population; 
+create table ppfa_pmg_dashboard.population as (
+select distinct  id from rounddata.accountx a where current_giving_level = 'Major Donor' and delete_flag <> 'Y'
+UNION
+select distinct rc_bios__account from rounddata.rc_bios__preference p join rounddata.accountx a on p.rc_bios__account = a.id where rc_bios__subcategory = 'High Touch Portfolio' and a.delete_flag <> 'Y'
+);
+
+Drop table if exists ppfa_pmg_dashboard.account; 
+create table ppfa_pmg_dashboard.account as (
+select a.id as "Account_id", a.auto_account_number as "Account_number", a.namex as "Account_Name", a.c3_affiliate_number as "C3_affil_number", a.c3_affiliate_name as "C3_Affil_name", a.c4_affiliate_number as "C4_affil_number", a.c4_affiliate_name as "C4_affil_name", a.shippingcity as "City", a.shippingstate as "State", a.current_giving_level as "Giving_level",coalesce(c.age,cc.age) as "Age", pm.namex as "Prospect_Manager"
+ from rounddata.accountx a
+  left join rounddata.contact c on a.rc_bios__preferred_contact = c.id
+  left join rounddata.contact cc on a.rc_bios__secondary_contact = cc.id
+  left join rounddata.contact pm on a.current_prospect_manager = pm.id
+  where exists (select 'x' from ppfa_pmg_dashboard.population p where a.id = p.id )
+  );
+
+Drop table if exists ppfa_pmg_dashboard.team; 
+create table ppfa_pmg_dashboard.team as (
+ select c.auto_contact_number as "team_member_contact_number",c.namex as "Team_member_name",m.rolex as "role", m.start_date as "Start_date", m.end_date as "end_date",m.active as "Active", a.namex as "Account_name", a.id as "account_id", a.auto_account_number as "Account_number" 
+ from rounddata.prospect_team_members m 
+ join rounddata.accountx a on m.accountx = a.id
+ join rounddata.contact c on m.contact = c.id
+where exists (select 'x' from ppfa_pmg_dashboard.population p where a.id = p.id )  
+ );
+ 
+ Drop table if exists ppfa_pmg_dashboard.supreme_reporting_table;
+ create table ppfa_pmg_dashboard.supreme_reporting_table as (
+ select * 
+ from rounddata.supreme_reporting_table m 
+where exists (select 'x' from ppfa_pmg_dashboard.population p where m.ngoc_accountid = p.id ) 
+ ); 
+
+ Drop table if exists ppfa_pmg_dashboard.all_giving;
+ create table ppfa_pmg_dashboard.all_giving as (
+ select r.developername, m.* 
+ from rounddata.opportunity m 
+ join rounddata.recordtype r on m.recordtypeid = r.id
+where exists (select 'x' from ppfa_pmg_dashboard.population p where m.accountid = p.id )
+   and m.delete_flag = 'N'); 
+
+ --Prospect Group member(x), Board member(x), AF membership(x), Leadership Council(x), Funding Interests(x), portfolio preference (x)  
+ Drop table if exists ppfa_pmg_dashboard.preferences;
+ create table ppfa_pmg_dashboard.preferences as (
+ select m.rc_bios__account, rc_bios__active, rc_bios__category, rc_bios__subcategory, rc_bios__type, rc_bios__subtype, rc_bios__comments, rc_bios__start_date, rc_bios__end_date 
+ from rounddata.rc_bios__preference m 
+where exists (select 'x' from ppfa_pmg_dashboard.population p where m.rc_bios__account = p.id )
+   and m.delete_flag = 'N' and (rc_bios__subcategory in ('Board Member','Action Fund Member','National Leadership Council','High Touch Portfolio') or rc_bios__category in ('Funding Interest') or rc_bios__type in ('Prospect Group Member') ) 
+ );
+ 
+ 
+  Drop table if exists ppfa_pmg_dashboard.tag_scores;
+ create table ppfa_pmg_dashboard.tag_scores as (
+ select accountid, 
+   CASE WHEN classification_code = 'TAG:MGL' Then 'Major Giving Likelihood'
+        WHEN classification_code = 'TAG:MLGL' Then 'Mid-Level Giving Likelihood'
+        WHEN classification_code = 'TAG:VR' Then 'Velocity Rating'
+        WHEN classification_code = 'TAG:LI' Then 'Loyalty Insights'
+        WHEN classification_code = 'TAG:TGR' Then 'Target Gift Range'
+        WHEN classification_code = 'TAG:PGL' Then 'Planned Gift Likelihood'
+        WHEN classification_code = 'TAG:SGL' Then 'Sustainer Gift Likelihood'
+        WHEN classification_code = 'TAG:PTL' Then 'Political Gift Likelihood'
+        ELSE Classification_code END as classification_code, 
+   classification_value, start_date, end_date, sts 
+ from rounddata.wealth_classification m 
+where exists (select 'x' from ppfa_pmg_dashboard.population p where m.accountid = p.id )
+   and m.delete_flag = 'N' and (end_date is null or end_date >= getdate())
+ );
+ */
+ 
+ --Tasks
+ drop table if exists ppfa_pmg_dashboard.tasks;
+ create table ppfa_pmg_dashboard.tasks as (
+ select m.rc_bios__account, rc_bios__active, rc_bios__category, rc_bios__subcategory, rc_bios__type, rc_bios__subtype, rc_bios__comments, rc_bios__start_date, rc_bios__end_date 
+ from rounddata.task m 
+where exists (select 'x' from ppfa_pmg_dashboard.population p where m.rc_bios__account = p.id )
+   te_flag = 'N' and (rc_bios__subcategory in ('Board Member','Action Fund Member','National Leadership Council','High Touch Portfolio') or rc_bios__category in ('Funding Interest') or rc_bios__type in ('Prospect Group Member') ) 
+ );
+ 
