@@ -88,9 +88,15 @@ where exists (select 'x' from ppfa_pmg_dashboard.population p where m.accountid 
  --Tasks
  drop table if exists ppfa_pmg_dashboard.tasks;
  create table ppfa_pmg_dashboard.tasks as (
- select m.rc_bios__account, rc_bios__active, rc_bios__category, rc_bios__subcategory, rc_bios__type, rc_bios__subtype, rc_bios__comments, rc_bios__start_date, rc_bios__end_date 
+ select m.
  from rounddata.task m 
-where exists (select 'x' from ppfa_pmg_dashboard.population p where m.rc_bios__account = p.id )
-   te_flag = 'N' and (rc_bios__subcategory in ('Board Member','Action Fund Member','National Leadership Council','High Touch Portfolio') or rc_bios__category in ('Funding Interest') or rc_bios__type in ('Prospect Group Member') ) 
+where exists (select 'x' from rounddata.contact c join ppfa_pmg_dashboard.population p on c.accountid = p.id where m.whoid = c.id )
+   or exists ( select 'x' from rounddata.portfolio p 
+              join rounddata.account_portfolio ap on p.id = ap.portfolio
+              join ppfa_pmg_dashboard.population u on ap.accountx = u.id 
+              where m.whatid = p.id )
+   or exists (select 'x' from rounddata.opportunity o 
+              join ppfa_pmg_dashboard.population u on o.accountid = u.id  
+              where recordtypeid = '01236000001HtyXAAS' and m.whatid = o.id )
  );
  
