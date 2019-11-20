@@ -14,7 +14,7 @@ city state c3 affil, Giving Level, current prospect manager from account pref co
 All tasks that are attached to any giving and prospect views
 */
 
-/*
+
 Drop table if exists ppfa_pmg_dashboard.population; 
 create table ppfa_pmg_dashboard.population as (
 select distinct  id from rounddata.accountx a where current_giving_level = 'Major Donor' and delete_flag <> 'Y'
@@ -83,13 +83,15 @@ where exists (select 'x' from ppfa_pmg_dashboard.population p where m.rc_bios__a
 where exists (select 'x' from ppfa_pmg_dashboard.population p where m.accountid = p.id )
    and m.delete_flag = 'N' and (end_date is null or end_date >= getdate())
  );
- */
+ 
  
  --Tasks
  drop table if exists ppfa_pmg_dashboard.tasks;
  create table ppfa_pmg_dashboard.tasks as (
- select m.
+ select m.id, m.whoid, m.whatid, m.subjectx, m.statusx, m.description,m.isclosed,m.rc_bios__archive_flag,m.closed_date, m.contact_method, c.namex as prospect_manager,
+   m.task_type, m.task_sub_type
  from rounddata.task m 
+ left join rounddata.contact c on m.prospect_manager = c.id  
 where exists (select 'x' from rounddata.contact c join ppfa_pmg_dashboard.population p on c.accountid = p.id where m.whoid = c.id )
    or exists ( select 'x' from rounddata.portfolio p 
               join rounddata.account_portfolio ap on p.id = ap.portfolio
