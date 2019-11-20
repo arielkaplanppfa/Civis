@@ -1,3 +1,5 @@
+grant usage on schema ppfa_pmg_dashboard to agrandbois;
+
 /*
 Accounts that are Major Givng and/or High Touch Portfolio. -- Done!
 
@@ -102,3 +104,5 @@ where exists (select 'x' from rounddata.contact c join ppfa_pmg_dashboard.popula
               where recordtypeid = '01236000001HtyXAAS' and m.whatid = o.id )
  );
  
+ 
+ grant select on all tables in schema ppfa_pmg_dashboard to agrandbois;
