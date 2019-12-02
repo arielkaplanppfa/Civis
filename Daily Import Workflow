@@ -17,7 +17,6 @@ workflow:
         - Backup_Create___Contact_48607779
       on-error:
         - Backup_Restore___Contact_48608040
-      join: all
     Opportunities_Import_18957656:
       action: civis.run_job
       input:
@@ -52,6 +51,7 @@ workflow:
         - Opportunities_Import_18957656
         - Preferences_Import_18821690
         - Account_Address_Import_39322115
+        - Contacts_import_18879977
     Backup_Create___Credits_48602452:
       action: civis.run_job
       input:
@@ -76,14 +76,10 @@ workflow:
       action: civis.run_job
       input:
         job_id: 48603606
-      on-success:
-        - Contacts_import_18879977
     Backup_Restore___Accountx_48607302:
       action: civis.run_job
       input:
         job_id: 48607302
-      on-success:
-        - Contacts_import_18879977
     Backup_Create___Contact_48607779:
       action: civis.run_job
       input:
