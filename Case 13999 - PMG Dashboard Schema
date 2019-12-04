@@ -16,6 +16,7 @@ city state c3 affil, Giving Level, current prospect manager from account pref co
 All tasks that are attached to any giving and prospect views
 */
 
+/*Added trigger email from this job to the success notifications of the Daily Rounddata Imports Workflow */
 
 Drop table if exists ppfa_pmg_dashboard.population; 
 create table ppfa_pmg_dashboard.population as (
