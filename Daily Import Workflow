@@ -33,7 +33,7 @@ workflow:
         - Backup_Create___Credits_48602452
       on-error:
         - Backup_Restore___Credits_48603493
-      join: 1
+      join: all
     Preferences_Import_18821690:
       action: civis.run_job
       input:
@@ -52,6 +52,7 @@ workflow:
         - Preferences_Import_18821690
         - Account_Address_Import_39322115
         - Contacts_import_18879977
+        - Supreme_Reporting_Table_22671189
     Backup_Create___Credits_48602452:
       action: civis.run_job
       input:
@@ -104,7 +105,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 18980234
-      join: 1
+      join: all
       on-success:
         - Backup_Create___Alternate_ID_49581555
       on-error:
@@ -133,3 +134,19 @@ workflow:
       action: civis.run_job
       input:
         job_id: 49586038
+    Supreme_Reporting_Table_22671189:
+      action: civis.run_job
+      input:
+        job_id: 22671189
+      on-success:
+        - Backup_Create___Supreme_Reporting_Table_52046320
+      on-error:
+        - Backup_Restore___Supreme_Reporting_Table_52046330
+    Backup_Create___Supreme_Reporting_Table_52046320:
+      action: civis.run_job
+      input:
+        job_id: 52046320
+    Backup_Restore___Supreme_Reporting_Table_52046330:
+      action: civis.run_job
+      input:
+        job_id: 52046330
