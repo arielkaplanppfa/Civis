@@ -77,14 +77,10 @@ workflow:
       action: civis.run_job
       input:
         job_id: 48603606
-      on-success:
-        - Contact_Address_Import_18978183
     Backup_Restore___Accountx_48607302:
       action: civis.run_job
       input:
         job_id: 48607302
-      on-success:
-        - Contact_Address_Import_18978183
     Backup_Create___Contact_48607779:
       action: civis.run_job
       input:
@@ -134,10 +130,14 @@ workflow:
       action: civis.run_job
       input:
         job_id: 49586054
+      on-success:
+        - Contact_Address_Import_18978183
     Backup_Restore___Account_Address_49586038:
       action: civis.run_job
       input:
         job_id: 49586038
+      on-success:
+        - Contact_Address_Import_18978183
     Supreme_Reporting_Table_22671189:
       action: civis.run_job
       input:
