@@ -14,7 +14,7 @@ ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Birth_date_source  date;
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Race  Varchar(1024);
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Race_confidence  Varchar(1024);
 
---Gender
+--Gender - self reported
 Update ppfa_golden.golden_diversity  
 set Gender = reportedgendername, Gender_source = 'Self-Reported'
 from (
@@ -24,6 +24,7 @@ join vansync.ppfa_contactsreportedgenders_mym m on g.source_primary_key = m.vani
 join vansync.ppfa_reportedgenders i on m.reportedgenderid = i.reportedgenderid ) f 
 where golden_diversity.resolved_id = f.resolved_id and gender_rank = 1 and gender is null;
 
+--Gender - Catalist
 Update ppfa_golden.golden_diversity  
 set Gender = catalist_gender, gender_source = 'Catalist' 
 from (
@@ -33,7 +34,7 @@ where golden_diversity.resolved_id = f.resolved_id and gender is null;
 
 --SHOULD WE ADD AN UPDATE STATEMENT THAT SAYS WHEN GENDER IS CIS AND PRONOUNS IS HE HIM SET GNEDER TO MALE ETC...
 
---Pronouns
+--Pronouns - rD
 Update ppfa_golden.golden_diversity  
 set pronouns = preferred_pronouns
 from (
@@ -44,7 +45,7 @@ where preferred_pronouns is not null) f
 where golden_diversity.resolved_id = f.resolved_id and noun_rank = 1 and pronouns is null;
 
 
---Race
+--Race - self reported
 Update ppfa_golden.golden_diversity  
 set Race = 
 CASE  
@@ -64,7 +65,25 @@ select resolved_id, i.reportedracename, ROW_NUMBER () OVER ( PARTITION BY resolv
 from ppfa_golden.current_customer_graph g 
 join vansync.ppfa_contactsreportedraces_mym m on g.source_primary_key = m.vanid
 join vansync.ppfa_reportedraces i on m.reportedraceid = i.reportedraceid ) f 
-where golden_diversity.resolved_id = f.resolved_id and race_rank = 1 and gender is null;
+where golden_diversity.resolved_id = f.resolved_id and race_rank = 1 and race is null;
+
+--race - catalist
+Update ppfa_golden.golden_diversity  
+set race = 
+CASE  
+when reportedracename = 'nativeAmerican' then 'Native American'
+when reportedracename = 'Other' then 'Other'
+when reportedracename = 'asian' then 'Asian'
+when reportedracename = 'hispanic' then 'Latinx'
+when reportedracename = 'caucasian' then 'White'
+when reportedracename = 'black' then 'Black' else null end 
+, race_confidence = catalist_raceconfidence 
+from (
+select resolved_id, catalist_race, catalist_raceconfidence
+from catalist_monthly.current_catalist_return where catalist_race is not null and catalist_race <> 'unknown' and catalist_raceconfidence in ('Possibly','Likely','HighlyLikely') ) f 
+where golden_diversity.resolved_id = f.resolved_id and race is null;
+
+
 /*
 Update ppfa_golden.catalist_source  
 set first_name = firstname 
