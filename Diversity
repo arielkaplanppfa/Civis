@@ -72,7 +72,7 @@ Update ppfa_golden.golden_diversity
 set race = 
 CASE  
 when catalist_race = 'nativeAmerican' then 'Native American'
-when catalist_race = 'Other' then 'Other'
+when catalist_race = 'other' then 'Other'
 when catalist_race = 'asian' then 'Asian'
 when catalist_race = 'hispanic' then 'Latinx'
 when catalist_race = 'caucasian' then 'White'
@@ -80,7 +80,8 @@ when catalist_race = 'black' then 'Black' else null end
 , race_confidence = catalist_raceconfidence 
 from (
 select resolved_id, catalist_race, catalist_raceconfidence
-from catalist_monthly.current_catalist_return where catalist_race is not null and catalist_race <> 'unknown' and catalist_raceconfidence in ('Possibly','Likely','HighlyLikely') ) f 
+from catalist_monthly.current_catalist_return 
+  where catalist_race is not null and catalist_race <> 'unknown' and catalist_raceconfidence in ('Possibly','Likely','HighlyLikely') ) f 
 where golden_diversity.resolved_id = f.resolved_id and race is null;
 
 
