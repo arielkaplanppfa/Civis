@@ -1,0 +1,274 @@
+
+drop table if exists ppfa_golden.golden_diversity;
+create table ppfa_golden.golden_diversity as (
+select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%' and resolved_id not like '003%'
+);
+
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Gender varchar(1024);
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Gender_source varchar(1024);
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Orientation varchar(1024);
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Pronouns  Varchar(1024);
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Age  Varchar(1024);
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Birth_date  date;
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Birth_date_source  date;
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Race  Varchar(1024);
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Race_confidence  Varchar(1024);
+
+--Gender
+Update ppfa_golden.golden_diversity  
+set Gender = reportedgendername, Gender_source = 'Self-Reported'
+from (
+select resolved_id, i.reportedgendername, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(reportedgendername) desc) as "gender_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contactsreportedgenders_mym m on g.source_primary_key = m.vanid
+join vansync.ppfa_reportedgenders i on m.reportedgenderid = i.reportedgenderid ) f 
+where golden_diversity.resolved_id = f.resolved_id and gender_rank = 1 and gender is null;
+
+Update ppfa_golden.golden_diversity  
+set Gender = catalist_gender, gender_source = 'Catalist' 
+from (
+select resolved_id, catalist_gender
+from catalist_monthly.current_catalist_return where catalist_gender <> 'unknown' ) f 
+where golden_diversity.resolved_id = f.resolved_id and gender is null;
+
+--SHOULD WE ADD AN UPDATE STATEMENT THAT SAYS WHEN GENDER IS CIS AND PRONOUNS IS HE HIM SET GNEDER TO MALE ETC...
+
+--Pronouns
+Update ppfa_golden.golden_diversity  
+set pronouns = preferred_pronouns
+from (
+select resolved_id, preferred_pronouns, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY preferred_pronouns desc) as "noun_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact m on g.source_primary_key = m.id
+where preferred_pronouns is not null) f 
+where golden_diversity.resolved_id = f.resolved_id and noun_rank = 1 and pronouns is null;
+
+/*
+Update ppfa_golden.catalist_source  
+set first_name = firstname 
+from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) and firstname is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set first_name = firstname 
+from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and firstname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set first_name = firstname 
+from (select resolved_id, firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
+from (
+select resolved_id, firstname
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+UNION
+select resolved_id, firstname
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+)  g 
+where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and firstname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+--Last Names
+Update ppfa_golden.catalist_source  
+set last_name = lastname 
+from (select resolved_id, c.lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_high_touch t where g.resolved_id = t.resolved_id) and lastname is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set last_name = lastname
+from (select resolved_id, c.lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) and lastname is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set last_name = lastname 
+from (select resolved_id, c.lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and lastname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set last_name = lastname 
+from (select resolved_id, lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
+from (
+select resolved_id, lastname
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+UNION
+select resolved_id, lastname
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+)  g 
+where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and lastname is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+--Middle Names
+Update ppfa_golden.catalist_source  
+set middle_name = rc_bios__middle_name 
+from (select resolved_id, c.rc_bios__middle_name, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(rc_bios__middle_name) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_high_touch t where g.resolved_id = t.resolved_id) and rc_bios__middle_name is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set middle_name = rc_bios__middle_name 
+from (select resolved_id, c.rc_bios__middle_name, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(rc_bios__middle_name) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where exists (select 'x' from ppfa_golden.catalist_rd_only_clusters t where g.resolved_id = t.resolved_id) and rc_bios__middle_name is not null ) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set middle_name = middlename 
+from (select resolved_id, c.middlename, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(middlename) desc) as "name_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and middlename is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+Update ppfa_golden.catalist_source  
+set middle_name = middlename 
+from (select resolved_id, middlename, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(middlename) desc) as "name_rank"
+from (
+select resolved_id, rc_bios__middle_name as "middlename"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+UNION
+select resolved_id, middlename 
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+)  g 
+where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and middlename is not null) f 
+where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
+
+--Address
+Update ppfa_golden.catalist_source 
+set v_street = coalesce(m.street_1,'')||' '||coalesce(m.street_2,'')||' '||coalesce(m.street_3,''), v_city = m.city, v_state = m.state, v_zip = m.zip
+from ( select ppid, street_1, street_2, street_3, city, state, zip, address_rank, golden_rank, ROW_NUMBER () OVER ( PARTITION BY ppid ORDER BY address_rank desc, date desc) as "Van_rank" from ppfa_golden.staging_mailing_address where source like 'Van%' ) m where resolved_id = m.ppid and m.van_rank =1 ;
+
+Update ppfa_golden.catalist_source 
+set v_street = coalesce(m.street_1,'')||' '||coalesce(m.street_2,'')||' '||coalesce(m.street_3,''), v_city = m.city, v_state = m.state, v_zip = m.zip
+from ( select ppid, street_1, street_2, street_3, city, state, zip, address_rank, golden_rank, ROW_NUMBER () OVER ( PARTITION BY ppid ORDER BY address_rank desc, date desc) as "rd_rank" from ppfa_golden.staging_mailing_address where source not like 'Van%' ) m where resolved_id = m.ppid and m.rd_rank = 1 and v_street is null;
+
+Update ppfa_golden.catalist_source 
+set m_street = coalesce(m.street_1,'')||' '||coalesce(m.street_2,'')||' '||coalesce(m.street_3,''),m_city = m.city, m_state = m.state, m_zip = m.zip
+from ( select ppid, street_1, street_2, street_3, city, state, zip, address_rank, golden_rank, ROW_NUMBER () OVER ( PARTITION BY ppid ORDER BY address_rank desc, date desc) as "rd_rank" from ppfa_golden.staging_mailing_address where source not like 'Van%' ) m where resolved_id = m.ppid and m.rd_rank =1 ;
+
+Update ppfa_golden.catalist_source 
+set m_street = coalesce(m.street_1,'')||' '||coalesce(m.street_2,'')||' '||coalesce(m.street_3,''),m_city = m.city, m_state = m.state, m_zip = m.zip
+from ( select ppid, street_1, street_2, street_3, city, state, zip, address_rank, golden_rank, ROW_NUMBER () OVER ( PARTITION BY ppid ORDER BY address_rank desc, date desc) as "van_rank" from ppfa_golden.staging_mailing_address where source  like 'Van%' ) m where resolved_id = m.ppid and m.van_rank = 1 and m_street is null;
+
+--Phones
+update ppfa_golden.catalist_source
+set  phone = p.home_phone
+from (select * from ppfa_golden.golden_phones ) p 
+where catalist_source.resolved_id = p.resolved_id;
+
+update ppfa_golden.catalist_source
+set  phone = g.phone
+from (select p.resolved_id, m.phone,  ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY preferredphone desc, datecreated desc) as "phone_rank" 
+      from ppfa_golden.current_customer_graph p join vansync.ppfa_contactsphones_mym m on p.source_primary_key = m.vanid
+       where datesuppressed is null) g 
+where catalist_source.resolved_id = g.resolved_id
+and catalist_source.phone is null and g.phone_rank = 1;
+
+
+--Birthdates
+update ppfa_golden.catalist_source
+set birth_date = b.birthdate
+from (
+  select g.resolved_id, left(birthdate,11)::date as "birthdate",ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "birth_rank"  
+  from ppfa_golden.current_customer_graph g join rounddata.contact m on g.source_primary_key = m.id
+  where birthdate is not null
+  ) b
+where catalist_source.resolved_id = b.resolved_id
+and catalist_source.birth_date is null and b.birth_rank = 1 ;
+
+update ppfa_golden.catalist_source
+set birth_date = b.birthdate
+from (
+  select g.resolved_id, left(dob,11)::date as "birthdate",ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "birth_rank"  
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym m on g.source_primary_key = m.vanid
+  where dob is not null
+  ) b
+where catalist_source.resolved_id = b.resolved_id
+and catalist_source.birth_date is null and b.birth_rank = 1 ;
+
+
+update ppfa_golden.catalist_source
+set birth_date = b.birthdate
+from (
+  select g.resolved_id, to_date(rc_bios__birth_year,'YYYY') as "birthdate",ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "birth_rank"  
+  from ppfa_golden.current_customer_graph g join rounddata.contact m on g.source_primary_key = m.id
+  where rc_bios__birth_year is not null
+  ) b
+where catalist_source.resolved_id = b.resolved_id
+and catalist_source.birth_date is null and b.birth_rank = 1 ;
+
+-- emails
+update ppfa_golden.catalist_source
+set email = u.email
+From (
+  select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datefirstread desc) as "email_rank"
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contactsemailbatches_mym e on g.source_primary_key = e.vanid
+  where datebounced is null ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1;
+  
+  
+update ppfa_golden.catalist_source
+set email = u.valuex
+From (
+  select g.resolved_id, c.valuex, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "email_rank"
+  from  ppfa_golden.current_customer_graph g join rounddata.additional_contact_info c on g.source_primary_key = c.contact
+  where typex = 'Email' and preferred = 'true'
+  ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+  update ppfa_golden.catalist_source
+set email = u.valuex
+From (
+  select g.resolved_id, c.valuex, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY createddate desc) as "email_rank"
+  from  ppfa_golden.current_customer_graph g join rounddata.additional_contact_info c on g.source_primary_key = c.contact
+  where typex = 'Email' and preferred = 'false'
+  ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+  update ppfa_golden.catalist_source
+set email = u.email
+From (
+  select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "email_rank"
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contactsemails_mym e on g.source_primary_key = e.vanid
+  where datesuppressed is null ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+  update ppfa_golden.catalist_source
+set email = u.email
+From (
+  select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "email_rank"
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym e on g.source_primary_key = e.vanid
+  where email is not null ) u
+  where catalist_source.resolved_id = u.resolved_id
+  and u.email_rank = 1 and catalist_source.email is null;
+  
+  
+  
+select * from ppfa_golden.catalist_source;
+*/
