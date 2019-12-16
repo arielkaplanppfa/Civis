@@ -18,7 +18,7 @@ ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Race_confidence  Varchar(10
 Update ppfa_golden.golden_diversity  
 set Gender = reportedgendername, Gender_source = 'Self-Reported'
 from (
-select resolved_id, i.reportedgendername, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(reportedgendername) desc) as "gender_rank"
+select resolved_id, i.reportedgendername, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datemodified desc) as "gender_rank"
 from ppfa_golden.current_customer_graph g 
 join vansync.ppfa_contactsreportedgenders_mym m on g.source_primary_key = m.vanid
 join vansync.ppfa_reportedgenders i on m.reportedgenderid = i.reportedgenderid ) f 
@@ -43,6 +43,28 @@ join rounddata.contact m on g.source_primary_key = m.id
 where preferred_pronouns is not null) f 
 where golden_diversity.resolved_id = f.resolved_id and noun_rank = 1 and pronouns is null;
 
+
+--Race
+Update ppfa_golden.golden_diversity  
+set Race = 
+CASE  
+when reportedracename = 'Asian' then 'Asian'
+when reportedracename = 'Other' then 'Other'
+when reportedracename = 'Caucasian or White' then 'White'
+when reportedracename = 'Hispanic' then 'Latinx'
+when reportedracename = 'Pacific Islander' then 'Pacific Islander'
+when reportedracename = 'Middle Eastern' then 'Middle Eastern'
+when reportedracename = 'Native American' then 'Native American'
+when reportedracename = 'Pacific Islander' then 'Pacific Islander'
+when reportedracename = 'Black or African American' then 'Black'
+when reportedracename = 'Native Hawaiian' then 'Native Hawaiian' else null end 
+, race_confidence = 'Self-Reported'
+from (
+select resolved_id, i.reportedracename, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datemodified desc) as "race_rank"
+from ppfa_golden.current_customer_graph g 
+join vansync.ppfa_contactsreportedraces_mym m on g.source_primary_key = m.vanid
+join vansync.ppfa_reportedraces i on m.reportedraceid = i.reportedraceid ) f 
+where golden_diversity.resolved_id = f.resolved_id and race_rank = 1 and gender is null;
 /*
 Update ppfa_golden.catalist_source  
 set first_name = firstname 
