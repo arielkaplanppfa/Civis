@@ -106,6 +106,7 @@ where exists (select 'x' from rounddata.contact c join ppfa_pmg_dashboard.popula
  );
  
  
+ --Prospect Views
  drop table if exists ppfa_pmg_dashboard.prospect_view;
  create table ppfa_pmg_dashboard.prospect_view as (
  select ap.portfolio, ap.portfolio_name, ap.accountx, ap.account_name
