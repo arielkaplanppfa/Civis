@@ -84,7 +84,7 @@ where exists (select 'x' from ppfa_pmg_dashboard.population p where m.rc_bios__a
    classification_value, start_date, end_date, sts 
  from rounddata.wealth_classification m 
 where exists (select 'x' from ppfa_pmg_dashboard.population p where m.accountid = p.id )
-   and m.delete_flag = 'N' and (end_date is null or end_date >= getdate())
+    and (end_date is null or end_date >= getdate())
  );
  
  
