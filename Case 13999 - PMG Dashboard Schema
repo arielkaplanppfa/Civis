@@ -27,7 +27,7 @@ select distinct rc_bios__account from rounddata.rc_bios__preference p join round
 
 Drop table if exists ppfa_pmg_dashboard.account; 
 create table ppfa_pmg_dashboard.account as (
-select a.id as "Account_id", a.auto_account_number as "Account_number", a.namex as "Account_Name", a.c3_affiliate_number as "C3_affil_number", a.c3_affiliate_name as "C3_Affil_name", a.c4_affiliate_number as "C4_affil_number", a.c4_affiliate_name as "C4_affil_name", a.shippingcity as "City", a.shippingstate as "State", a.current_giving_level as "Giving_level",coalesce(c.age,cc.age) as "Age", pm.namex as "Prospect_Manager"
+select a.id as "Account_id", a.auto_account_number as "Account_number", a.namex as "Account_Name", a.c3_affiliate_number as "C3_affil_number", a.c3_affiliate_name as "C3_Affil_name", a.c4_affiliate_number as "C4_affil_number", a.c4_affiliate_name as "C4_affil_name", a.shippingcity as "City", a.shippingstate as "State", a.current_giving_level as "Giving_level",coalesce(c.age,cc.age) as "Age", pm.namex as "Prospect_Manager", a.capacity_rating as "Capacity Rating"
  from rounddata.accountx a
   left join rounddata.contact c on a.rc_bios__preferred_contact = c.id
   left join rounddata.contact cc on a.rc_bios__secondary_contact = cc.id
@@ -111,6 +111,7 @@ where exists (select 'x' from rounddata.contact c join ppfa_pmg_dashboard.popula
  create table ppfa_pmg_dashboard.prospect_view as (
  select ap.portfolio, ap.portfolio_name, ap.accountx, ap.account_name
 from ppfa_pmg_dashboard.population p join rounddata.account_portfolio ap on p.id = ap.accountx
+   where ap.delete_flag <> 'Y'
  );
  
  grant select on all tables in schema ppfa_pmg_dashboard to agrandbois;
