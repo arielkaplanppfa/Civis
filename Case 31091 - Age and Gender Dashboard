@@ -1,3 +1,4 @@
+
 drop table if exists rounddata_dev.ak_31091_stats;
 create table rounddata_dev.ak_31091_stats as (
 select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%' and resolved_id not like '003%' and source ilike '%ound%'
@@ -8,11 +9,82 @@ ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN contact_id varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Account_id varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Gender varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Age  Varchar(1024);
-ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Race  Varchar(1024);
+--ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Race  Varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN pmg  Varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN planned_gift  Varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN mid_level  Varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN low_dollar  Varchar(1024);
 ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN action_taker  Varchar(1024);
 
+---Setting the contact id - preferred
+update rounddata_dev.ak_31091_stats
+set contact_id = id, account_id = accountid, preferred_contact = Case when pref_cont = 1 then 'Y' else null end
+from (
+select resolved_id, id, Case when rc_bios__preferred_contact ilike 'true' then 1 else 2 end as pref_cont, accountid,auto_contact_number, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY auto_contact_number asc) as "pref_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where delete_flag <> 'Y') f 
+where ak_31091_stats.resolved_id = f.resolved_id and pref_rank = 1 and pref_cont = 1;
+
+---Setting the contact id - Secondary
+update rounddata_dev.ak_31091_stats
+set contact_id = id, account_id = accountid, preferred_contact = 'N'
+from (
+select resolved_id, id, Case when rc_bios__preferred_contact ilike 'true' then 1 else 2 end as pref_cont, accountid,auto_contact_number, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY auto_contact_number asc) as "pref_rank"
+from ppfa_golden.current_customer_graph g 
+join rounddata.contact c on g.source_primary_key = c.id
+where delete_flag <> 'Y' and rc_bios__preferred_contact ilike 'false') f 
+where ak_31091_stats.resolved_id = f.resolved_id and pref_rank = 1 and preferred_contact is null;
+
+--- Age -rD
+update rounddata_dev.ak_31091_stats
+set age = datediff(year,to_date(f.rc_bios__birth_year||'-'||f.rc_bios__birth_month||'-'||f.rc_bios__birth_day,'YYYY-MM-DD'), sysdate)
+from (
+select resolved_id, Contact_id, c.rc_bios__birth_year,rc_bios__birth_month,rc_bios__birth_day
+from rounddata_dev.ak_31091_stats s 
+join rounddata.contact c on s.contact_id = c.id
+where rc_bios__birth_day is not null and rc_bios__birth_year is not null and rc_bios__birth_year is not null and rc_bios__birth_month in ('01','02','03','04','05','06','07','08','09','10','11','12')) f 
+where ak_31091_stats.resolved_id = f.resolved_id;
+
+update rounddata_dev.ak_31091_stats
+set age = f.age
+from (
+select resolved_id, Contact_id, c.age
+from rounddata_dev.ak_31091_stats s 
+join rounddata.contact c on s.contact_id = c.id
+where c.age is not null) f 
+where ak_31091_stats.resolved_id = f.resolved_id and ak_31091_stats.age is null ;
+
+--- Age -catalist
+update rounddata_dev.ak_31091_stats
+set age = catalist_age
+from (
+select s.resolved_id, c.catalist_age 
+from rounddata_dev.ak_31091_stats s 
+join catalist_monthly.current_catalist_return c on s.resolved_id = c.resolved_id) f 
+where ak_31091_stats.resolved_id = f.resolved_id and age is null;
+
+--- Gender -rD
+update rounddata_dev.ak_31091_stats
+set gender = Case when preferred_pronouns = 'He, Him, His' then 'Male' when preferred_pronouns = 'She, Her, Hers' then 'Female' when preferred_pronouns = 'They, Them, Their, Theirs' then 'Other' else null end
+from (
+select resolved_id, Contact_id, preferred_pronouns
+from rounddata_dev.ak_31091_stats s 
+join rounddata.contact c on s.contact_id = c.id
+where preferred_pronouns is not null) f 
+where ak_31091_stats.resolved_id = f.resolved_id;
+
+--- gender -catalist
+update rounddata_dev.ak_31091_stats
+set gender = case when catalist_gender = 'female' then 'Female' when catalist_gender = 'male' then 'Male' else null end
+from (
+select s.resolved_id, c.catalist_gender 
+from rounddata_dev.ak_31091_stats s 
+join catalist_monthly.current_catalist_return c on s.resolved_id = c.resolved_id) f 
+where ak_31091_stats.resolved_id = f.resolved_id and age is null;
+
+-- PMG
+update rounddata_dev.ak_31091_stats
+set pmg = 'Y'
+where exists ( select 'x' from rounddata.rc_bios__preference p where p.rc_bios__account = rounddata_dev.ak_31091_stats.account_id and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true' and p.rc_bios__category = 'Giving Level' and p.rc_bios__subcategory = 'Major Donor' );
 
