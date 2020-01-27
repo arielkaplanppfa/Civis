@@ -1,0 +1,18 @@
+drop table if exists rounddata_dev.ak_31091_stats;
+create table rounddata_dev.ak_31091_stats as (
+select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%' and resolved_id not like '003%' and source ilike '%ound%'
+);
+
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN preferred_contact varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN contact_id varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Account_id varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Gender varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Age  Varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN Race  Varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN pmg  Varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN planned_gift  Varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN mid_level  Varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN low_dollar  Varchar(1024);
+ALTER TABLE  rounddata_dev.ak_31091_stats ADD COLUMN action_taker  Varchar(1024);
+
+
