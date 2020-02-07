@@ -168,7 +168,7 @@ recent_active as
  trunc(rc_bios__start_date) as start_date,
  trunc(rc_bios__end_date) as end_date
 from full_member_ranked
-where rc_bios__active ilike 'true' or rc_bios__active = 'Y' and row_num = 1),
+where (rc_bios__active ilike 'true' or rc_bios__active = 'Y') and row_num = 1),
 all_inactive as (
   select distinct  resolved_id, Case when rc_bios__type = 'National Lifetime' then 'Lifetime' when rc_bios__type = 'Associate' then 'Associate' else 'Contributing' end as membership, Case when rc_bios__active ilike 'true' or rc_bios__active = 'Y' then 'Y' else 'N' end as active, trunc(rc_bios__start_date) as start_date,trunc(rc_bios__end_date) as end_date
 from full_member_ranked
