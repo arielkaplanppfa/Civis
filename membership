@@ -47,17 +47,71 @@ phone  Varchar(1024) );
 
 insert into ppfa_golden.golden_membership
 with temp as (
-select idr.resolved_id,  p.*, Case when rc_bios__type = 'National Lifetime' then 1 else 2 end as membership_rank, row_number() over(partition by idr.resolved_id, Case when rc_bios__type = 'National Lifetime' then 1 else 2 end order by case when p.rc_bios__active ilike 'true' then 1 else 2 end asc, rc_bios__start_date desc, rc_bios__end_date desc) as row_num
+select idr.resolved_id,  p.*, Case when rc_bios__type = 'National Lifetime' then 1 else 2 end as membership_rank, row_number() over(partition by idr.resolved_id  order by Case when rc_bios__type = 'National Lifetime' then 1 else 2 end , case when p.rc_bios__active ilike 'true' then 1 else 2 end asc, rc_bios__start_date desc, rc_bios__end_date desc) as row_num
 from rounddata.rc_bios__preference p
 join rounddata.contact c on p.rc_bios__account = c.accountid
 join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
-where p.delete_flag <> 'Y' and p.rc_bios__category = 'Constituent Type' and p.rc_bios__subcategory = 'Action Fund Member' and p.rc_bios__type not in ('Affiliate PPAZ Annual','National Associate','Affiliate PPSE Lifetime') )
-select resolved_id, Case when rc_bios__type = 'National Lifetime' then 'Lifetime' else 'Contributing' end as membership, Case when rc_bios__active ilike 'true' then 'Y' else 'N' end as active, trunc(rc_bios__start_date) as start_date,trunc(rc_bios__end_date) as end_date
-from temp;
-  
+where p.delete_flag <> 'Y' and p.rc_bios__category = 'Constituent Type' and p.rc_bios__subcategory = 'Action Fund Member' and p.rc_bios__type not in ('Affiliate PPAZ Annual','National Associate','Affiliate PPSE Lifetime') ),
+recent_active as
+(select distinct  resolved_id, Case when rc_bios__type = 'National Lifetime' then 'Lifetime' else 'Contributing' end as membership, Case when rc_bios__active ilike 'true' then 'Y' else 'N' end as active, trunc(rc_bios__start_date) as start_date,trunc(rc_bios__end_date) as end_date
+from temp
+where rc_bios__active ilike 'true' and row_num = 1),
+all_inactive as (
+  select distinct  resolved_id, Case when rc_bios__type = 'National Lifetime' then 'Lifetime' else 'Contributing' end as membership, Case when rc_bios__active ilike 'true' then 'Y' else 'N' end as active, trunc(rc_bios__start_date) as start_date,trunc(rc_bios__end_date) as end_date
+from temp
+where rc_bios__active not ilike 'true'
+  )
+select * from recent_active
+UNION
+select * from all_inactive
+;
+
 
 --Need associate memberships
-
+/*
+with temp as(
+  select
+  idr.resolved_id,
+vanid,
+(case when activistcodeid = 4304186 then 'lifetime'
+ when surveyquestionid = 203939 then 'contributing'
+ when surveyquestionid = 203938 then 'associate'
+ else null end) as membership_type,
+ (case 
+  when surveyresponseid in (860303,860301) or activistcodeid = 4304186 then 'opt-in'
+  when surveyresponseid in (860304,860302) then 'opt-out'
+  else null end) as membership_status,
+ (case when datecanvassed is not null and         datecanvassed<CONVERT_TIMEZONE('US/Eastern', getdate()) then datecanvassed
+  else datecreated end) as activity_date,
+ contacttypename as activity_type1, --channel
+ inputtypename as activity_type2, --channel
+ (case when username ilike '%mobilize%' then 'mobilize'
+  when username ilike '%hustle%' then 'hustle'
+  when username ilike '%controlshift%' then 'controlshift'
+ else 'eavan' end) as source
+ From (select 
+ vanid,
+ surveyquestionid,
+ surveyresponseid,
+ null as activistcodeid,
+ datecanvassed,
+ datecreated,
+ inputtypeid,
+ contacttypeid,
+ username
+ from vansync.ppfa_contactssurveyresponses_mym 
+ where surveyquestionid in (203938)
+) mem
+ left join vansync.ppfa_contacttypes con using (contacttypeid)
+ left join vansync.ppfa_inputtypes inp using (inputtypeid)
+ join idres_analytics.current_customer_graph idr on mem.vanid = idr.source_primary_key
+ order by vanid desc)
+ select resolved_id as ppid, membership_type, membership_status, activity_date, activity_type1, activity_type2, source
+ from temp optin
+ where membership_status ilike '%in%'
+ and not exists (select 'x' from temp optout where optin.resolved_id = optout.resolved_id and optout.activity_date >= optin.activity_date and optout.membership_status ilike '%out%'  )
+ and optin.activity_date >= dateadd(year, -1, optin.activity_date)
+ */
 
 --update statement to set activity kind. when contributing/lifetime then gift id from activities. when associates then action id from activities
 
