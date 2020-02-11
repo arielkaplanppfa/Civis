@@ -1,0 +1,112 @@
+Drop table if exists ppfa_golden.staging_emails; /* Unlike addresses Im not sure we should take the accounts pref phone for these */
+create table ppfa_golden.staging_emails as 
+with temp as (
+  select distinct ppid as "resolved_id", 'High Touch' as "High_touch" from ppfa_golden.high_touch 
+  where giving_level in ('Major Donor', 'Mid-Level VIP') or planned_giving is not null or board_member is not null or corporations is not null or foundation is not null 
+  ),temptwo as (/*rD contact Emails*/
+select i.resolved_id, c.contact as "source_key", 
+Case
+  WHEN coalesce(c.subtype, c.field,'Other') = 'Home' THEN 'Personal'
+  When coalesce(c.subtype, c.field,'Other') = 'Work' THEN 'Work'
+  Else 'Other' End as "Type", c.valuex as "Email", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
+CASE
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '2' -- Preferred Verified 
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '3' -- Preferred Unverified
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source in ('Merkle','User Entry','DSG','GSI')  THEN '4'   -- Preferred Verified opt out
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '5'  -- preferred unverified opt out
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '6' --Active verified
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI')  THEN '7' --Active Unverified
+  else '8' -- All others
+  END as "Email_rank", 'roundData' as "Source" 
+From ppfa_golden.current_customer_graph i
+join rounddata.additional_contact_info c on i.source_primary_key = c.contact
+left join temp t on i.resolved_id = t.resolved_id
+where c.delete_flag <> 'Y' and c.active = 'true' and c.typex = 'Email'
+UNION /*rD household accounts*/ 
+select g.resolved_id, a.id as "source_key", 
+ Case
+  WHEN coalesce(c.subtype, c.field,'Other') = 'Home' THEN 'Home'
+  When coalesce(c.subtype, c.field,'Other') = 'Mobile' THEN 'Mobile'
+  When coalesce(c.subtype, c.field,'Other') = 'Work' THEN 'Work'
+  Else 'Other' End as "Type", c.valuex as "Email", c.opt_out as "Opt_Out", t.high_touch,  c.createddate,
+CASE
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '2' -- Preferred Verified 
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '3' -- Preferred Unverified
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source in ('Merkle','User Entry','DSG','GSI')  THEN '4'   -- Preferred Verified opt out
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '5'  -- preferred unverified opt out
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '6' --Active verified
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI')  THEN '7' --Active Unverified
+  END as "Email_rank", 'roundData' as "Source" 
+from ppfa_golden.current_customer_graph g 
+join rounddata.accountx a on g.source_primary_key = a.id
+join rounddata.additional_contact_info c on a.rc_bios__preferred_contact = c.contact
+left join temp t on g.resolved_id = t.resolved_id
+where a.delete_flag <>'Y' and c.delete_flag <>'Y' and c.typex = 'Email'
+ /*
+UNION 
+select g.resolved_id, m.vanid:: Varchar as "source_Key", Case 
+WHEN m.iscellstatusid = 1 THEN 'Mobile'
+WHEN m.phonetypeid = 'H' THEN 'Home'
+WHEN m.phonetypeid = 'C' then 'Mobile' 
+WHEN m.phonetypeid = 'W' then 'Other'
+WHEN m.phonetypeid = 'F' then 'Other'
+When m.phonetypeid = 'M' then 'Other' -- What is this?
+Else 'Other' End as "Type", '('||substring(m.phone,1,3)||')'||' '||substring(m.phone,4,3)||'-'||substring(m.phone,7,4) as "phone", 
+'false' as "Opt_out", t.high_touch, m.datecreated, 
+CASE  
+WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.phonetypeid = 'M' then  '2' --Preferred from good source
+WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.phonetypeid <> 'M' then  '4'-- Non preferred from good source
+WHEN s.sourcename not in ('Catalist','User Added','Bulk')  and m.phonetypeid = 'M'  THEN '5' -- preferred from bad source
+WHEN s.sourcename not in ('Catalist','User Added','Bulk')  and m.phonetypeid <> 'M' THEN '6' -- non-preferred from bad source
+Else '7' End as "Phone_rank", 'Van' as "Source" -- All others	
+from ppfa_golden.current_customer_graph g
+join vansync.ppfa_contactsphones_mym m on g.source_primary_key = m.vanid
+left join vansync.ppfa_iscellstatuses c on m.iscellstatusid = c.iscellstatusid
+left join vansync.ppfa_phonesources s on m.phonesourceid = s.phonesourceid
+left join temp t on g.resolved_id = t.resolved_id
+where m.datesuppressed is null
+UNION
+select idr.resolved_id, 
+m.profile_id:: varchar as "Source_key",  
+Case when status = 'Active Subscriber' or opted_out_source = 'Texted a STOP word' then 'Mobile' else 'Other' end as Type,
+ '('||substring(m.phone_number,2,3)||')'||' '||substring(m.phone_number,5,3)||'-'||substring(m.phone_number,8,4) as "phone", 
+Case when opted_out_source = 'Texted a STOP word' then 'true' else 'false' end as opt_out,
+t.high_touch, m.created_at,
+case 
+when status = 'Active Subscriber' and (select message_status from mobile_commons.outgoing og where m.profile_id = og.profile_id and m.phone_number = og.phone_number and  message_status is not null order by og.sent_at desc limit 1 ) = 'sent' then '2' 
+when status = 'Active Subscriber' and (select message_status from mobile_commons.outgoing og where m.profile_id = og.profile_id and m.phone_number = og.phone_number and  message_status is not null order by og.sent_at desc limit 1 ) is null then '3' 
+when status = 'Active Subscriber' and opted_out_source = 'Texted a STOP word'  then '4'
+when status = 'Active Subscriber' and (select message_status from mobile_commons.outgoing og where m.profile_id = og.profile_id and m.phone_number = og.phone_number and  message_status is not null order by og.sent_at desc limit 1 ) = 'failed_permanently' then '6'
+when status = 'Undeliverable' then '7' 
+else '9' end as phone_rank,
+'Mobile_commons' as source
+from idres_analytics.current_customer_graph idr
+join mobile_commons.profiles m on idr.source_primary_key = m.profile_id and idr.source = 'mobilecommons'
+left join temp t on idr.resolved_id = t.resolved_id
+order by resolved_id desc */
+),
+tempthree as(
+select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id,type ORDER BY email_rank asc, createddate desc) as "golden_rank" from temptwo order by resolved_id, email_rank
+)
+select  * from tempthree
+;
+
+Drop table if exists ppfa_golden.golden_emails;
+create table ppfa_golden.golden_emails as
+with temp as (
+select distinct resolved_id from ppfa_golden.staging_emails
+)
+select t.resolved_id, p.personal_email, p.opt_out as "Personal_Opt_Out", p.source as "Personal_Source", pp.work_email as "work_email", pp.opt_out as "work_Opt_Out", pp.source as "work_Source",
+po.Other_email as "Other_email", po.opt_out as "Other_Opt_Out", po.source as "Other_Source"
+from temp t 
+left join ( select pm.resolved_id, pm.Email as "Personal_email", pm.opt_out, pm.source from ppfa_golden.staging_emails pm where pm.type = 'Personal' and pm.golden_rank = 1 
+) as p on t.resolved_id = p.resolved_id 
+left join ( select pm.resolved_id, pm.Email as "work_email", pm.opt_out, pm.source from ppfa_golden.staging_emails pm where pm.type = 'Work' and pm.golden_rank = 1 
+) as pp on t.resolved_id = pp.resolved_id
+left join ( select pm.resolved_id, pm.Email as "Other_email", pm.opt_out, pm.source from ppfa_golden.staging_emails pm where pm.type = 'Other' and pm.golden_rank = 1 
+) as po on t.resolved_id = po.resolved_id
+;
+
+select * from ppfa_golden.staging_phones order by resolved_id 
+limit 10000;
+
