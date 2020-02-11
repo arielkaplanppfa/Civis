@@ -60,6 +60,24 @@ join rounddata.accountx a on g.source_primary_key = a.id
 join rounddata.additional_contact_info c on a.rc_bios__preferred_contact = c.contact
 left join temp t on g.resolved_id = t.resolved_id
 where a.delete_flag <>'Y' and c.delete_flag <>'Y' and c.typex = 'Phone'
+UNION
+select idr.resolved_id, 
+m.profile_id:: varchar as "Source_key",  
+Case when status = 'Active Subscriber' or opted_out_source = 'Texted a STOP word' then 'Mobile' else 'Other' end as Type,
+ '('||substring(m.phone_number,2,3)||')'||' '||substring(m.phone_number,5,3)||'-'||substring(m.phone_number,8,4) as "phone", 
+Case when opted_out_source = 'Texted a STOP word' then 'true' else 'false' end as opt_out,
+t.high_touch, m.created_at,
+case 
+when status = 'Active Subscriber' and (select message_status from mobile_commons.outgoing og where m.profile_id = og.profile_id and m.phone_number = og.phone_number and  message_status is not null order by og.sent_at desc limit 1 ) = 'sent' then '2' 
+when status = 'Active Subscriber' and (select message_status from mobile_commons.outgoing og where m.profile_id = og.profile_id and m.phone_number = og.phone_number and  message_status is not null order by og.sent_at desc limit 1 ) is null then '3' 
+when status = 'Active Subscriber' and opted_out_source = 'Texted a STOP word'  then '4'
+when status = 'Active Subscriber' and (select message_status from mobile_commons.outgoing og where m.profile_id = og.profile_id and m.phone_number = og.phone_number and  message_status is not null order by og.sent_at desc limit 1 ) = 'failed_permanently' then '6'
+when status = 'Undeliverable' then '7' 
+else '9' end as phone_rank,
+'Mobile_commons' as source
+from idres_analytics.current_customer_graph idr
+join mobile_commons.profiles m on idr.source_primary_key = m.profile_id and idr.source = 'mobilecommons'
+left join temp t on idr.resolved_id = t.resolved_id
 order by resolved_id desc
 ),
 tempthree as(
