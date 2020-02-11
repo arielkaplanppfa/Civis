@@ -94,12 +94,12 @@ select distinct resolved_id from ppfa_golden.staging_phones
 select p.resolved_id, p.phone as "Home_Phone", p.opt_out as "Home_Opt_Out", p.source as "Home_Source", pp.Mobile_phone as "Mobile_Phone", pp.opt_out as "Mobile_Opt_Out", pp.source as "Mobile_Source",
 po.Other_phone as "Other_Phone", po.opt_out as "Other_Opt_Out", po.source as "Other_Source"
 from temp t 
-left join ppfa_golden.staging_phones p on t.resolved_id = p.resolved_id
+left join ( select pm.resolved_id, pm.phone, pm.opt_out, pm.source from ppfa_golden.staging_phones pm where type = 'Home' and golden_rank = 1 
+) p on t.resolved_id = p.resolved_id
 left join ( select pm.resolved_id, pm.phone as "Mobile_Phone", pm.opt_out, pm.source from ppfa_golden.staging_phones pm where pm.type = 'Mobile' and pm.golden_rank = 1 
 ) as pp on t.resolved_id = pp.resolved_id
 left join ( select pm.resolved_id, pm.phone as "Other_Phone", pm.opt_out, pm.source from ppfa_golden.staging_phones pm where pm.type = 'Other' and pm.golden_rank = 1 
-) as po on t.resolved_id = po.resolved_id
-where p.type = 'Home' and p.golden_rank = 1 
+) as po on t.resolved_id = po.resolved_id 
 ;
 
 select * from ppfa_golden.staging_phones order by resolved_id 
