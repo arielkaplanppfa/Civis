@@ -87,12 +87,14 @@ workflow:
         job_id: 48607779
       on-success:
         - Alternate_ID_import_18980234
+        - IDR___New_Record_Append_62546388
     Backup_Restore___Contact_48608040:
       action: civis.run_job
       input:
         job_id: 48608040
       on-success:
         - Alternate_ID_import_18980234
+        - IDR___New_Record_Append_62546388
     Backup_Create___Opportunity_48609005:
       action: civis.run_job
       input:
@@ -179,4 +181,9 @@ workflow:
       action: civis.run_job
       input:
         job_id: 52572822
+      join: 1
+    IDR___New_Record_Append_62546388:
+      action: civis.run_job
+      input:
+        job_id: 62546388
       join: 1
