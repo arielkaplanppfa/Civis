@@ -55,7 +55,7 @@ with temp as ( /*might want to break giving levels out into its own temp table a
  left join ( select p.ppid, high_touch from temp p where category = 'High Touch Portfolio' ) p on w.ppid = p.ppid  /* Portfolio */
  left join ( select l.ppid, high_touch from temp l where category = 'Planned Gift' ) l on w.ppid = l.ppid  /* PG */
  left join ( select m.ppid, high_touch from temp m where category = 'Prospect Management' ) m on w.ppid = m.ppid /*Prospect Management*/
- left join ( select b.ppid, high_touch from temp b where category = 'Celebrity' ) b on w.ppid = b.ppid /*Celebrity*/
+ left join ( select b.ppid, high_touch from temp b where high_touch = 'Celebrity' ) b on w.ppid = b.ppid /*Celebrity*/
  left join ( select bm.ppid, high_touch from temp bm where category = 'Board Member' ) bm on w.ppid = bm.ppid /*Board Member*/
  left join ( select pm.ppid, high_touch from temp pm where category = 'Prospect Manager' ) pm on w.ppid = pm.ppid /*prospect Managers*/
  group by  w.ppid, c.high_touch,  f.high_touch, l.high_touch, b.high_touch
