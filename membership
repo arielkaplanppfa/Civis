@@ -89,7 +89,12 @@ phone  Varchar(1024) );
 
 insert into ppfa_golden.golden_membership
 with temp as (
-select idr.resolved_id,  p.rc_bios__active, p.rc_bios__type, p.rc_bios__start_date, p.rc_bios__end_date, Case when rc_bios__type = 'National Lifetime' then 1 else 2 end as membership_rank
+select idr.resolved_id,  p.rc_bios__active, p.rc_bios__type, p.rc_bios__start_date, p.rc_bios__end_date, 
+Case 
+when rc_bios__type = 'National Lifetime' and p.rc_bios__active ilike 'true' then 1
+when rc_bios__type = 'National Annual' and p.rc_bios__active ilike 'true' then 2  -- 3 belings to active associates
+when rc_bios__type = 'National Lifetime' and p.rc_bios__active ilike 'false' then 4
+else 5 end as membership_rank
 from rounddata.rc_bios__preference p
 join rounddata.contact c on p.rc_bios__account = c.accountid
 join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
@@ -152,7 +157,11 @@ ass_first_yes.activity_date as start_date,
  case when ass_first_no.activity_date >= ass_first_yes.activity_date 
       then ass_first_no.activity_date 
       else dateadd(year, 1, ass_first_yes.activity_date) end as end_date,
-'3' as membership_rank
+case 
+     when case 
+               when ass_first_no.activity_date >= ass_first_yes.activity_date then ass_first_no.activity_date else dateadd(year, 1, ass_first_yes.activity_date) end > sysdate 
+     then 3 
+     else 6 end  as membership_rank
  from ass_first_yes
  left join ass_first_no on ass_first_yes.ppid = ass_first_no.ppid   
    ),
