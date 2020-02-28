@@ -1,7 +1,7 @@
 
 drop table if exists ppfa_golden.golden_diversity;
 create table ppfa_golden.golden_diversity as (
-select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%' and resolved_id not like '003%'
+select distinct resolved_id from ppfa_golden.current_customer_graph where resolved_id not like '001%' and resolved_id not like '003%' 
 );
 
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Gender varchar(1024);
@@ -10,7 +10,7 @@ ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Orientation varchar(1024);
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Pronouns  Varchar(1024);
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Age  Varchar(1024);
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Birth_date  date;
-ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Birth_date_source  date;
+ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Birth_date_source  varchar(30);
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Race  Varchar(1024);
 ALTER TABLE  ppfa_golden.golden_diversity ADD COLUMN Race_confidence  Varchar(1024);
 
@@ -82,6 +82,19 @@ select resolved_id, catalist_race, catalist_raceconfidence
 from catalist_monthly.current_catalist_return 
   where catalist_race is not null and catalist_race <> 'unknown' and catalist_raceconfidence in ('Possibly','Likely','HighlyLikely') ) f 
 where golden_diversity.resolved_id = f.resolved_id and race is null;
+
+
+--Age - Rounddata
+Update ppfa_golden.golden_diversity  
+set birth_date = birthdate, birth_date_source = 'rounddata'
+from(
+select idr.resolved_id, c.id, birthdate::Date, coalesce(x.last_gift_date::Date, '1900-01-01'),
+  row_number() over(partition by idr.resolved_id order by coalesce(x.last_gift_date::Date, '1900-01-01') desc) as row_num
+from idres_analytics.current_customer_graph idr 
+  join rounddata.contact c on  idr.source_primary_key = c.id
+  join rounddata.accountx  x on c.accountid = x.id
+  where c.birthdate is not null) f
+  where golden_diversity.resolved_id = f.resolved_id and row_num = 1;
 
 
 /*
