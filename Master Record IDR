@@ -1,7 +1,109 @@
 -- Add master_record column
 --alter table idres_analytics.prev_customer_graph add column master_record varchar(1);
 
+-- High Touch
+create temporary table ht_temp as 
+ with temp as ( /*might want to break giving levels out into its own temp table and choose the highest and then union back to the rest*/
+ select distinct i.resolved_id as "ppid",c.id as contact_id,c.createddate, c.rc_bios__preferred_contact,'Giving Level' as "Category", a.current_giving_level as "High_Touch" 
+ from idres_analytics.prev_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.accountx a on c.accountid = a.id
+ where a.current_giving_level in ('Major Donor', 'Mid-Level VIP', 'Mid-Level High')
+ UNION -- Managed Acccounts
+ select distinct i.resolved_id as "ppid",c.id as contact_id,c.createddate,c.rc_bios__preferred_contact, p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from idres_analytics.prev_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__type like '%Managed%'
+ UNION -- High Touch Portfolio Prefs
+ select distinct i.resolved_id as "ppid",c.id as contact_id,c.createddate,c.rc_bios__preferred_contact, p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from idres_analytics.prev_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'High Touch Portfolio'
+ UNION -- Prospect Management Prefs
+ select distinct i.resolved_id as "ppid",c.id as contact_id,c.createddate,c.rc_bios__preferred_contact, p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from idres_analytics.prev_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Prospect Management'
+ UNION -- Celebrity Prefs
+ select distinct i.resolved_id as "ppid",c.id as contact_id,c.createddate,c.rc_bios__preferred_contact, p.rc_bios__category as "Category", p.rc_bios__subcategory as "High_Touch"
+ from idres_analytics.prev_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Celebrity'
+ UNION -- Board Member Prefs
+ select distinct i.resolved_id as "ppid",c.id as contact_id,c.createddate,c.rc_bios__preferred_contact, p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
+ from ppfa_golden.current_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account
+ where p.rc_bios__active = 'true' and p.rc_bios__subcategory = 'Board Member'
+ UNION -- Prospect Managers
+ select distinct i.resolved_id as "ppid",c.id as contact_id,c.createddate,c.rc_bios__preferred_contact, 'Prospect Manager' as "Category", pm.namex as "High_Touch" 
+ from idres_analytics.prev_customer_graph i 
+ join rounddata.contact c on i.source_primary_key = c.id 
+ join rounddata.accountx a on c.accountid = a.id
+ join rounddata.contact pm on a.current_prospect_manager = pm.id
+ where a.current_prospect_manager is not null
+ ),
+ temptwo as (
+ select distinct ppid, contact_id, createddate, rc_bios__preferred_contact from temp
+ ), tempthree as (
+ select w.ppid,w.contact_id,createddate,rc_bios__preferred_contact, listagg( distinct g.high_touch, '; ') as "Giving_Level", c.high_touch as "Corporations", f.high_touch as "Foundation", listagg(distinct p.high_touch, '; ') as "Portfolio", l.high_touch as "Planned_Giving", listagg(distinct m.high_touch, '; ') as "Prospect_management", b.high_touch as "Celebrity", listagg(distinct bm.high_touch, '; ') as "Board_Member", listagg(distinct pm.high_touch, '; ') as "Prospect_managers"  
+ from temptwo w
+ left join ( select t.ppid, high_touch from temp t where category = 'Giving Level' ) g on w.ppid = g.ppid /* Giving Levels */
+ left join ( select c.ppid, high_touch from temp c where category = 'Corporations' ) c on w.ppid = c.ppid  /* Corporations */
+ left join ( select f.ppid, high_touch from temp f where category = 'Foundation' ) f on w.ppid = f.ppid  /* Foundations */
+ left join ( select p.ppid, high_touch from temp p where category = 'High Touch Portfolio' ) p on w.ppid = p.ppid  /* Portfolio */
+ left join ( select l.ppid, high_touch from temp l where category = 'Planned Gift' ) l on w.ppid = l.ppid  /* PG */
+ left join ( select m.ppid, high_touch from temp m where category = 'Prospect Management' ) m on w.ppid = m.ppid /*Prospect Management*/
+ left join ( select b.ppid, high_touch from temp b where high_touch = 'Celebrity' ) b on w.ppid = b.ppid /*Celebrity*/
+ left join ( select bm.ppid, high_touch from temp bm where category = 'Board Member' ) bm on w.ppid = bm.ppid /*Board Member*/
+ left join ( select pm.ppid, high_touch from temp pm where category = 'Prospect Manager' ) pm on w.ppid = pm.ppid /*prospect Managers*/
+ group by  w.ppid,w.contact_id,w.createddate, w.rc_bios__preferred_contact, c.high_touch,  f.high_touch, l.high_touch, b.high_touch),
+ tempfour as (
+ select *,
+ case when planned_giving is not null then 2
+      when foundation is not null then 4
+      when giving_level = 'Major Donor' then 6
+      when giving_level = 'Mid-Level VIP' then 8
+      when giving_level = 'Mid-Level High' then 10
+      when board_member is not null then 12
+      when prospect_management is not null then 14
+      when celebrity is not null then 16
+      when prospect_managers is not null then 18
+      else 20 end as ht_rank,
+ Case when rc_bios__preferred_contact = 'true' then 
+      (case when planned_giving is not null then 2
+      when foundation is not null then 4
+      when giving_level = 'Major Donor' then 6
+      when giving_level = 'Mid-Level VIP' then 8
+      when giving_level = 'Mid-Level High' then 10
+      when board_member is not null then 12
+      when prospect_management is not null then 14
+      when celebrity is not null then 16
+      when prospect_managers is not null then 18
+      else 20 end) -1
+   else (case when planned_giving is not null then 2
+      when foundation is not null then 4
+      when giving_level = 'Major Donor' then 6
+      when giving_level = 'Mid-Level VIP' then 8
+      when giving_level = 'Mid-Level High' then 10
+      when board_member is not null then 12
+      when prospect_management is not null then 14
+      when celebrity is not null then 16
+      when prospect_managers is not null then 18
+      else 20 end) end as final_ht_rank
+ from tempthree tt)
+ select *, row_number() over(partition by ppid order by final_ht_rank asc, createddate asc) as rownum
+ from tempfour;
 
+update idres_analytics.prev_customer_graph 
+set master_record = 'Y'
+where exists ( select 'x' from ht_temp where ht_temp.contact_id = idres_analytics.prev_customer_graph.source_primary_key and rownum = 1);
+
+/*
 -- Rounddata Master records non-high touch
 with temp as (
 select resolved_id, source, source_primary_key, gs.last_gift_date, c.createddate
@@ -16,3 +118,4 @@ join rounddata.giving_summary gs on x.id = gs.accountid)
 select resolved_id, source, source_primary_key, coalesce(last_gift_date, '1850-01-01'), createddate, row_number() over(partition by resolved_id order by coalesce(last_gift_date, '1850-01-01') desc, createddate asc) as rownum
 from temp 
 order by 1 desc, row_number() over(partition by resolved_id order by coalesce(last_gift_date, '1850-01-01') desc, createddate asc) asc
+*/
