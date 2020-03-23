@@ -1,0 +1,18 @@
+-- Add master_record column
+--alter table idres_analytics.prev_customer_graph add column master_record varchar(1);
+
+
+-- Rounddata Master records non-high touch
+with temp as (
+select resolved_id, source, source_primary_key, gs.last_gift_date, c.createddate
+from idres_analytics.prev_customer_graph idr 
+join rounddata.contact c on idr.source_primary_key = c.id
+join rounddata.giving_summary gs on c.accountid = gs.accountid
+UNION
+select resolved_id, source, source_primary_key, gs.last_gift_date, x.createddate
+from idres_analytics.prev_customer_graph idr
+join rounddata.accountx x on idr.source_primary_key = x.id
+join rounddata.giving_summary gs on x.id = gs.accountid)
+select resolved_id, source, source_primary_key, coalesce(last_gift_date, '1850-01-01'), createddate, row_number() over(partition by resolved_id order by coalesce(last_gift_date, '1850-01-01') desc, createddate asc) as rownum
+from temp 
+order by 1 desc, row_number() over(partition by resolved_id order by coalesce(last_gift_date, '1850-01-01') desc, createddate asc) asc
