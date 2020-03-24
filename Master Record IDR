@@ -122,19 +122,35 @@ set master_record = 'Y'
 where exists ( select 'x' from singles s where idres_analytics.prev_customer_graph.resolved_id = s.resolved_id and idres_analytics.prev_customer_graph.source = s.source and idres_analytics.prev_customer_graph.source_primary_key = s.source_primary_key );
 
 
-/*
--- Rounddata Master records non-high touch
+--Ids still needed to update
+create temporary table pending as (
+select distinct resolved_id, source 
+from idres_analytics.prev_customer_graph
+where source not in ('first_email','Civis Data')
+MINUS
+select distinct resolved_id, source 
+from idres_analytics.prev_customer_graph
+where master_record is not null
+and source not in ('first_email','Civis Data') );
+
+--remainder of rounddata
+create temporary table rd_ids as 
 with temp as (
-select resolved_id, source, source_primary_key, gs.last_gift_date, c.createddate
+select resolved_id, source, source_primary_key, coalesce(gs.last_gift_date, '1850-01-01') as last_gift_date, c.createddate
 from idres_analytics.prev_customer_graph idr 
 join rounddata.contact c on idr.source_primary_key = c.id
-join rounddata.giving_summary gs on c.accountid = gs.accountid
+left join rounddata.giving_summary gs on c.accountid = gs.accountid
+where exists ( select 'x' from pending p where p.resolved_id = idr.resolved_id and p.source = idr.source )
 UNION
-select resolved_id, source, source_primary_key, gs.last_gift_date, x.createddate
+select resolved_id, source, source_primary_key, coalesce(gs.last_gift_date, '1850-01-01') as last_gift_date, x.createddate
 from idres_analytics.prev_customer_graph idr
 join rounddata.accountx x on idr.source_primary_key = x.id
-join rounddata.giving_summary gs on x.id = gs.accountid)
-select resolved_id, source, source_primary_key, coalesce(last_gift_date, '1850-01-01'), createddate, row_number() over(partition by resolved_id order by coalesce(last_gift_date, '1850-01-01') desc, createddate asc) as rownum
+left join rounddata.giving_summary gs on x.id = gs.accountid
+where exists ( select 'x' from pending p where p.resolved_id = idr.resolved_id and p.source = idr.source ) )
+select resolved_id, source, source_primary_key, last_gift_date, createddate, row_number() over(partition by resolved_id order by last_gift_date desc, createddate asc) as rownum
 from temp 
-order by 1 desc, row_number() over(partition by resolved_id order by coalesce(last_gift_date, '1850-01-01') desc, createddate asc) asc
-*/
+order by 1 desc, row_number() over(partition by resolved_id order by last_gift_date desc, createddate asc) asc ;
+
+update idres_analytics.prev_customer_graph 
+set master_record = 'Y'
+where exists ( select 'x' from rd_ids r where r.resolved_id = idres_analytics.prev_customer_graph.resolved_id and r.source = idres_analytics.prev_customer_graph.source and r.source_primary_key = idres_analytics.prev_customer_graph.source_primary_key and r.rownum = 1 );
