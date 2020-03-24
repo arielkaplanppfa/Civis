@@ -176,9 +176,9 @@ with temp as (
   join vansync.ppfa_contacts_mym_cont c on idr.source_primary_key = c.vanid and idr.source = 'van'
   left join vansync.ppfa_contactscontributions_mym o on c.vanid = o.vanid
   where exists ( select 'x' from pending p where p.resolved_id = idr.resolved_id and p.source = idr.source ) )
-  select *, row_number() over(partition by resolved_id order by gift_date desc, datecreated asc)  
+  select *, row_number() over(partition by resolved_id order by gift_date desc, datecreated asc) as rownum 
   from temp;
   
   update idres_analytics.prev_customer_graph
   set master_record = 'Y'
-  where exists ( select 'x' from van_ids v where idres_analytics.prev_customer_graph.resolved_id = v.resolved_id and idres_analytics.prev_customer_graph.source = v.source and idres_analytics.prev_customer_graph.source_primary_key = v.source_primary_key );
+  where exists ( select 'x' from van_ids v where idres_analytics.prev_customer_graph.resolved_id = v.resolved_id and idres_analytics.prev_customer_graph.source = v.source and idres_analytics.prev_customer_graph.source_primary_key = v.source_primary_key and rownum = 1);
