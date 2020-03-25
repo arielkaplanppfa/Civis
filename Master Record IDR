@@ -151,6 +151,7 @@ select resolved_id, source, source_primary_key, last_gift_date, createddate, row
 from temp 
 order by 1 desc, row_number() over(partition by resolved_id order by last_gift_date desc, createddate asc) asc ;
 
+--Update rounddata sources
 update idres_analytics.prev_customer_graph 
 set master_record = 'Y'
 where exists ( select 'x' from rd_ids r where r.resolved_id = idres_analytics.prev_customer_graph.resolved_id and r.source = idres_analytics.prev_customer_graph.source and r.source_primary_key = idres_analytics.prev_customer_graph.source_primary_key and r.rownum = 1 );
@@ -169,6 +170,8 @@ from idres_analytics.prev_customer_graph
 where master_record is not null
 and source not in ('first_email','Civis Data') );
 
+--Van ID logic: Most recent gift date and if not then oldest record. 
+
 create temporary table van_ids as
 with temp as (
   select idr.resolved_id,idr.source, idr.source_primary_key, c.datecreated, coalesce(o.datereceived, '1850-01-01') as gift_date
@@ -179,6 +182,37 @@ with temp as (
   select *, row_number() over(partition by resolved_id order by gift_date desc, datecreated asc) as rownum 
   from temp;
   
+ -- update van sources
   update idres_analytics.prev_customer_graph
   set master_record = 'Y'
   where exists ( select 'x' from van_ids v where idres_analytics.prev_customer_graph.resolved_id = v.resolved_id and idres_analytics.prev_customer_graph.source = v.source and idres_analytics.prev_customer_graph.source_primary_key = v.source_primary_key and rownum = 1);
+  
+--Get the reamining resolved_ids and sources (should only be MC at this point)
+drop table pending;
+
+create temporary table pending as (
+select distinct resolved_id, source 
+from idres_analytics.prev_customer_graph
+where source not in ('first_email','Civis Data')
+MINUS
+select distinct resolved_id, source 
+from idres_analytics.prev_customer_graph
+where master_record is not null
+and source not in ('first_email','Civis Data') );
+
+/*Testing
+with temp as (
+  select idr.*, f.profile_id, f.first_name, f.last_name, f.status, f.source_name, f.source_id, f.source_type, f.updated_at, f.created_at, f.profile_id,
+  coalesce( (select received_at from mobile_commons.incoming i join mobile_commons.profiles prof on i.profile_id = prof.profile_id  where i.profile_id = f.profile_id and i.received_at >= prof.updated_at order by received_at desc limit 1 ), updated_at) as last_activity,
+  Case when f.status = 'Undeliverable' then 3
+       when f.status = 'Profiles with no Subscriptions' then 2
+       when f.status = 'Active Subscriber' then 1 else 4 end as Sub_rank
+  from idres_analytics.prev_customer_graph idr 
+  join mobile_commons.profiles f on idr.source_primary_key = f.profile_id and idr.source = 'mobilecommons'
+  where exists ( select 'x' from pending p where idr.resolved_id = p.resolved_id and idr.source = p.source )
+  ), temptwo as(
+  select *, row_number() over(partition by resolved_id order by last_activity desc, sub_rank asc, created_at desc) as row_num 
+  from temp)
+  select * from temptwo
+  order by resolved_id, row_num asc */
+  /*examples: 345565865 and 318005804 for resolved_id 237sadqkhbhk3dsb*/
