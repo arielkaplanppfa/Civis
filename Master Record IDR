@@ -200,10 +200,11 @@ from idres_analytics.prev_customer_graph
 where master_record is not null
 and source not in ('first_email','Civis Data') );
 
-/*Testing
+/*Testing Mobile Commons
 with temp as (
-  select idr.*, f.profile_id, f.first_name, f.last_name, f.status, f.source_name, f.source_id, f.source_type, f.updated_at, f.created_at, f.profile_id,
-  coalesce( (select received_at from mobile_commons.incoming i join mobile_commons.profiles prof on i.profile_id = prof.profile_id  where i.profile_id = f.profile_id and i.received_at >= prof.updated_at order by received_at desc limit 1 ), updated_at) as last_activity,
+  select idr.*, f.profile_id, f.first_name, f.last_name, f.status, f.source_name, f.source_id, f.source_type,  f.created_at, f.updated_at,
+( select created_at from mobile_commons.clicks c where c.profile_id = f.profile_id order by created_at desc limit 1 ) as last_click, 
+(select received_at from mobile_commons.incoming i where i.profile_id = f.profile_id order by received_at desc limit 1 ) as last_incoming ,
   Case when f.status = 'Undeliverable' then 3
        when f.status = 'Profiles with no Subscriptions' then 2
        when f.status = 'Active Subscriber' then 1 else 4 end as Sub_rank
@@ -211,8 +212,12 @@ with temp as (
   join mobile_commons.profiles f on idr.source_primary_key = f.profile_id and idr.source = 'mobilecommons'
   where exists ( select 'x' from pending p where idr.resolved_id = p.resolved_id and idr.source = p.source )
   ), temptwo as(
-  select *, row_number() over(partition by resolved_id order by last_activity desc, sub_rank asc, created_at desc) as row_num 
+  select *, 
+    Case when last_click is null and last_incoming is null then 'updated_at'
+         when last_click >= Coalesce(last_incoming, '1800-01-01') and last_click >= updated_at then 'Click'
+         when last_incoming >= coalesce(last_click,'1800-01-01') and last_incoming >= updated_at then 'Incoming'
+         else 'updated_at' end as last_activity
+    --, row_number() over(partition by resolved_id order by sub_rank asc, last_activity desc, created_at desc) as row_num 
   from temp)
   select * from temptwo
-  order by resolved_id, row_num asc */
-  /*examples: resolved_id 237sadqkhbhk3dsb and 23ow7t2inqpcq5df where the non master record is not row_num 1*/
+  order by resolved_id --, row_num asc */
