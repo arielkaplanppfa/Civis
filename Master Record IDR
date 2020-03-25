@@ -215,4 +215,4 @@ with temp as (
   from temp)
   select * from temptwo
   order by resolved_id, row_num asc */
-  /*examples: 345565865 and 318005804 for resolved_id 237sadqkhbhk3dsb*/
+  /*examples: resolved_id 237sadqkhbhk3dsb and 23ow7t2inqpcq5df where the non master record is not row_num 1*/
