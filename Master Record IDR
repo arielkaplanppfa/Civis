@@ -202,7 +202,7 @@ and source not in ('first_email','Civis Data') );
 
 /*Testing Mobile Commons
 with temp as (
-  select idr.*, f.profile_id, f.first_name, f.last_name, f.status, f.source_name, f.source_id, f.source_type,  f.created_at, f.updated_at,
+  select idr.*, f.profile_id, f.first_name, f.last_name, f.status, f.created_at, f.updated_at,
 ( select created_at from mobile_commons.clicks c where c.profile_id = f.profile_id order by created_at desc limit 1 ) as last_click, 
 (select received_at from mobile_commons.incoming i where i.profile_id = f.profile_id order by received_at desc limit 1 ) as last_incoming ,
   Case when f.status = 'Undeliverable' then 3
@@ -214,10 +214,15 @@ with temp as (
   ), temptwo as(
   select *, 
     Case when last_click is null and last_incoming is null then 'updated_at'
-         when last_click >= Coalesce(last_incoming, '1800-01-01') and last_click >= updated_at then 'Click'
-         when last_incoming >= coalesce(last_click,'1800-01-01') and last_incoming >= updated_at then 'Incoming'
-         else 'updated_at' end as last_activity
-    --, row_number() over(partition by resolved_id order by sub_rank asc, last_activity desc, created_at desc) as row_num 
-  from temp)
-  select * from temptwo
-  order by resolved_id --, row_num asc */
+         when last_click >= Coalesce(last_incoming, '1800-01-01')  then 'Click'
+         when last_incoming >= coalesce(last_click,'1800-01-01')  then 'Incoming'
+         else 'updated_at' end as last_activity_type
+  from temp), tempthree as (
+  select *, 
+  Case when last_activity_type = 'Click' then last_click
+       when last_activity_type = 'Incoming' then last_incoming
+       else updated_at end as last_activity_date
+  from temptwo)
+  select *,  row_number() over(partition by resolved_id order by sub_rank asc, last_activity_date desc, created_at desc) as row_num 
+  from tempthree
+  order by resolved_id, row_number() over(partition by resolved_id order by sub_rank asc, last_activity_date desc, created_at desc) asc */
