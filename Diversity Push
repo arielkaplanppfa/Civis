@@ -13,9 +13,12 @@ else 'Other' end as sub_type__c,
 Case when race_confidence = 'Self-Reported' then 'Self Reported'
 else 'Catalist' end as verified_source__c,
 Case when race_confidence = 'Self-Reported' then 'Verified'
+when race_confidence = 'HighlyLikely' then 'Highly Likely'
+when race_confidence = 'Likely' then 'Likely'
 else null end as verified__c
 From rounddata_dev.uat_contacts uc
 join rounddata.contact pc on uc.auto_contact_number__c = pc.auto_contact_number
 join idres_analytics.current_customer_graph idr on pc.id = idr.source_primary_key
 join ppfa_golden.golden_diversity d on idr.resolved_id = d.resolved_id
 where race_confidence in ('Self-Reported','HighlyLikely','Likely' )
+order by random()
