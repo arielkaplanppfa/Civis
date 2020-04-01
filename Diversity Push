@@ -1,4 +1,8 @@
-select uc.id, uc.name, uc.auto_contact_number__c, pc.id, pc.namex, pc.auto_contact_number, d.race, d.race_confidence, 
+select select 
+uc.id as contact__c,
+--uc.name, 
+--uc.auto_contact_number__c, 
+--pc.id, pc.namex, pc.auto_contact_number, d.race, d.race_confidence, 
 'Race' as Type__c, 
 Case when race ilike '%white%' then 'White'
 when race ilike '%Black%' then 'Black'
@@ -9,16 +13,17 @@ when race ilike '%indigenous%' then 'Indigenous'
 when race ilike '%Arab%' then 'Middle Eastern'
 when race ilike '%pacific%' then 'AAPI'
 when race ilike '%Hawai%' then 'Other'
-else 'Other' end as sub_type__c,
+else 'Other' end as subtype__c,
 Case when race_confidence = 'Self-Reported' then 'Self Reported'
-else 'Catalist' end as verified_source__c,
-Case when race_confidence = 'Self-Reported' then 'Verified'
+else 'Catalist' end as source__c,
+Case 
+when race_confidence = 'Self-Reported' then 'Verified'
 when race_confidence = 'HighlyLikely' then 'Highly Likely'
 when race_confidence = 'Likely' then 'Likely'
-else null end as verified__c
+else null end as Confidence__c
 From rounddata_dev.uat_contacts uc
 join rounddata.contact pc on uc.auto_contact_number__c = pc.auto_contact_number
 join idres_analytics.current_customer_graph idr on pc.id = idr.source_primary_key
 join ppfa_golden.golden_diversity d on idr.resolved_id = d.resolved_id
-where race_confidence in ('Self-Reported','HighlyLikely','Likely' )
+where race_confidence in ('Self-Reported','HighlyLikely','Likely')
 order by random()
