@@ -1,4 +1,18 @@
-select select 
+/* 
+get full list
+
+Drop from full list, contacts that have verified race data
+
+delete race records that are different from full list
+
+insert the leftovers on the full list
+
+Question: Push to master record, or all records in a cluster?
+Question: how does merging affect these records? the Verified ones should remain
+*/
+
+Create temporary table full_list as (
+select 
 uc.id as contact__c,
 --uc.name, 
 --uc.auto_contact_number__c, 
@@ -25,5 +39,6 @@ From rounddata_dev.uat_contacts uc
 join rounddata.contact pc on uc.auto_contact_number__c = pc.auto_contact_number
 join idres_analytics.current_customer_graph idr on pc.id = idr.source_primary_key
 join ppfa_golden.golden_diversity d on idr.resolved_id = d.resolved_id
-where race_confidence in ('Self-Reported','HighlyLikely','Likely')
-order by random()
+where race_confidence in ('Self-Reported','HighlyLikely','Likely') );
+
+select * from full_list;
