@@ -1,7 +1,7 @@
 /* 
-get full list
+get full list -- DONE
 
-Drop from full list, contacts that have verified race data
+Drop from full list, contacts that have verified race data -- Done but test
 
 delete race records that are different from full list
 
@@ -40,5 +40,16 @@ join rounddata.contact pc on uc.auto_contact_number__c = pc.auto_contact_number
 join idres_analytics.current_customer_graph idr on pc.id = idr.source_primary_key
 join ppfa_golden.golden_diversity d on idr.resolved_id = d.resolved_id
 where race_confidence in ('Self-Reported','HighlyLikely','Likely') );
+
+create temporary table verifieds as (
+select ccg.source_primary_key
+from akaplan.uat_additional_contact_info__c ua 
+join idres_analytics.current_customer_graph idr on ua.contact__c = idr.source_primary_key
+join idres_analytics.current_customer_graph ccg on idr.resolved_id = ccg.resolved_id and ccg.source = 'round_data'
+where type__c = 'Race' and confidence__c = 'Verified' );
+
+delete from  full_list
+where exists ( select 'x' from verifieds where full_list.contact__c = verifieds.source_primary_key );
+
 
 select * from full_list;
