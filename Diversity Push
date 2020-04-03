@@ -3,12 +3,14 @@ get full list -- DONE
 
 Drop from full list, contacts that have verified race data -- Done but test
 
-delete race records that are different from full list
+Delet records w
 
 insert the leftovers on the full list
 
-Question: Push to master record, or all records in a cluster?
+Question: Push to master record, or all records in a cluster? -- all recores
 Question: how does merging affect these records? the Verified ones should remain
+
+DONT FORGET ABOUT DELETE FLAG ON CONTACTS - CUT DOWN ON ERRORS
 */
 
 Create temporary table full_list as (
@@ -35,12 +37,13 @@ when race_confidence = 'Self-Reported' then 'Verified'
 when race_confidence = 'HighlyLikely' then 'Highly Likely'
 when race_confidence = 'Likely' then 'Likely'
 else null end as Confidence__c
-From rounddata_dev.uat_contacts uc
+From rounddata_dev.uat_contacts uc --Replace this and next line for prod script Contact -> current customer graph
 join rounddata.contact pc on uc.auto_contact_number__c = pc.auto_contact_number
 join idres_analytics.current_customer_graph idr on pc.id = idr.source_primary_key
 join ppfa_golden.golden_diversity d on idr.resolved_id = d.resolved_id
-where race_confidence in ('Self-Reported','HighlyLikely','Likely') );
+where race_confidence in ('Self-Reported','HighlyLikely','Likely')  );
 
+--Remove Contacts with Verified Data
 create temporary table verifieds as (
 select ccg.source_primary_key
 from akaplan.uat_additional_contact_info__c ua 
@@ -51,5 +54,26 @@ where type__c = 'Race' and confidence__c = 'Verified' );
 delete from  full_list
 where exists ( select 'x' from verifieds where full_list.contact__c = verifieds.source_primary_key );
 
+--Delete the unchanged rows
+create temporary table unchanged as (
+select aci.contact__c 
+from akaplan.uat_additional_contact_info__c aci 
+join full_list fl on aci.contact__c = fl.contact__c
+where aci.type__c = 'Race' and  aci.subtype__c = fl.subtype__c and aci.confidence__c = fl.confidence__c   );
+
+delete from  full_list
+where exists ( select 'x' from unchanged where full_list.contact__c = unchanged.contact__c );
+
+--Get the IDs to delete
+drop table if exists rounddata_dev.race_deletes;
+create table rounddata_dev.race_deletes as(
+select aci.id 
+from akaplan.uat_additional_contact_info__c aci 
+join full_list fl on aci.contact__c = fl.contact__c
+where aci.type__c = 'Race' and  ( (aci.subtype__c <> fl.subtype__c) or (aci.confidence__c <> fl.confidence__c) ) );
+
+drop table if exists rounddata_dev.race_inserts;
+create table rounddata_dev.race_inserts as (
+  select * from full_list);
 
 select * from full_list;
