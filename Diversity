@@ -95,7 +95,16 @@ from idres_analytics.current_customer_graph idr
   join rounddata.accountx  x on c.accountid = x.id
   where c.birthdate is not null) f
   where golden_diversity.resolved_id = f.resolved_id and row_num = 1;
-
+  
+--Age Catalist
+Update ppfa_golden.golden_diversity  
+set birth_date = catalist_birthdate, birth_date_source = 'Catalist'
+from(
+select idr.resolved_id, to_date(catalist_birthdate, 'YYYY-MM-DD') as catalist_birthdate
+from idres_analytics.current_customer_graph idr 
+  join catalist_monthly.current_catalist_return cat on idr.resolved_id = cat.resolved_id
+  where catalist_birthdate is not null) f
+  where golden_diversity.resolved_id = f.resolved_id and golden_diversity.birth_date is null;
 
 /*
 Update ppfa_golden.catalist_source  
