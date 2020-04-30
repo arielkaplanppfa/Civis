@@ -71,9 +71,9 @@ INSERT INTO akaplan.supreme_reporting_table (
          ,CASE WHEN opportunity.deposit_date IS NOT NULL THEN opportunity.deposit_date
                ELSE opportunity.adjusted_deposit_date
           END                                                                                                 deposit_date
-         ,SYSDATE                                                                                          datepulled
-         ,opportunity.final_amount                                                                            amount
-         ,'TRANSACTION'                                                                                       data_source
+         ,SYSDATE                                                                                             datepulled
+         ,coalesce(opportunity.final_amount, opportunity.amount)                                             amount
+         ,recordtype.namex                                                                                    data_source
          ,opportunity.etl_id                                                                                  etl_id
          ,opportunity.delete_flag                                                                             delete_flag
          ,opportunity.affiliate_number                                                                        affiliate_number
@@ -634,3 +634,6 @@ SELECT opportunity.closedate                                                    
     JOIN rounddata.accountx      a                                                           ON rc_giving__opportunity_credit.rc_giving__account = a.id
     LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON opportunity.accountid = vehicle.rc_bios__account
   );
+  
+  drop table if exists rounddata.ak_supreme_reporting_table;
+  create table rounddata.ak_supreme_reporting_table as (select * from akaplan.supreme_reporting_table);
