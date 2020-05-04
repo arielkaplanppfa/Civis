@@ -1,0 +1,20 @@
+version: '2.0'
+workflow:
+  tasks:
+    uat_delete:
+      action: civis.run_job
+      input:
+        job_id: 74359478
+      on-success:
+        - uat_insert
+    Case_43068___Salesforce_Diversity_Table_Builds_WIP_70221455:
+      action: civis.run_job
+      input:
+        job_id: 70221455
+      on-success:
+        - uat_delete
+    uat_insert:
+      action: civis.run_job
+      input:
+        job_id: 74360078
+        delay: '01:00'
