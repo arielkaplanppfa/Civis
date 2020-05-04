@@ -76,4 +76,12 @@ drop table if exists rounddata_dev.race_inserts;
 create table rounddata_dev.race_inserts as (
   select * from full_list);
 
-select * from full_list;
+select 'full', count(*) from full_list group by 1
+UNION
+select 'Verified', count(*) from verifieds group by 1
+UNION
+Select 'unchanged', count(*) from unchanged group by 1
+UNION 
+select 'Deleted', count(*) from rounddata_dev.race_deletes group by 1
+UNION
+select 'Inserts', count(*) from rounddata_dev.race_inserts group by 1;
