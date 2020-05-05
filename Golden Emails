@@ -76,7 +76,7 @@ temptwo as (
 select resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source,
        ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.source_email_id = tt.source_email_id order by rank asc limit 1 ) as best_rank
 from temptwo t ) 
-select distinct resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source, best_rank
+select distinct resolved_id, type ,email, preferred , opt, active, source_email_id, source, best_rank
 from tempthree;
   
 ----rD needs ranking and then smashing together somehow
