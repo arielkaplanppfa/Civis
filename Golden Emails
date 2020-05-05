@@ -1,3 +1,9 @@
+/*
+Rework the table
+TOp phone is preferred and active from either system
+THEN all others based on created date (in SF) and activity Date (EA)
+*/
+
 Drop table if exists ppfa_golden.staging_emails; /* Unlike addresses Im not sure we should take the accounts pref phone for these */
 create table ppfa_golden.staging_emails as 
 with temp as (
@@ -10,12 +16,12 @@ Case
   When coalesce(c.subtype, c.field,'Other') = 'Work' THEN 'Work'
   Else 'Other' End as "Type", c.valuex as "Email", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
 CASE
-  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '2' -- Preferred Verified 
-  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '3' -- Preferred Unverified
-  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source in ('Merkle','User Entry','DSG','GSI')  THEN '4'   -- Preferred Verified opt out
-  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '5'  -- preferred unverified opt out
-  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '6' --Active verified
-  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI')  THEN '7' --Active Unverified
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI','EveryAction')  THEN '2' -- Preferred Verified 
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI','EveryAction') THEN '3' -- Preferred Unverified
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source in ('Merkle','User Entry','DSG','GSI','EveryAction')  THEN '4'   -- Preferred Verified opt out
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source not in ('Merkle','User Entry','DSG','GSI','EveryAction')  THEN '5'  -- preferred unverified opt out
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI','EveryAction')  THEN '6' --Active verified
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI','EveryAction')   THEN '7' --Active Unverified
   else '8' -- All others
   END as "Email_rank", 'roundData' as "Source" 
 From ppfa_golden.current_customer_graph i
@@ -30,18 +36,58 @@ select g.resolved_id, a.id as "source_key",
   When coalesce(c.subtype, c.field,'Other') = 'Work' THEN 'Work'
   Else 'Other' End as "Type", c.valuex as "Email", c.opt_out as "Opt_Out", t.high_touch,  c.createddate,
 CASE
-  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '2' -- Preferred Verified 
-  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '3' -- Preferred Unverified
-  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source in ('Merkle','User Entry','DSG','GSI')  THEN '4'   -- Preferred Verified opt out
-  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source not in ('Merkle','User Entry','DSG','GSI') THEN '5'  -- preferred unverified opt out
-  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI') THEN '6' --Active verified
-  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI')  THEN '7' --Active Unverified
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI','EveryAction') THEN '2' -- Preferred Verified 
+  WHEN c.preferred = 'true' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI','EveryAction') THEN '3' -- Preferred Unverified
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source in ('Merkle','User Entry','DSG','GSI','EveryAction')  THEN '4'   -- Preferred Verified opt out
+  WHEN c.preferred = 'true' and c.opt_out = 'true' and c.source not in ('Merkle','User Entry','DSG','GSI','EveryAction') THEN '5'  -- preferred unverified opt out
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source in ('Merkle','User Entry','DSG','GSI','EveryAction') THEN '6' --Active verified
+  WHEN c.preferred = 'false' and c.opt_out = 'false' and c.source not in ('Merkle','User Entry','DSG','GSI','EveryAction')  THEN '7' --Active Unverified
   END as "Email_rank", 'roundData' as "Source" 
 from ppfa_golden.current_customer_graph g 
 join rounddata.accountx a on g.source_primary_key = a.id
 join rounddata.additional_contact_info c on a.rc_bios__preferred_contact = c.contact
 left join temp t on g.resolved_id = t.resolved_id
 where a.delete_flag <>'Y' and c.delete_flag <>'Y' and c.typex = 'Email'
+    
+--------------------------------------------------
+--------------------------------------------------
+create temporary table van_emails as 
+with temp as (select idr.resolved_id:: varchar, e.vanid:: varchar,
+ case when emailtypeid = 1 then 'Personal' when emailtypeid = 2 then 'Work' else 'Other' end:: varchar as type,
+  e.email:: varchar,
+  Case when c.emailid = e.contactsemailid then 'true'
+       when e.email = (select email from vansync.ppfa_contactsemails_mym ce where ce.vanid = c.vanid order by datecreated desc limit 1) then 'true' else 'false' end:: varchar as preferred, --email id can be null
+  --e.preferredemail:: varchar, 
+  'XX':: varchar as opt, 
+'true':: varchar  as active 
+, e.datecreated:: date, e.contactsemailid:: varchar as source_email_id, 'van':: varchar as "Source",
+Case when s.emailsubscriptionstatusid = 2 then 100 when s.emailsubscriptionstatusid = 1 then 50 else 0 end:: integer as sub_rank,
+Case when s.committeeid = '11607' then 3 when s.committeeid = '9816' then 2 when s.committeeid = '74821' then 1 else 0 end:: integer as committee_rank
+from vansync.ppfa_contacts_mym_cont c
+join vansync.ppfa_contactsemails_mym e on c.vanid = e.vanid
+left join vansync.ppfa_emailsubscriptions_mym s on e.email = s.email
+join idres_analytics.current_customer_graph idr on e.vanid = idr.source_primary_key and source = 'van'
+where ( s.committeeid in ('11607','9816','74821') or s.committeeid is null) and c.personcommitteeid = '11607'
+and e.datesuppressed is null),
+temptwo as (
+  select *, 
+  row_number() over (partition by resolved_id order by  ((sub_rank + committee_rank) + (Case when preferred = 'true' then 104 else 0 end) ) desc, datecreated desc) as rank
+  from temp), tempthree as (
+select resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source,
+       ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.source_email_id = tt.source_email_id order by rank asc limit 1 ) as best_rank
+from temptwo t ) 
+select distinct resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source, best_rank
+from tempthree;
+  
+----rD needs ranking and then smashing together somehow
+select idr.resolved_id, aci.contact,
+Case when upper(aci.subtype) like '%HOME%'  then 'Personal' when upper(aci.subtype) like '%WORK%' then 'Work' else 'Other' end as type,
+  aci.valuex, aci.preferred, aci.opt_out, aci.active, aci.createddate, aci.id, 'rounddata' as "Source"
+from rounddata.additional_contact_info aci
+join idres_analytics.current_customer_graph idr on aci.contact = idr.source_primary_key
+where aci.typex = 'Email'
+    
+    
  /*
 UNION 
 select g.resolved_id, m.vanid:: Varchar as "source_Key", Case 
