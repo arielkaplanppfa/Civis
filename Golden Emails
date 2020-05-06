@@ -3,6 +3,98 @@ Rework the table
 TOp phone is preferred and active from either system
 THEN all others based on created date (in SF) and activity Date (EA)
 */
+create temporary table van_emails as 
+with temp as (select idr.resolved_id:: varchar, e.vanid:: varchar,
+ case when emailtypeid = 1 then 'Personal' when emailtypeid = 2 then 'Work' else 'Other' end:: varchar as type,
+  e.email:: varchar,
+  Case when c.emailid = e.contactsemailid then 'true'
+       when e.email = (select email from vansync.ppfa_contactsemails_mym ce where ce.vanid = c.vanid order by datecreated desc limit 1) then 'true' else 'false' end:: varchar as preferred, --email id can be null
+  --e.preferredemail:: varchar, 
+  'XX':: varchar as opt, 
+'true':: varchar  as active 
+, e.datecreated:: date, e.contactsemailid:: varchar as source_email_id, 'van':: varchar as "Source",
+Case when s.emailsubscriptionstatusid = 2 then 100 when s.emailsubscriptionstatusid = 1 then 50 else 0 end:: integer as sub_rank,
+Case when s.committeeid = '11607' then 3 when s.committeeid = '9816' then 2 when s.committeeid = '74821' then 1 else 0 end:: integer as committee_rank
+from vansync.ppfa_contacts_mym_cont c
+join vansync.ppfa_contactsemails_mym e on c.vanid = e.vanid
+left join vansync.ppfa_emailsubscriptions_mym s on e.email = s.email
+join idres_analytics.current_customer_graph idr on e.vanid = idr.source_primary_key and source = 'van'
+where ( s.committeeid in ('11607','9816','74821') or s.committeeid is null) and c.personcommitteeid = '11607'
+and e.datesuppressed is null),
+temptwo as (
+  select *, 
+  row_number() over (partition by resolved_id order by  ((sub_rank + committee_rank) + (Case when preferred = 'true' then 104 else 0 end) ) desc, datecreated desc) as rank
+  from temp), 
+  tempthree as (
+select resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source, rank,
+       ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by rank asc limit 1 ) as best_rank
+from temptwo t ),
+tempfour as (
+select *, row_number() over( partition by resolved_id, email,best_rank order by rank asc) as dupe_digit
+  from tempthree),
+  final as (
+  select *, row_number () over (partition by resolved_id order by rank asc) as van_rank
+  from tempfour
+  where  dupe_digit = 1)
+select resolved_id, type, email, preferred, opt, active, source_email_id, source, rank, van_rank
+  from final;
+    
+create temporary table rd_emails as 
+    with temp as (
+  select idr.resolved_id, aci.contact,
+Case when upper(aci.subtype) like '%HOME%'  then 'Personal' when upper(aci.subtype) like '%WORK%' then 'Work' else 'Other' end as type,
+  aci.valuex as email, aci.preferred, 
+  case when aci.preferred = 'true' then 100 else 0 end as pref_score,
+  aci.opt_out,
+  case when aci.opt_out = 'false' then 10 else 0 end as opt_score,
+  aci.active,
+  case when aci. active = 'true' then 50 else 0 end as active_score,
+  case when aci.source in ('Merkle','User Entry','DSG','GSI','EveryAction') then 1 else 3 end as source_score,
+  aci.createddate, aci.id as source_email_id, 'rounddata' as "Source"
+from rounddata.additional_contact_info aci
+join idres_analytics.current_customer_graph idr on aci.contact = idr.source_primary_key
+where aci.typex = 'Email' ),
+temptwo as (
+ select * , (pref_score + opt_score + active_Score + source_score) as final_score
+  from temp),
+  tempthree as (
+  select  resolved_id, type, email, preferred, opt_out, active, source_email_id, source,final_score,  ( select final_score from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by final_score desc limit 1 ) as best_score
+  from temptwo t),
+ tempfour as (
+  select  *, row_number() over( partition by resolved_id, email,best_score order by final_score desc) as dupe_digit
+  from tempthree),
+ final as (
+  select *, row_number () over (partition by resolved_id order by final_score desc) as rd_rank
+  from tempfour
+  where  dupe_digit = 1)
+  select  resolved_id, type, email, preferred, opt_out, active, source_email_id, source,final_score, rd_rank
+  from final;
+
+drop table if exists ppfa_golden.staging_emails;
+drop table if exists ppfa_golden.golden_emails_staging;
+create table ppfa_golden.golden_emails_staging as 
+with temp as (
+select resolved_id, type, email, preferred, opt_out, active, source_email_id, source,final_score as source_score, rd_rank as rank
+from akaplan.rd_emails
+union 
+select * from akaplan. van_emails),
+dist as (
+select distinct resolved_id, email from temp)
+select d.resolved_id, d.email, coalesce(v.type, rd.type) as type, coalesce(v.preferred, rd.preferred) as preferred, coalesce(v.source_email_id, rd.source_email_id) as source_email_id, coalesce(v.source, rd.source) as source, coalesce(v.source_score, rd.source_score) as source_score, coalesce(v.rank, rd.rank) as rank
+from dist d 
+left join 
+(
+select * from temp t where source = 'van' and rank = (select min(rank) from temp tt  where t.resolved_id = tt.resolved_id and t.email = tt.email ) 
+) v on d.resolved_id = v.resolved_id and d.email = v.email
+left join 
+(
+select * from temp t where source = 'rounddata' and rank = (select min(rank) from temp tt  where t.resolved_id = tt.resolved_id and t.email = tt.email ) 
+) rd on d.resolved_id = rd.resolved_id and d.email = rd.email
+where length(d.resolved_id) >10
+order by d.resolved_id desc, v.rank asc;
+
+
+
 /* OLD CODE */
 --Drop table if exists ppfa_golden.staging_emails; /* Unlike addresses Im not sure we should take the accounts pref phone for these */
 /*create table ppfa_golden.staging_emails as 
@@ -48,76 +140,7 @@ join rounddata.accountx a on g.source_primary_key = a.id
 join rounddata.additional_contact_info c on a.rc_bios__preferred_contact = c.contact
 left join temp t on g.resolved_id = t.resolved_id
 where a.delete_flag <>'Y' and c.delete_flag <>'Y' and c.typex = 'Email'
-*/
-
-  create temporary table van_emails as 
-with temp as (select idr.resolved_id:: varchar, e.vanid:: varchar,
- case when emailtypeid = 1 then 'Personal' when emailtypeid = 2 then 'Work' else 'Other' end:: varchar as type,
-  e.email:: varchar,
-  Case when c.emailid = e.contactsemailid then 'true'
-       when e.email = (select email from vansync.ppfa_contactsemails_mym ce where ce.vanid = c.vanid order by datecreated desc limit 1) then 'true' else 'false' end:: varchar as preferred, --email id can be null
-  --e.preferredemail:: varchar, 
-  'XX':: varchar as opt, 
-'true':: varchar  as active 
-, e.datecreated:: date, e.contactsemailid:: varchar as source_email_id, 'van':: varchar as "Source",
-Case when s.emailsubscriptionstatusid = 2 then 100 when s.emailsubscriptionstatusid = 1 then 50 else 0 end:: integer as sub_rank,
-Case when s.committeeid = '11607' then 3 when s.committeeid = '9816' then 2 when s.committeeid = '74821' then 1 else 0 end:: integer as committee_rank
-from vansync.ppfa_contacts_mym_cont c
-join vansync.ppfa_contactsemails_mym e on c.vanid = e.vanid
-left join vansync.ppfa_emailsubscriptions_mym s on e.email = s.email
-join idres_analytics.current_customer_graph idr on e.vanid = idr.source_primary_key and source = 'van'
-where ( s.committeeid in ('11607','9816','74821') or s.committeeid is null) and c.personcommitteeid = '11607'
-and e.datesuppressed is null),
-temptwo as (
-  select *, 
-  row_number() over (partition by resolved_id order by  ((sub_rank + committee_rank) + (Case when preferred = 'true' then 104 else 0 end) ) desc, datecreated desc) as rank
-  from temp), 
-  tempthree as (
-select resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source, rank,
-       ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by rank asc limit 1 ) as best_rank
-from temptwo t ),
-tempfour as (
-select *, row_number() over( partition by resolved_id, email,best_rank order by rank asc) as dupe_digit
-  from tempthree),
-  final as (
-  select *, row_number () over (partition by resolved_id order by rank asc) as van_rank
-  from tempfour
-  where  dupe_digit = 1)
-select resolved_id, type, email, preferred, opt, active, source_email_id, source, van_rank
-  from final;
-    
-create temporary table rd_emails as 
-    with temp as (
-  select idr.resolved_id, aci.contact,
-Case when upper(aci.subtype) like '%HOME%'  then 'Personal' when upper(aci.subtype) like '%WORK%' then 'Work' else 'Other' end as type,
-  aci.valuex as email, aci.preferred, 
-  case when aci.preferred = 'true' then 100 else 0 end as pref_score,
-  aci.opt_out,
-  case when aci.opt_out = 'false' then 10 else 0 end as opt_score,
-  aci.active,
-  case when aci. active = 'true' then 50 else 0 end as active_score,
-  case when aci.source in ('Merkle','User Entry','DSG','GSI','EveryAction') then 1 else 3 end as source_score,
-  aci.createddate, aci.id as source_email_id, 'rounddata' as "Source"
-from rounddata.additional_contact_info aci
-join idres_analytics.current_customer_graph idr on aci.contact = idr.source_primary_key
-where aci.typex = 'Email' ),
-temptwo as (
- select * , (pref_score + opt_score + active_Score + source_score) as final_score
-  from temp),
-  tempthree as (
-  select  resolved_id, type, email, preferred, opt_out, active, source_email_id, source,final_score,  ( select final_score from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by final_score desc limit 1 ) as best_score
-  from temptwo t),
- tempfour as (
-  select  *, row_number() over( partition by resolved_id, email,best_score order by final_score desc) as dupe_digit
-  from tempthree),
- final as (
-  select *, row_number () over (partition by resolved_id order by final_score desc) as rd_rank
-  from tempfour
-  where  dupe_digit = 1)
-  select  resolved_id, type, email, preferred, opt_out, active, source_email_id, source, rd_rank
-  from final;
-
-    
+*/    
  /*
 UNION 
 select g.resolved_id, m.vanid:: Varchar as "source_Key", Case 
@@ -159,7 +182,7 @@ else '9' end as phone_rank,
 from idres_analytics.current_customer_graph idr
 join mobile_commons.profiles m on idr.source_primary_key = m.profile_id and idr.source = 'mobilecommons'
 left join temp t on idr.resolved_id = t.resolved_id
-order by resolved_id desc */
+order by resolved_id desc 
 ),
 tempthree as(
 select *, ROW_NUMBER () OVER ( PARTITION BY resolved_id,type ORDER BY email_rank asc, createddate desc) as "golden_rank" from temptwo order by resolved_id, email_rank
@@ -185,4 +208,6 @@ left join ( select pm.resolved_id, pm.Email as "Other_email", pm.opt_out, pm.sou
 
 select * from ppfa_golden.staging_phones order by resolved_id 
 limit 10000;
+*/
+
 
