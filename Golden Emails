@@ -90,7 +90,6 @@ left join
 (
 select * from temp t where source = 'rounddata' and rank = (select min(rank) from temp tt  where t.resolved_id = tt.resolved_id and t.email = tt.email ) 
 ) rd on d.resolved_id = rd.resolved_id and d.email = rd.email
-where length(d.resolved_id) >10
 order by d.resolved_id desc, v.rank asc;
 
 
