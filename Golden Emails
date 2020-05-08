@@ -23,11 +23,11 @@ where ( s.committeeid in ('11607','9816','74821') or s.committeeid is null) and 
 and e.datesuppressed is null),
 temptwo as (
   select *, 
-  row_number() over (partition by resolved_id order by  ((sub_rank + committee_rank) + (Case when preferred = 'true' then 104 else 0 end) ) desc, datecreated desc) as rank
+  (sub_rank + committee_rank) + (Case when preferred = 'true' then 104 else 0 end)  as rank
   from temp), 
   tempthree as (
 select resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source, rank,
-       ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by rank asc limit 1 ) as best_rank
+       ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by rank desc,datecreated desc limit 1 ) as best_rank
 from temptwo t ),
 tempfour as (
 select *, row_number() over( partition by resolved_id, email,best_rank order by rank asc) as dupe_digit
