@@ -30,10 +30,10 @@ select resolved_id, vanid, type ,email, preferred , opt, active, source_email_id
        ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by rank desc,datecreated desc limit 1 ) as best_rank
 from temptwo t ),
 tempfour as (
-select *, row_number() over( partition by resolved_id, email,best_rank order by rank asc) as dupe_digit
+select *, row_number() over( partition by resolved_id, email,best_rank order by rank desc) as dupe_digit
   from tempthree),
   final as (
-  select *, row_number () over (partition by resolved_id order by rank asc) as van_rank
+  select *, row_number () over (partition by resolved_id order by rank desc) as van_rank
   from tempfour
   where  dupe_digit = 1)
 select resolved_id, type, email, preferred, opt, active, source_email_id, source, rank, van_rank
