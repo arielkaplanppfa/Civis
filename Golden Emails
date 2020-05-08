@@ -23,20 +23,20 @@ where ( s.committeeid in ('11607','9816','74821') or s.committeeid is null) and 
 and e.datesuppressed is null),
 temptwo as (
   select *, 
-  (sub_rank + committee_rank) + (Case when preferred = 'true' then 104 else 0 end)  as rank
+  (sub_rank + committee_rank) + (Case when preferred = 'true' then 104 else 0 end)  as v_rank
   from temp), 
   tempthree as (
-select resolved_id, vanid, type ,email, preferred , opt, active, source_email_id, source, rank,
-       ( select rank from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by rank desc,datecreated desc limit 1 ) as best_rank
+select resolved_id, vanid, type ,email, preferred , opt, active,datecreated, source_email_id, source, v_rank,
+       ( select v_rank from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by v_rank desc,datecreated desc limit 1 ) as best_rank
 from temptwo t ),
 tempfour as (
-select *, row_number() over( partition by resolved_id, email,best_rank order by rank desc) as dupe_digit
+select *, row_number() over( partition by resolved_id, email,best_rank order by v_rank desc) as dupe_digit
   from tempthree),
   final as (
-  select *, row_number () over (partition by resolved_id order by rank desc) as van_rank
+  select *, row_number () over (partition by resolved_id, email order by v_rank desc) as van_rank
   from tempfour
   where  dupe_digit = 1)
-select resolved_id, type, email, preferred, opt, active, source_email_id, source, rank, van_rank
+select resolved_id, type, email, preferred, opt, active,datecreated, source_email_id, source, v_rank , van_rank
   from final;
     
 create temporary table rd_emails as 
@@ -58,39 +58,56 @@ temptwo as (
  select * , (pref_score + opt_score + active_Score + source_score) as final_score
   from temp),
   tempthree as (
-  select  resolved_id, type, email, preferred, opt_out, active, source_email_id, source,final_score,  ( select final_score from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by final_score desc limit 1 ) as best_score
+  select  resolved_id, type, email, preferred, opt_out, active, createddate, source_email_id, source,final_score,  ( select final_score from temptwo tt where t.resolved_id = tt.resolved_id and t.email = tt.email order by final_score desc limit 1 ) as best_score
   from temptwo t),
  tempfour as (
   select  *, row_number() over( partition by resolved_id, email,best_score order by final_score desc) as dupe_digit
   from tempthree),
  final as (
-  select *, row_number () over (partition by resolved_id order by final_score desc) as rd_rank
+  select *, row_number () over (partition by resolved_id, email order by final_score desc) as rd_rank
   from tempfour
   where  dupe_digit = 1)
-  select  resolved_id, type, email, preferred, opt_out, active, source_email_id, source,final_score, rd_rank
+  select  resolved_id, type, email, preferred, opt_out, active,createddate, source_email_id, source,final_score, rd_rank
   from final;
 
 drop table if exists ppfa_golden.staging_emails;
 drop table if exists ppfa_golden.golden_emails_staging;
 create table ppfa_golden.golden_emails_staging as 
-with temp as (
-select resolved_id, type, email, preferred, opt_out, active, source_email_id, source,final_score as source_score, rd_rank as rank
-from akaplan.rd_emails
-union 
-select * from akaplan. van_emails),
+with re as (
+select *
+from rd_emails),
+ve as(
+select *
+from van_emails),
 dist as (
-select distinct resolved_id, email from temp)
-select d.resolved_id, d.email, coalesce(v.type, rd.type) as type, coalesce(v.preferred, rd.preferred) as preferred, coalesce(v.source_email_id, rd.source_email_id) as source_email_id, coalesce(v.source, rd.source) as source, coalesce(v.source_score, rd.source_score) as source_score, coalesce(v.rank, rd.rank) as rank
+select distinct resolved_id, email from re
+UNION
+select distinct resolved_id, email from ve)
+select d.resolved_id, d.email, coalesce(v.type, rd.type) as type, coalesce(v.preferred, rd.preferred) as preferred,coalesce(v.opt, rd.opt_out) as opt_out, coalesce(v.active, rd.active) as active, coalesce(v.datecreated, rd.createddate) as datecreated, coalesce(v.source_email_id, rd.source_email_id) as source_email_id, coalesce(v.source, rd.source) as source, coalesce(v.v_rank, rd.final_score) as source_score, coalesce(v.van_rank, rd.rd_rank) as rank
 from dist d 
 left join 
 (
-select * from temp t where source = 'van' and rank = (select min(rank) from temp tt  where t.resolved_id = tt.resolved_id and t.email = tt.email ) 
+select * from ve t where  van_rank = (select min(van_rank) from ve tt  where t.resolved_id = tt.resolved_id and t.email = tt.email ) 
 ) v on d.resolved_id = v.resolved_id and d.email = v.email
 left join 
 (
-select * from temp t where source = 'rounddata' and rank = (select min(rank) from temp tt  where t.resolved_id = tt.resolved_id and t.email = tt.email ) 
+select * from re t where  rd_rank = (select min(rd_rank) from re tt  where t.resolved_id = tt.resolved_id and t.email = tt.email ) 
 ) rd on d.resolved_id = rd.resolved_id and d.email = rd.email
-order by d.resolved_id desc, v.rank asc;
+-- order by d.resolved_id desc--, v.rank asc
+;
+
+
+/*
+with temp as (
+select *,
+case when source  = 'van' then (source_score:: decimal/207) * 100 when source = 'rounddata' then (source_score:: decimal/163) * 100 else null end as strength
+from ppfa_golden.golden_emails_staging)
+select *, row_number() over(partition by resolved_id order by strength, datecreated desc) as golden_rank 
+from temp
+where length(resolved_id) >10 and resolved_id not like '003%'
+order by resolved_id, row_number() over(partition by resolved_id order by strength, datecreated desc) asc
+
+*/
 
 
 
