@@ -91,14 +91,14 @@ select ppid, Source_Key, address_id, street_1, street_2, street_3, city, state, 
 from ppfa_golden.staging_mailing_address where golden_rank = 1 order by ppid
 );
 
-alter table ppfa_golden.staging_mailing_address add column address_key varchar(256);
+alter table ppfa_golden.staging_mailing_address add column m_address_key varchar(256);
 
-update ppfa_golden.staging_mailing_address set address_key = upper(replace(coalesce(street_1,'No Street_1'),' ','')||replace(coalesce(street_2,'No Street_2'),' ','')||replace(Coalesce(street_3,'No Street_3'),' ','')||replace(coalesce(city,'No City'), ' ','')||replace(coalesce(state,'No State'),' ','')||Coalesce(left(zip,5),'NoZip'))  ;
+update ppfa_golden.staging_mailing_address set m_address_key = upper(replace(coalesce(street_1,'No Street_1'),' ','')||replace(coalesce(street_2,'No Street_2'),' ','')||replace(Coalesce(street_3,'No Street_3'),' ','')||replace(coalesce(city,'No City'), ' ','')||replace(coalesce(state,'No State'),' ','')||Coalesce(left(zip,5),'NoZip'))  ;
 
 
-alter table ppfa_golden.golden_mailing_address add column address_key varchar(256);
+alter table ppfa_golden.golden_mailing_address add column m_address_key varchar(256);
 
-update ppfa_golden.golden_mailing_address set address_key = upper(replace(coalesce(street_1,'No Street_1'),' ','')||replace(coalesce(street_2,'No Street_2'),' ','')||replace(Coalesce(street_3,'No Street_3'),' ','')||replace(coalesce(city,'No City'), ' ','')||replace(coalesce(state,'No State'),' ','')||Coalesce(left(zip,5),'NoZip'))  ;
+update ppfa_golden.golden_mailing_address set m_address_key = upper(replace(coalesce(street_1,'No Street_1'),' ','')||replace(coalesce(street_2,'No Street_2'),' ','')||replace(Coalesce(street_3,'No Street_3'),' ','')||replace(coalesce(city,'No City'), ' ','')||replace(coalesce(state,'No State'),' ','')||Coalesce(left(zip,5),'NoZip'))  ;
 
 /*
 select resolved_id, source_primary_key, address_id, rc_bios__street_line_1, rc_bios__street_line_2, rc_bios__additional_line_1, rc_bios__city, rc_bios__state, rc_bios__country, rc_bios__postal_code, rc_bios__do_not_mail, rc_bios__type, createddate, source, address_rank, golden_rank 
