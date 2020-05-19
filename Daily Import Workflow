@@ -22,9 +22,9 @@ workflow:
       input:
         job_id: 18957656
       on-success:
-        - Backup_Create___Opportunity_48609005
+        - Import_Success___Opportunity_48609005
       on-error:
-        - Backup_Restore___Opportunity_48609396
+        - Import_Fail___Opportunity_48609396
     Credits_Import_18822200:
       action: civis.run_job
       input:
@@ -95,18 +95,6 @@ workflow:
       on-success:
         - Alternate_ID_import_18980234
         - IDR___New_Record_Append_62546388
-    Backup_Create___Opportunity_48609005:
-      action: civis.run_job
-      input:
-        job_id: 48609005
-      on-success:
-        - Sustainer_Payments_Table_Build_52572822
-    Backup_Restore___Opportunity_48609396:
-      action: civis.run_job
-      input:
-        job_id: 48609396
-      on-success:
-        - Sustainer_Payments_Table_Build_52572822
     Alternate_ID_import_18980234:
       action: civis.run_job
       input:
@@ -187,3 +175,15 @@ workflow:
       input:
         job_id: 62546388
       join: 1
+    Import_Success___Opportunity_48609005:
+      action: civis.run_job
+      input:
+        job_id: 48609005
+      on-success:
+        - Sustainer_Payments_Table_Build_52572822
+    Import_Fail___Opportunity_48609396:
+      action: civis.run_job
+      input:
+        job_id: 48609396
+      on-success:
+        - Sustainer_Payments_Table_Build_52572822
