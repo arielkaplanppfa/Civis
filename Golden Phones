@@ -8,7 +8,9 @@ select i.resolved_id, c.contact as "source_key",
 Case
   WHEN c.subtype = 'Home' THEN 'Home'
   When c.subtype = 'Mobile' THEn 'Mobile'
-  Else 'Other' End as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.High_touch, c.createddate,
+  Else 'Other' End as "Type", 
+ replace(replace(replace(replace(c.valuex, ' ',''), '-',''),'(',''),')','') as "Phone", 
+    c.opt_out as "Opt_Out", t.High_touch, c.createddate,
 CASE
   WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'true' or notes = 'Telematch: Verified') THEN '1' -- Preferred Verified 
   WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '2' -- Preferred Unverified
@@ -30,7 +32,8 @@ WHEN m.phonetypeid = 'C' then 'Mobile'
 WHEN m.phonetypeid = 'W' then 'Other'
 WHEN m.phonetypeid = 'F' then 'Other'
 When m.phonetypeid = 'M' then 'Other' -- What is this?
-Else 'Other' End as "Type", '('||substring(m.phone,1,3)||')'||' '||substring(m.phone,4,3)||'-'||substring(m.phone,7,4) as "phone", 
+Else 'Other' End as "Type",
+m.phone as "phone", 
 'false' as "Opt_out", t.high_touch, m.datecreated, 
 CASE  
 WHEN s.sourcename in ('Catalist','User Added','Bulk') and m.phonetypeid = 'M' then  '2' --Preferred from good source
@@ -45,7 +48,9 @@ left join vansync.ppfa_phonesources s on m.phonesourceid = s.phonesourceid
 left join temp t on g.resolved_id = t.resolved_id
 where m.datesuppressed is null
 UNION /*rD household accounts*/
-select g.resolved_id, a.id as "source_key", coalesce(c.subtype,c.field,'None') as "Type", c.valuex as "Phone", c.opt_out as "Opt_Out", t.high_touch,  c.createddate,
+select g.resolved_id, a.id as "source_key", coalesce(c.subtype,c.field,'None') as "Type", 
+    replace(replace(replace(replace(c.valuex, ' ',''), '-',''),'(',''),')','') as "Phone", 
+    c.opt_out as "Opt_Out", t.high_touch,  c.createddate,
 CASE
   WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'true' or notes = 'Telematch: Verified') THEN '1' -- Preferred Verified
   WHEN c.preferred = 'true' and c.opt_out = 'false' and (c.verified = 'false' or c.verified is null) THEN '2' -- Preferred Unverified
@@ -64,7 +69,7 @@ UNION
 select idr.resolved_id, 
 m.profile_id:: varchar as "Source_key",  
 Case when status = 'Active Subscriber' or opted_out_source = 'Texted a STOP word' then 'Mobile' else 'Other' end as Type,
- '('||substring(m.phone_number,2,3)||')'||' '||substring(m.phone_number,5,3)||'-'||substring(m.phone_number,8,4) as "phone", 
+ right(m.phone_number, 10) as "phone", 
 Case when opted_out_source = 'Texted a STOP word' then 'true' else 'false' end as opt_out,
 t.high_touch, m.created_at,
 case 
