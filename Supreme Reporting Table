@@ -1,5 +1,5 @@
-DROP TABLE IF EXISTS akaplan.supreme_reporting_table;
-CREATE TABLE akaplan.supreme_reporting_table (
+DROP TABLE IF EXISTS rounddata.supreme_reporting_table;
+CREATE TABLE rounddata.supreme_reporting_table (
  closedate               DATETIME      DEFAULT NULL
 ,deposit_date            DATETIME      DEFAULT NULL
 ,datepulled              DATETIME
@@ -63,7 +63,7 @@ create table akaplan.rc_bios__preference_vehicle as
   
     
     
-INSERT INTO akaplan.supreme_reporting_table (  
+INSERT INTO rounddata.supreme_reporting_table (  
   --------------------------
   --TRANSACTIONS
   --------------------------
@@ -635,5 +635,5 @@ SELECT opportunity.closedate                                                    
     LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON opportunity.accountid = vehicle.rc_bios__account
   );
   
-  drop table if exists rounddata.ak_supreme_reporting_table;
-  create table rounddata.ak_supreme_reporting_table as (select * from akaplan.supreme_reporting_table);
+  -- drop table if exists rounddata.ak_supreme_reporting_table;
+  -- create table rounddata.ak_supreme_reporting_table as (select * from akaplan.supreme_reporting_table);
