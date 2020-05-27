@@ -1,6 +1,6 @@
 drop table if exists rounddata.sustainer_gifts;
 
-select o.etl_id, o.id, o.accountid, o.rc_giving__parent pledgeid, o.pledge_number,p.opportunity_external_id as recurring_gift_id, o.closedate, o.final_amount, o.rc_giving__source_code, o.gau_credit_code,c.sourcecode_activity_type_code activity_type, c.sourcecode_campaign_code, o.rc_giving__payment_method, p.rc_giving__giving_amount, p.rc_giving__payment_frequency
+select distinct o.etl_id, o.id, o.accountid, o.rc_giving__parent pledgeid, o.pledge_number,p.opportunity_external_id as recurring_gift_id, o.closedate, o.final_amount, o.rc_giving__source_code, o.gau_credit_code,c.sourcecode_activity_type_code activity_type, c.sourcecode_campaign_code, o.rc_giving__payment_method, p.rc_giving__giving_amount, p.rc_giving__payment_frequency
 ,nvl(p.RC_GIVING__ANNIVERSARY_DATE,p.closedate) pledge_date, pm.id pmid, pm.RC_GIVING__CARD_NUMBER_LAST_4, pm.rc_giving__card_expiration_mon
 ,pm.rc_giving__card_expiration_yea, pm.namex, pm.RC_GIVING__PAYMENT_TYPE, p.stagename, p.rC_Giving__Payment_End_Date 
 ,case when p.rC_Giving__Is_Sustainer = 'true'
