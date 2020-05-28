@@ -111,11 +111,18 @@ INSERT INTO rounddata.supreme_reporting_table (
               AND (
                     (
                        campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number in ('090030','090330','090430','091460')
+                       AND 
+                       (
+                        opportunity.affiliate_number in ('090030','090330','090430','091460')
                        AND substring(opportunity.gau_credit_code,1,3) = 'C34'
                        AND substring(opportunity.gau_credit_code,8,2) = 'UR'
                        AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True'
+                       AND opportunity.nps_exclude not ilike 'True' 
+                       ) 
+                       OR
+                       ( 
+                         opportunity.gau_credit_code like 'C340210%' 
+                       )
                     )
               OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
                    AND
@@ -312,10 +319,18 @@ SELECT opportunity.closedate                                                    
               AND (
                     (
                        campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number in ('090030','090330','090430','091460')
+                       AND 
+                       (
+                           opportunity.affiliate_number in ('090030','090330','090430','091460')
                        AND substring(opportunity.gau_credit_code,1,3) = 'C34'
                        AND substring(opportunity.gau_credit_code,8,2) = 'UR'
                        AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND opportunity.nps_exclude not ilike 'True' 
+                       ) 
+                       OR
+                       ( 
+                         opportunity.gau_credit_code like 'C340210%' 
+                       )
                     )
               OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
                    AND
@@ -509,11 +524,19 @@ SELECT opportunity.closedate                                                    
           ,CASE WHEN rc_Giving__opportunity_credit.rc_giving__opportunity_close_d >= '2011-07-01'
               AND (
                     (
-                       campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number in ('090030','090330','090430','091460')
+                      campaign.sourcecode_office_code = 'N'
+                       AND 
+                       (
+                        opportunity.affiliate_number in ('090030','090330','090430','091460')
                        AND substring(opportunity.gau_credit_code,1,3) = 'C34'
                        AND substring(opportunity.gau_credit_code,8,2) = 'UR'
                        AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND opportunity.nps_exclude not ilike 'True' 
+                       ) 
+                       OR
+                       ( 
+                         opportunity.gau_credit_code like 'C340210%' 
+                       )
                     )
               OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
                    AND
