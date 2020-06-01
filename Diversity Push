@@ -40,7 +40,7 @@ else null end as Confidence__c
 From rounddata.contact uc --Replace this and next line for prod script Contact -> current customer graph
 join idres_analytics.current_customer_graph idr on uc.id = idr.source_primary_key
 join ppfa_golden.golden_diversity d on idr.resolved_id = d.resolved_id
-where race_confidence in ('Self-Reported','HighlyLikely','Likely')  );
+where race_confidence in ('Self-Reported','HighlyLikely','Likely') and uc.delete_flag <> 'Y' );
 
 --Remove Contacts with Verified Data
 create temporary table verifieds as (
