@@ -45,7 +45,7 @@ where preferred_pronouns is not null) f
 where golden_diversity.resolved_id = f.resolved_id and noun_rank = 1 and pronouns is null;
 
 
---Race - self reported
+--Race - self reported --Van
 Update ppfa_golden.golden_diversity  
 set Race = 
 CASE  
@@ -64,6 +64,31 @@ select resolved_id, i.reportedracename, ROW_NUMBER () OVER ( PARTITION BY resolv
 from ppfa_golden.current_customer_graph g 
 join vansync.ppfa_contactsreportedraces_mym m on g.source_primary_key = m.vanid
 join vansync.ppfa_reportedraces i on m.reportedraceid = i.reportedraceid ) f 
+where golden_diversity.resolved_id = f.resolved_id and race_rank = 1 and race is null;
+
+--Race - self reported --rD
+Update ppfa_golden.golden_diversity  
+set Race = 
+CASE  
+when subtype = 'Asian/Asian American' then 'Asian, Asian American, South Asian, and/or Southeast Asian'
+when subtype = 'Other' then 'Other'
+when subtype = 'Caucasian or White' then 'Caucasian or White'
+when subtype = 'Latinx' then 'Hispanic and/or Latina/o/x'
+when subtype = 'Pacific Islander' then 'Pacific Islander'
+when subtype = 'Middle Eastern' then 'Arab American and/or Middle Eastern'
+when subtype = 'Indigenous' then 'Native American and/or Indigenous'
+when subtype = 'Black' then 'Black, African, or African American'
+when subtype = 'Native Hawaiian' then 'Native Hawaiian' else null end 
+, race_confidence = 'Self-Reported'
+from (
+select idr.resolved_id, c.id, c.subtype , coalesce(x.last_gift_date::Date, '1900-01-01'),
+  row_number() over(partition by idr.resolved_id order by coalesce(x.last_gift_date::Date, '1900-01-01') desc) as race_rank, u.namex
+from idres_analytics.current_customer_graph idr 
+  join rounddata.additional_contact_info c on  idr.source_primary_key = c.contact
+  join rounddata.contact n on c.contact = n.id
+  join rounddata.accountx  x on n.accountid = x.id
+  join rounddata.userx u on c.createdbyid = u.id
+  where c.typex = 'Race' and c.confidence = 'Verified' and u.namex not in ('Ariel Kaplan') ) f 
 where golden_diversity.resolved_id = f.resolved_id and race_rank = 1 and race is null;
 
 --race - catalist
@@ -101,18 +126,18 @@ from idres_analytics.current_customer_graph idr
 
 create temporary table vandob as 
 with temp as (select idr.resolved_id, c.vanid, c.dob, row_number() over(partition by resolved_id) as row_num
-from idres_analytics.current_customer_graph idr 
-  join vansync.ppfa_contacts_mym c on  idr.source_primary_key = c.vanid and idr.source ='van'
-  -- left join vansync.ppfa_con
-  where c.dob is not null),
-  c as ( select resolved_id, dob, 
-         count(*) as count from temp t group by 1, 2 ),
- counts as ( 
+             from idres_analytics.current_customer_graph idr 
+             join vansync.ppfa_contacts_mym c on  idr.source_primary_key = c.vanid and idr.source ='van'
+              -- left join vansync.ppfa_con
+             where c.dob is not null),
+     c as ( select resolved_id, dob, count(*) as count 
+           from temp t group by 1, 2 ),
+     counts as ( 
          select *, row_number() over(partition by resolved_id order by count desc) as rownum  from c ),
- agree as(
-  select counts.*, m.max
-  from counts
-  join ( select resolved_id, max(row_num) as max from temp group by 1) m on counts.resolved_id = m.resolved_id
+     agree as(
+              select counts.*, m.max
+              from counts
+              join ( select resolved_id, max(row_num) as max from temp group by 1) m on counts.resolved_id = m.resolved_id
   )
   select * from agree where count = max;
   
