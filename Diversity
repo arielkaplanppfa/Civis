@@ -88,7 +88,7 @@ from idres_analytics.current_customer_graph idr
   join rounddata.contact n on c.contact = n.id
   join rounddata.accountx  x on n.accountid = x.id
   join rounddata.userx u on c.createdbyid = u.id
-  where c.typex = 'Race' and c.confidence = 'Verified' and u.namex not in ('Data Migration') ) f 
+  where c.typex = 'Race' and c.confidence = 'Verified' and u.namex not in ('Data Migration','Ariel Kaplan') ) f 
 where golden_diversity.resolved_id = f.resolved_id and race_rank = 1 and race is null;
 
 --race - catalist
