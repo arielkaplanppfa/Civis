@@ -79,7 +79,7 @@ when subtype = 'Middle Eastern' then 'Arab American and/or Middle Eastern'
 when subtype = 'Indigenous' then 'Native American and/or Indigenous'
 when subtype = 'Black' then 'Black, African, or African American'
 when subtype = 'Native Hawaiian' then 'Native Hawaiian' else null end 
-, race_confidence = 'Verfied'
+, race_confidence = 'Verified'
 from (
 select idr.resolved_id, c.id, c.subtype , coalesce(x.last_gift_date::Date, '1900-01-01'),
   row_number() over(partition by idr.resolved_id order by coalesce(x.last_gift_date::Date, '1900-01-01') desc) as race_rank, u.namex
