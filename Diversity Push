@@ -23,12 +23,12 @@ uc.id as contact__c,
 Case when race ilike '%white%' then 'White'
 when race ilike '%Black%' then 'Black'
 when race ilike '%hispanic%' then 'Latinx'
-when race ilike '%asian%' then 'AAPI'
+when race ilike '%asian%' then 'Asian/Asian American'
 when race ilike '%other%' then 'Other'
 when race ilike '%indigenous%' then 'Indigenous'
 when race ilike '%Arab%' then 'Middle Eastern'
-when race ilike '%pacific%' then 'AAPI'
-when race ilike '%Hawai%' then 'Other'
+when race ilike '%pacific%' then 'Pacific Islander'
+when race ilike '%Hawai%' then 'Native Hawaiian'
 else 'Other' end as subtype__c,
 Case when race_confidence = 'Self-Reported' then 'Self Reported'
 else 'Catalist' end as source__c,
@@ -37,40 +37,39 @@ when race_confidence = 'Self-Reported' then 'Verified'
 when race_confidence = 'HighlyLikely' then 'Highly Likely'
 when race_confidence = 'Likely' then 'Likely'
 else null end as Confidence__c
-From rounddata_dev.uat_contacts uc --Replace this and next line for prod script Contact -> current customer graph
-join rounddata.contact pc on uc.auto_contact_number__c = pc.auto_contact_number
-join idres_analytics.current_customer_graph idr on pc.id = idr.source_primary_key
+From rounddata.contact uc --Replace this and next line for prod script Contact -> current customer graph
+join idres_analytics.current_customer_graph idr on uc.id = idr.source_primary_key
 join ppfa_golden.golden_diversity d on idr.resolved_id = d.resolved_id
 where race_confidence in ('Self-Reported','HighlyLikely','Likely')  );
 
 --Remove Contacts with Verified Data
 create temporary table verifieds as (
 select ccg.source_primary_key
-from akaplan.uat_additional_contact_info__c ua 
-join idres_analytics.current_customer_graph idr on ua.contact__c = idr.source_primary_key
+from rounddata.additional_contact_info ua 
+join idres_analytics.current_customer_graph idr on ua.contact = idr.source_primary_key
 join idres_analytics.current_customer_graph ccg on idr.resolved_id = ccg.resolved_id and ccg.source = 'round_data'
-where type__c = 'Race' and confidence__c = 'Verified' );
+where typex = 'Race' and confidence = 'Verified' );
 
 delete from  full_list
 where exists ( select 'x' from verifieds where full_list.contact__c = verifieds.source_primary_key );
 
 --Delete the unchanged rows
 create temporary table unchanged as (
-select aci.contact__c 
-from akaplan.uat_additional_contact_info__c aci 
-join full_list fl on aci.contact__c = fl.contact__c
-where aci.type__c = 'Race' and  aci.subtype__c = fl.subtype__c and aci.confidence__c = fl.confidence__c   );
+select aci.contact
+from rounddata.additional_contact_info aci 
+join full_list fl on aci.contact = fl.contact__c
+where aci.typex = 'Race' and  aci.subtype = fl.subtype__c and aci.confidence = fl.confidence__c   );
 
 delete from  full_list
-where exists ( select 'x' from unchanged where full_list.contact__c = unchanged.contact__c );
+where exists ( select 'x' from unchanged where full_list.contact__c = unchanged.contact );
 
 --Get the IDs to delete
 drop table if exists rounddata_dev.race_deletes;
 create table rounddata_dev.race_deletes as(
 select aci.id 
-from akaplan.uat_additional_contact_info__c aci 
-join full_list fl on aci.contact__c = fl.contact__c
-where aci.type__c = 'Race' and  ( (aci.subtype__c <> fl.subtype__c) or (aci.confidence__c <> fl.confidence__c) ) );
+from rounddata.additional_contact_info aci 
+join full_list fl on aci.contact = fl.contact__c
+where aci.typex = 'Race' and  ( (aci.subtype <> fl.subtype__c) or (aci.confidence <> fl.confidence__c) ) );
 
 drop table if exists rounddata_dev.race_inserts;
 create table rounddata_dev.race_inserts as (
