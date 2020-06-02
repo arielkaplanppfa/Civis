@@ -18,3 +18,9 @@ workflow:
       input:
         job_id: 74360078
         delay: '01:00'
+    Case_43068___Workflow_Step_1_77806964:
+      action: civis.run_job
+      input:
+        job_id: 77806964
+      on-success:
+        - Case_43068___Salesforce_Diversity_Table_Builds_WIP_70221455
