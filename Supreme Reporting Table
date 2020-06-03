@@ -54,7 +54,7 @@ DROP TABLE IF EXISTS akaplan.mv_soft_credit_opportunities ;
   INSERT INTO mv_soft_credit_opportunities
   SELECT DISTINCT rC_Giving__Opportunity AS rc_giving__opportunity
   FROM rounddata.rc_giving__opportunity_credit
-  WHERE delete_flag<>'Y' OR rc_giving__archive_flag = 'true'  ;
+  WHERE delete_flag<>'Y' OR rc_giving__archive_flag ilike 'true'  ;
  
 -- Giving Vehicle Preferences
 drop table if exists akaplan.rc_bios__preference_vehicle;
@@ -79,7 +79,7 @@ INSERT INTO rounddata.supreme_reporting_table (
          ,opportunity.affiliate_number                                                                        affiliate_number
          ,campaign.rc_giving__channel                                                                         channel
          ,rc_giving__payment_method.payment_subtype                                                           payment_subtype
-         ,CASE WHEN parent_opportunity.rc_giving__is_sustainer = 'true'
+         ,CASE WHEN parent_opportunity.rc_giving__is_sustainer ilike 'true'
                THEN 'offline'
                WHEN campaign.SourceCode_Campaign_Code = 'W'
                THEN 'online'
@@ -245,9 +245,9 @@ INSERT INTO rounddata.supreme_reporting_table (
          ,CASE WHEN recordtype.namex = 'Transaction'
                AND opportunity.stagename = 'Completed'
                THEN 1
-               WHEN recordtype.namex = 'Pledge Payment'
-               AND  opportunity.stagename  = 'Completed'
-               AND  parent_opportunity.rc_giving__is_bookable = 'FALSE'
+               WHEN recordtype.namex ilike 'Pledge Payment'
+               AND  opportunity.stagename  ilike 'Completed'
+               AND  parent_opportunity.rc_giving__is_bookable ilike 'FALSE'
                THEN 1
                WHEN recordtype.namex = 'Pledge'
                AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete')
@@ -448,14 +448,14 @@ SELECT opportunity.closedate                                                    
          ,'HARD'                                         AS Credit_Type
          ,NULL                                           AS Giving_level_pre_gift
          ,opportunity.rC_Giving__Giving_Number           AS Giving_Number
-         ,CASE WHEN recordtype.namex = 'Transaction'
-               AND opportunity.stagename = 'Completed'
+         ,CASE WHEN recordtype.namex ilike 'Transaction'
+               AND opportunity.stagename ilike 'Completed'
                THEN 1
-               WHEN recordtype.namex = 'Pledge Payment'
-               AND  opportunity.stagename  = 'Completed'
-               AND  opportunity.rc_giving__is_bookable = 'FALSE'
+               WHEN recordtype.namex ilike 'Pledge Payment'
+               AND  opportunity.stagename  ilike 'Completed'
+               AND  opportunity.rc_giving__is_bookable ilike 'FALSE'
                THEN 1
-               WHEN recordtype.namex = 'Pledge'
+               WHEN recordtype.namex ilike 'Pledge'
                AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete')
                THEN 1
                ELSE 0
@@ -521,58 +521,58 @@ SELECT opportunity.closedate                                                    
                 THEN 1
                 ELSE 0
            END                                                                                                         is_pass_through
-          ,CASE WHEN rc_Giving__opportunity_credit.rc_giving__opportunity_close_d >= '2011-07-01'
+          ,CASE WHEN rc_Giving__opportunity_credit.credit_close_date >= '2011-07-01'
               AND (
                     (
                       campaign.sourcecode_office_code = 'N'
                        AND 
                        (
-                        opportunity.affiliate_number in ('090030','090330','090430','091460')
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
-                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
-                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' 
+                        rc_Giving__opportunity_credit.affiliate_number in ('090030','090330','090430','091460')
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND rc_Giving__opportunity_credit.nps_exclude not ilike 'True' 
                        ) 
                        OR
                        ( 
-                         opportunity.gau_credit_code like 'C340210%' 
+                         rc_Giving__opportunity_credit.gau_code_credit like 'C340210%' 
                        )
                     )
               OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
                    AND
-                   opportunity.gau_credit_code like '%CFP'
+                   rc_Giving__opportunity_credit.gau_code_credit like '%CFP'
                  )
               OR ( campaign.sourcecode_office_code in ('N','C')
-                   AND ( opportunity.gau_credit_code like '_9001%'
-                         OR opportunity.gau_credit_code like '_9002%'
-                         OR opportunity.gau_credit_code like '_9003%'
-                         OR opportunity.gau_credit_code like '_9004%'
-                         OR opportunity.gau_credit_code like '_9005%')
+                   AND ( rc_Giving__opportunity_credit.gau_code_credit like '_9001%'
+                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9002%'
+                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9003%'
+                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9004%'
+                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9005%')
                         )
                   OR (campaign.sourcecode_office_code in ('N','C')
-                      and substring(opportunity.gau_credit_code,1,3) = 'C34'
-                      and substring(opportunity.gau_credit_code,8,2) = 'UR'
-                      and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                      and substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                      and substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                      and substring(rc_Giving__opportunity_credit.gau_code_credit,16,4) in ('A152','A113','A118','A126','A155')
                      )
                  )
               THEN 'Y'
               -- PP Keystone added 2019-07-23 cdelja per ariel
-              WHEN opportunity.closedate >= '2019-07-01'
+              WHEN rc_Giving__opportunity_credit.credit_close_date  >= '2019-07-01'
               AND (
                      (     campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number = '091410'
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
-                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
-                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND rc_Giving__opportunity_credit.affiliate_number = '091410'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
                       )
                    OR (     campaign.sourcecode_office_code = 'K'
-                        AND opportunity.gau_credit_code like '%CFP'
+                        AND rc_Giving__opportunity_credit.gau_code_credit like '%CFP'
                       )
                   )
               THEN 'Y'
-              WHEN (substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+              WHEN (substring(rc_Giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
                     and
-                    opportunity.affiliate_number in ('090030','090330','090430','091460','091410')
+                    rc_Giving__opportunity_credit.affiliate_number in ('090030','090330','090430','091460','091410')
                    )
               OR (campaign.SourceCode_Activity_Type_Code = '3NP'
                   and
