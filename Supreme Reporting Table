@@ -103,7 +103,7 @@ INSERT INTO rounddata.supreme_reporting_table (
          ,opportunity.gau_debit_code                                                                          gau_debit_code
          ,recordtype.namex                                                                                    recordtype
          ,CASE WHEN opportunity.gau_credit_code IN
-               ('C325005','C325015','11000000000002340','11000000000002356')
+               ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') -- added C340100TR422ONL per case 52904
                THEN 1
                ELSE 0
           END   is_pass_through
@@ -124,6 +124,16 @@ INSERT INTO rounddata.supreme_reporting_table (
                          opportunity.gau_credit_code like 'C340210%' 
                        )
                     )
+              OR ( campaign.sourcecode_office_code = 'C'      --Added this OR per case 52909 (Legacy Web sustainers with C Source)
+                  AND 
+                       (
+                        opportunity.affiliate_number in ('090030','090330','090430','091460')
+                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
+                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
+                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND opportunity.nps_exclude not ilike 'True' 
+                       ) 
+                 ) 
               OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
                    AND
                    opportunity.gau_credit_code like '%CFP'
@@ -150,7 +160,7 @@ INSERT INTO rounddata.supreme_reporting_table (
                        AND substring(opportunity.gau_credit_code,1,3) = 'C34'
                        AND substring(opportunity.gau_credit_code,8,2) = 'UR'
                        AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude ilike 'True'
+                       AND opportunity.nps_exclude not ilike 'True' -- added NOT per case 52909
                       )
                    OR (     campaign.sourcecode_office_code = 'K'
                         AND opportunity.gau_credit_code like '%CFP'
@@ -311,7 +321,7 @@ SELECT opportunity.closedate                                                    
          ,opportunity.gau_debit_code                                                                          gau_debit_code
          ,recordtype.namex                                                                                    recordtype
          ,CASE WHEN opportunity.gau_credit_code IN
-                ('C325005','C325015','11000000000002340','11000000000002356')
+                ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') -- added C340100TR422ONL per case 52904
                THEN 1
                ELSE 0
           END   is_pass_through
@@ -517,7 +527,7 @@ SELECT opportunity.closedate                                                    
           ,NULL                                                                                                gau_debit_code
           ,rc_giving__opportunity_credit.soft_credit_type                                                              recordtype
           ,CASE WHEN rc_giving__opportunity_credit.gau_code_credit IN
-                 ('C325005','C325015','11000000000002340','11000000000002356')
+                 ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') -- added C340100TR422ONL per case 52904
                 THEN 1
                 ELSE 0
            END                                                                                                         is_pass_through
@@ -658,6 +668,15 @@ SELECT opportunity.closedate                                                    
     LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON opportunity.accountid = vehicle.rc_bios__account
   );
  
+ 
+ --add ppid 6/15/20
+ alter table rounddata.supreme_reporting_table add column ppid varchar(30);
+ update rounddata.supreme_reporting_table
+set ppid = resolved_id
+from (select resolved_id, c.accountid from idres_analytics.current_customer_graph idr join rounddata.contact c on idr.source_primary_key = c.id) j
+where j.accountid = rounddata.supreme_reporting_table.ngoc_accountid;
+ 
+ -- Creates Backup
  drop table if exists rounddata.supreme_reporting_table_backup;
  create table rounddata.supreme_reporting_table_backup as 
  (select * from rounddata.supreme_reporting_table);
