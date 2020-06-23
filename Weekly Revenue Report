@@ -1,0 +1,161 @@
+Drop table if exists rounddata.weekly_revenue_report;
+
+with temp as (
+select Company
+,Restriction
+,Dept
+,Sub_Dept
+,'' Fundraising_Project_Breakout
+,'' Breakout_Restriction
+,Company_Code
+,Natural_Account
+,Fund_Type
+,DEPT_code
+,project_code
+,gau_credit_code
+,Credit_Description
+,month
+,sum(case when amount > 0
+and rc_giving__current_giving_amou > 0
+then 1
+else 0
+end) Count
+,sum(amount) Total_Revenue
+,Revenue_Type
+,sysdate::Date
+from
+(select p.id
+,p.closedate
+,p.deposit_date
+,p.rc_giving__current_giving_amou amount
+,p.gau_credit_code
+,gau_credit.rc_giving__description Credit_Description
+,p.rc_giving__current_giving_amou
+,na.BRDLEV1 Dept
+,substring(p.gau_credit_code,13,3) Sub_Dept
+,substring(p.gau_credit_code,8,2)  Fund_Type
+,p.project
+,case when gau_credit.rC_Giving__Description like '%pass%' then 'Passthrough'
+    when substring(p.gau_credit_code,1,2) = 'PV' then 'PP Votes'
+    when substring(p.gau_credit_code,1,2) = 'PC' then 'PAC'
+    when substring(p.gau_credit_code,1,2) = 'C4' then 'PPAF'
+    when substring(p.gau_credit_code,1,2) = 'C3' then 'PPFA'
+    else null
+end Company
+,substring(p.gau_credit_code,1,2) company_code
+,substring(p.gau_credit_code,10,3) DEPT_code
+,substring(p.gau_credit_code,13,3) Project_code
+,extract( month from p.deposit_date::Date)::varchar as  Month
+,substring(p.gau_credit_code,3,5) Natural_Account
+,case when substring(p.gau_credit_code,8,2) = 'PR' then 'Permanently Restricted'
+      when substring(p.gau_credit_code,8,2) = 'TR' then 'Temporarily Restricted'
+      when substring(p.gau_credit_code,8,2) = 'UR' then 'Unrestricted'
+      else null
+end restriction
+,'Pledge' Revenue_Type
+,sysdate::Date
+from rounddata.opportunity p
+join rounddata.rc_giving__gau gau_credit on p.gau_credit_code = gau_credit.namex
+join rounddata.recordtype rt on p.recordtypeid = rt.id
+join rounddata.campaign c on p.campaignid = c.id
+left join rounddata.ppfa_natural_accounts na on na.Natural_Account = substring(p.gau_credit_code,3,5)
+where not exists (select a.namex from rounddata.v_ppfa_suppress_credit_accounts_for_pledges a where a.namex = p.gau_credit_code)
+and p.rC_Giving__Is_Bookable = 'true'
+and rt.namex = 'Pledge'
+and p.deposit_date >= '2020-07-01'  --updated to FY21 per case 55699
+-- and p.deposit_date <= '2017-06-30'
+and p.deposit_date < sysdate
+and substring(coalesce(p.rc_giving__source_code, c.unique_source_code),2,1) in ('N','C')
+and substring(p.gau_credit_code,1,1) in ('C','P')
+and p.stagename in ('Open','Partially Complete','Partially Completed','Partially Collected','Completed')
+union
+select o.id, o.closedate, o.deposit_date, o.amount
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.Gau_Credit_Code
+  else o.Gau_Credit_Code
+ end gau_credit_code
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.credit_description
+  else o.credit_description
+ end credit_description
+,o.rc_giving__current_giving_amount
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.dept
+  else o.dept
+ end dept
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.sub_dept
+  else o.sub_dept
+ end sub_dept 
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.fund_type
+  else o.fund_type
+ end fund_type
+,o.project
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.company
+  else o.company
+ end company
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.company_code
+  else o.company_code
+ end company_code
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.dept_code
+  else o.dept_code
+ end dept_code 
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.project_code
+  else o.project_code
+ end dept_code  
+,o.month
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.natural_account
+  else o.natural_account
+ end natural_account 
+,case when  substring(o.Gau_Credit_Code,3,5) in ('20000','20009')
+  then p.restriction
+  else o.restriction
+ end restriction 
+,o.revenue_type, sysdate::Date
+from rounddata.rd_ppfa_fytd_transactions o
+left join rounddata.rd_ppfa_fytd_transactions p on o.refunded_transaction = p.id
+where not exists (select a.namex from rounddata.v_ppfa_suppress_credit_accounts_for_transactions a where a.namex = o.gau_credit_code)
+and substring(o.source_code,2,1) in ('N','C')
+and substring(o.Gau_Credit_Code,1,1) in ('C','P')
+and o.natural_account <> 44530
+-- and o.closedate > '2018-06-30'
+and o.deposit_date > '2020-06-30'  --updated to FY21 per case 55699
+AND concat(o.delete_flag, o.rc_giving__archive_flag) in ('Ntrue','Nfalse','Ytrue')
+) q1
+group by Company
+,Restriction
+,Dept
+,Sub_Dept
+,Company_Code
+,Natural_Account
+,Fund_Type
+,DEPT_code
+,project_code
+,gau_credit_code
+,Credit_Description
+,month
+,Revenue_Type)
+select *, 
+CASE 
+when month = '1' or month like '%Jan%' then '7'
+when month = '2' or month like '%Feb%' then '8'
+when month = '3' or month like '%Mar%' then '9'
+when month = '4' or month like '%Apr%' then '10'
+when month = '5' or month like '%May%' then '11'
+when month = '6' or month like '%Jun%' then '12'
+when month = '7' or month like '%Jul%' then '1'
+when month = '8' or month like '%Aug%' then '2'
+when month = '9' or month like '%Sep%' then '3'
+when month = '10' or month like '%Oct%' then '4'
+when month = '11' or month like '%Nov%' then '5'
+when month = '12' or month like '%Dec%' then '6'
+else null end as fiscal_month into rounddata.weekly_revenue_report
+from temp;
+
+select * from rounddata.weekly_revenue_report;
