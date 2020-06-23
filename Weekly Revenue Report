@@ -22,6 +22,8 @@ else 0
 end) Count
 ,sum(amount) Total_Revenue
 ,Revenue_Type
+,fiscal_year
+,fiscal_month
 ,sysdate::Date
 from
 (select p.id
@@ -54,6 +56,8 @@ end Company
 end restriction
 ,'Pledge' Revenue_Type
 ,sysdate::Date
+,akaplan.ppfa_fiscal_year(p.deposit_date) as fiscal_year
+,akaplan.ppfa_fiscal_month(p.deposit_date) as fiscal_month
 from rounddata.opportunity p
 join rounddata.rc_giving__gau gau_credit on p.gau_credit_code = gau_credit.namex
 join rounddata.recordtype rt on p.recordtypeid = rt.id
@@ -62,7 +66,7 @@ left join rounddata.ppfa_natural_accounts na on na.Natural_Account = substring(p
 where not exists (select a.namex from rounddata.v_ppfa_suppress_credit_accounts_for_pledges a where a.namex = p.gau_credit_code)
 and p.rC_Giving__Is_Bookable = 'true'
 and rt.namex = 'Pledge'
-and p.deposit_date >= '2020-07-01'  --updated to FY21 per case 55699
+and p.deposit_date >= '2019-07-01'  
 -- and p.deposit_date <= '2017-06-30'
 and p.deposit_date < sysdate
 and substring(coalesce(p.rc_giving__source_code, c.unique_source_code),2,1) in ('N','C')
@@ -118,6 +122,8 @@ select o.id, o.closedate, o.deposit_date, o.amount
   else o.restriction
  end restriction 
 ,o.revenue_type, sysdate::Date
+ ,akaplan.ppfa_fiscal_year(o.deposit_date) as fiscal_year
+,akaplan.ppfa_fiscal_month(o.deposit_date) as fiscal_month
 from rounddata.rd_ppfa_fytd_transactions o
 left join rounddata.rd_ppfa_fytd_transactions p on o.refunded_transaction = p.id
 where not exists (select a.namex from rounddata.v_ppfa_suppress_credit_accounts_for_transactions a where a.namex = o.gau_credit_code)
@@ -125,7 +131,7 @@ and substring(o.source_code,2,1) in ('N','C')
 and substring(o.Gau_Credit_Code,1,1) in ('C','P')
 and o.natural_account <> 44530
 -- and o.closedate > '2018-06-30'
-and o.deposit_date > '2020-06-30'  --updated to FY21 per case 55699
+and o.deposit_date > '2019-06-30'  
 AND concat(o.delete_flag, o.rc_giving__archive_flag) in ('Ntrue','Nfalse','Ytrue')
 ) q1
 group by Company
@@ -140,7 +146,9 @@ group by Company
 ,gau_credit_code
 ,Credit_Description
 ,month
-,Revenue_Type)
+,Revenue_Type
+,fiscal_year
+,fiscal_month)
 select *, 
 CASE 
 when month = '1' or month like '%Jan%' then '7'
@@ -155,7 +163,7 @@ when month = '9' or month like '%Sep%' then '3'
 when month = '10' or month like '%Oct%' then '4'
 when month = '11' or month like '%Nov%' then '5'
 when month = '12' or month like '%Dec%' then '6'
-else null end as fiscal_month into rounddata.weekly_revenue_report
+else null end as fiscal_month_manual into rounddata.weekly_revenue_report
 from temp;
 
 select * from rounddata.weekly_revenue_report;
