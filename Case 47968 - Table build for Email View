@@ -1,0 +1,12 @@
+Drop table if exists rounddata_dev.ak_47968_email_view;
+create table rounddata_dev.ak_47968_email_view as (
+select distinct c.id as id, eb.email as Email, em.emailsubject as Email_Subject, trunc(ed.datesent) as Date_sent,
+case when coalesce(eb.countread,0) > 0 or coalesce(eb.countlinksclicked,0) > 0 then 'Opened' else 'Unread' end as Opened
+from rounddata.contact c 
+join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
+join idres_analytics.current_customer_graph idrr on idr.resolved_id = idrr.resolved_id
+join vansync.ppfa_contactsemailbatches_mym eb on idrr.source_primary_key = eb.vanid and idrr.source = 'van'
+join vansync.ppfa_emailmessagedistributions_mym ed on eb.emailmessagedistributionid = ed.emailmessagedistributionid
+join vansync.ppfa_emailmessages_mym em on ed.emailmessageid = em.emailmessageid);
+
+ALTER TABLE rounddata_dev.ak_47968_email_view ALTER DISTKEY id, ALTER SORTKEY (Date_sent);
