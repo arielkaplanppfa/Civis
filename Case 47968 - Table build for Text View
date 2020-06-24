@@ -1,0 +1,13 @@
+Drop table if exists rounddata_dev.ak_47968_text_view;
+create table rounddata_dev.ak_47968_text_view as (
+select distinct c.id as ID, o.phone_number as Phone_Number, 'Outgoing' as type, trunc(sent_at) as Text_Date, o.body as Body,
+Case when i.message_id is not null or cl.click_id is not null then 'Responded' else 'Did not respond' end as Response
+from rounddata.contact c 
+join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
+join idres_analytics.current_customer_graph idrr on idr.resolved_id = idrr.resolved_id
+join mobile_commons.outgoing o on idrr.source_primary_key = o.profile_id and idrr.source = 'mobilecommons'
+left join mobile_commons.incoming i on o.next_message_id = i.message_id
+left join mobile_commons.clicks cl on cl.message_id = o.message_id
+where  sent_at >= dateadd(month, -3, sysdate) );
+
+ALTER TABLE rounddata_dev.ak_47968_text_view ALTER DISTKEY ID, ALTER SORTKEY (Text_Date ) ;
