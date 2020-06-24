@@ -1,0 +1,9 @@
+Drop table if exists rounddata_dev.ak_47968_action_view;
+create table rounddata_dev.ak_47968_action_view as (
+select distinct c.id as ID, action_date, action_type, action_org, form_name
+from rounddata.contact c 
+join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
+join idres_analytics.current_customer_graph idrr on idr.resolved_id = idrr.resolved_id
+join rounddata_dev.ppde_actions a on idrr.source_primary_key = a.vanid and idrr.source = 'van');
+
+ALTER TABLE rounddata_dev.ak_47968_action_view ALTER DISTKEY ID, ALTER SORTKEY (action_date ) ;
