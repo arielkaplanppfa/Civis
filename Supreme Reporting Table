@@ -176,12 +176,35 @@ INSERT INTO rounddata.supreme_reporting_table (
                   substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
                  )
               THEN 'Y'
+              /* SENFL Case 56005 */
+              WHEN opportunity.closedate >= '2020-07-01'
+              AND (
+                     (     campaign.sourcecode_office_code = 'N'
+                       AND opportunity.affiliate_number = '090320'
+                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
+                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
+                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND opportunity.nps_exclude not ilike 'True' -- added NOT per case 52909
+                      )
+                   OR (     campaign.sourcecode_office_code = 'F'
+                        AND opportunity.gau_credit_code like '%CFP'
+                      )
+                   OR (
+                            substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+                        and opportunity.affiliate_number = '090320'
+                      )
+                   OR (
+                            campaign.SourceCode_Activity_Type_Code = '3NP'
+                        and substring(Campaign.SourceCode_Segment_Code,1,1) = 'C'
+                        and opportunity.affiliate_number = '090320')
+                  )
+              THEN 'Y'
               ELSE 'N'
           END  AS cfp_shareable
          ,CASE 
                -- WHEN SUBSTR(opportunity.rc_giving__source_code, 2,1) IN ('L','P','E','A','W')
-               -- AND  opportunity.gau_credit_code NOT LIKE '%CFP'
-               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone')
+               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+                    AND  opportunity.gau_credit_code NOT LIKE '%CFP'
                THEN 'Y'
                ELSE 'N'
           END   AS is_local
@@ -383,11 +406,34 @@ SELECT opportunity.closedate                                                    
          substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
         )
               THEN 'Y'
+           /* SENFL Case 56005               */
+              WHEN opportunity.closedate >= '2020-07-01'
+              AND (
+                     (     campaign.sourcecode_office_code = 'N'
+                       AND opportunity.affiliate_number = '090320'
+                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
+                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
+                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND opportunity.nps_exclude not ilike 'True' -- added NOT per case 52909
+                      )
+                   OR (     campaign.sourcecode_office_code = 'F'
+                        AND opportunity.gau_credit_code like '%CFP'
+                      )
+                   OR (
+                            substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+                        and opportunity.affiliate_number = '090320'
+                      )
+                   OR (
+                            campaign.SourceCode_Activity_Type_Code = '3NP'
+                        and substring(Campaign.SourceCode_Segment_Code,1,1) = 'C'
+                        and opportunity.affiliate_number = '090320')
+                  )
+              THEN 'Y'
               ELSE 'N'
           END  AS cfp_shareable
          ,CASE -- WHEN SUBSTR(opportunity.rc_giving__source_code, 2,1) IN ('L','P','E','A','W')
-               -- AND  opportunity.gau_credit_code NOT LIKE '%CFP'
-               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone')
+               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+                    AND  opportunity.gau_credit_code NOT LIKE '%CFP'
                THEN 'Y'
                ELSE 'N'
           END   AS is_local
@@ -589,11 +635,33 @@ SELECT opportunity.closedate                                                    
                   substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
                  )
               THEN 'Y'
+          /* SENFL Case 56005 */   
+              WHEN rc_Giving__opportunity_credit.credit_close_date >= '2020-07-01'
+              AND (
+                     (     campaign.sourcecode_office_code = 'N'
+                       AND rc_Giving__opportunity_credit.affiliate_number = '090320'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                      )
+                   OR (     campaign.sourcecode_office_code = 'F'
+                        AND rc_Giving__opportunity_credit.gau_code_credit like '%CFP'
+                      )
+                   OR (
+                            substring(rc_Giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
+                        and rc_Giving__opportunity_credit.affiliate_number = '090320'
+                      )
+                   OR (
+                            campaign.SourceCode_Activity_Type_Code = '3NP'
+                        and substring(Campaign.SourceCode_Segment_Code,1,1) = 'C'
+                        and rc_Giving__opportunity_credit.affiliate_number = '090320')
+                  )
+              THEN 'Y'            
               ELSE 'N'
           END  AS cfp_shareable
          ,CASE -- WHEN SUBSTR(opportunity.rc_giving__source_code, 2,1) IN ('L','P','E','A','W')
-               -- AND  opportunity.gau_credit_code NOT LIKE '%CFP'
-               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone')
+               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+                    AND rc_Giving__opportunity_credit.gau_code_credit NOT LIKE '%CFP'
                THEN 'Y'
                ELSE 'N'
            END   AS is_local
