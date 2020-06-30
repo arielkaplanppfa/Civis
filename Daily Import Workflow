@@ -6,17 +6,17 @@ workflow:
       input:
         job_id: 18847649
       on-success:
-        - Backup_Create___Accountx_48603606
+        - Import_Success_Account_48603606
       on-error:
-        - Backup_Restore___Accountx_48607302
+        - Import_Fail___Account_48607302
     Contacts_import_18879977:
       action: civis.run_job
       input:
         job_id: 18879977
       on-success:
-        - Backup_Create___Contact_48607779
+        - Import_Success_Contact_48607779
       on-error:
-        - Backup_Restore___Contact_48608040
+        - Import_Fail_Contact_48603700
     Opportunities_Import_18957656:
       action: civis.run_job
       input:
@@ -30,18 +30,18 @@ workflow:
       input:
         job_id: 18822200
       on-success:
-        - Backup_Create___Credits_48602452
+        - Import_Success_Credit_48602452
       on-error:
-        - Backup_Restore___Credits_48603493
+        - Import_Fail_Credit_48603493
       join: 1
     Preferences_Import_18821690:
       action: civis.run_job
       input:
         job_id: 18821690
       on-success:
-        - Backup_Create___Preference_48602930
+        - Import_Success_Preference_48602930
       on-error:
-        - Backup_Restore___Preference_48603700
+        - Import_Fail_Preference_48608040
     rd_Workflow_Table_Drops_48599785:
       action: civis.run_job
       input:
@@ -53,85 +53,23 @@ workflow:
         - Account_Address_Import_39322115
         - Contacts_import_18879977
         - Supreme_Reporting_Table_22671189
-    Backup_Create___Credits_48602452:
-      action: civis.run_job
-      input:
-        job_id: 48602452
-    Backup_Restore___Credits_48603493:
-      action: civis.run_job
-      input:
-        job_id: 48603493
-    Backup_Create___Preference_48602930:
-      action: civis.run_job
-      input:
-        job_id: 48602930
-      on-success:
-        - Credits_Import_18822200
-    Backup_Restore___Preference_48603700:
-      action: civis.run_job
-      input:
-        job_id: 48603700
-      on-success:
-        - Credits_Import_18822200
-    Backup_Create___Accountx_48603606:
-      action: civis.run_job
-      input:
-        job_id: 48603606
-    Backup_Restore___Accountx_48607302:
-      action: civis.run_job
-      input:
-        job_id: 48607302
-    Backup_Create___Contact_48607779:
-      action: civis.run_job
-      input:
-        job_id: 48607779
-      on-success:
-        - Alternate_ID_import_18980234
-        - IDR___New_Record_Append_62546388
-    Backup_Restore___Contact_48608040:
-      action: civis.run_job
-      input:
-        job_id: 48608040
-      on-success:
-        - Alternate_ID_import_18980234
-        - IDR___New_Record_Append_62546388
     Alternate_ID_import_18980234:
       action: civis.run_job
       input:
         job_id: 18980234
       join: 1
       on-success:
-        - Backup_Create___Alternate_ID_49581555
+        - Import_Success_Alternate_ID_49581555
       on-error:
-        - Backup_Restore___Alternate_ID_49581408
-    Backup_Create___Alternate_ID_49581555:
-      action: civis.run_job
-      input:
-        job_id: 49581555
-    Backup_Restore___Alternate_ID_49581408:
-      action: civis.run_job
-      input:
-        job_id: 49581408
+        - Import_Fail_Alternate_ID_49581408
     Account_Address_Import_39322115:
       action: civis.run_job
       input:
         job_id: 39322115
       on-success:
-        - Backup_Create___Account_Address_49586054
+        - Import_Success_Account_Address_49586054
       on-error:
-        - Backup_Restore___Account_Address_49586038
-    Backup_Create___Account_Address_49586054:
-      action: civis.run_job
-      input:
-        job_id: 49586054
-      on-success:
-        - Contact_Address_Import_18978183
-    Backup_Restore___Account_Address_49586038:
-      action: civis.run_job
-      input:
-        job_id: 49586038
-      on-success:
-        - Contact_Address_Import_18978183
+        - Import_Fail_Account_Address_49586038
     Supreme_Reporting_Table_22671189:
       action: civis.run_job
       input:
@@ -142,17 +80,9 @@ workflow:
         job_id: 18978183
       join: 1
       on-success:
-        - Backup_Create___Contact_Address_52050253
+        - Import_Success_Contact_Address_52050253
       on-error:
-        - Backup_Restore___Contact_Address_52050260
-    Backup_Create___Contact_Address_52050253:
-      action: civis.run_job
-      input:
-        job_id: 52050253
-    Backup_Restore___Contact_Address_52050260:
-      action: civis.run_job
-      input:
-        job_id: 52050260
+        - Import_Fail_Contact_Address_52050260
     Sustainer_Payments_Table_Build_52572822:
       action: civis.run_job
       input:
@@ -182,3 +112,72 @@ workflow:
       input:
         job_id: 72767348
       join: 1
+    Import_Success_Account_48603606:
+      action: civis.run_job
+      input:
+        job_id: 48603606
+    Import_Fail___Account_48607302:
+      action: civis.run_job
+      input:
+        job_id: 48607302
+    Import_Success_Contact_48607779:
+      action: civis.run_job
+      input:
+        job_id: 48607779
+      on-success:
+        - Alternate_ID_import_18980234
+        - IDR___New_Record_Append_62546388
+    Import_Fail_Contact_48603700:
+      action: civis.run_job
+      input:
+        job_id: 48603700
+      on-success:
+        - Alternate_ID_import_18980234
+    Import_Success_Credit_48602452:
+      action: civis.run_job
+      input:
+        job_id: 48602452
+    Import_Fail_Credit_48603493:
+      action: civis.run_job
+      input:
+        job_id: 48603493
+    Import_Success_Preference_48602930:
+      action: civis.run_job
+      input:
+        job_id: 48602930
+      on-success:
+        - Credits_Import_18822200
+    Import_Fail_Preference_48608040:
+      action: civis.run_job
+      input:
+        job_id: 48608040
+      on-success:
+        - Credits_Import_18822200
+    Import_Success_Alternate_ID_49581555:
+      action: civis.run_job
+      input:
+        job_id: 49581555
+    Import_Fail_Alternate_ID_49581408:
+      action: civis.run_job
+      input:
+        job_id: 49581408
+    Import_Success_Account_Address_49586054:
+      action: civis.run_job
+      input:
+        job_id: 49586054
+      on-success:
+        - Contact_Address_Import_18978183
+    Import_Fail_Account_Address_49586038:
+      action: civis.run_job
+      input:
+        job_id: 49586038
+      on-success:
+        - Contact_Address_Import_18978183
+    Import_Success_Contact_Address_52050253:
+      action: civis.run_job
+      input:
+        job_id: 52050253
+    Import_Fail_Contact_Address_52050260:
+      action: civis.run_job
+      input:
+        job_id: 52050260
