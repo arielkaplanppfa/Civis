@@ -92,7 +92,6 @@ workflow:
       action: civis.run_job
       input:
         job_id: 62546388
-      join: 1
     Import_Success___Opportunity_48609005:
       action: civis.run_job
       input:
@@ -116,10 +115,14 @@ workflow:
       action: civis.run_job
       input:
         job_id: 48603606
+      on-success:
+        - Additional_Info_Contact_Import_19428477
     Import_Fail___Account_48607302:
       action: civis.run_job
       input:
         job_id: 48607302
+      on-success:
+        - Additional_Info_Contact_Import_19428477
     Import_Success_Contact_48607779:
       action: civis.run_job
       input:
@@ -181,3 +184,19 @@ workflow:
       action: civis.run_job
       input:
         job_id: 52050260
+    Additional_Info_Contact_Import_19428477:
+      action: civis.run_job
+      input:
+        job_id: 19428477
+      join: 1
+      on-success:
+        - Import_Success_ACI_81356671
+        - Import_Fail_ACI_81356768
+    Import_Success_ACI_81356671:
+      action: civis.run_job
+      input:
+        job_id: 81356671
+    Import_Fail_ACI_81356768:
+      action: civis.run_job
+      input:
+        job_id: 81356768
