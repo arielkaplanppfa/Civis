@@ -43,7 +43,7 @@ CREATE TABLE rounddata.supreme_reporting_table (
 ,Adjusted                VARCHAR(14)    DEFAULT NULL
 ,IsGivingVehicle         VARCHAR(15)
 ,Credit_Type             VARCHAR(43)
-,Giving_level_pre_gift   VARCHAR(16)    DEFAULT NULL
+,Giving_level_pre_gift   VARCHAR(24)    DEFAULT NULL
 ,Giving_Number           VARCHAR(500)
 ,reportable_revenue      varchar(26)
 ,has_soft_credit         varchar(27));
@@ -701,6 +701,14 @@ SELECT opportunity.closedate                                                    
 --          ,parent_opportunity.ppfa_fiscal_year                                                                  fiscal_year
           ,opportunity.ppfa_fiscal_month                                                                 fiscal_month
           ,opportunity.ppfa_fiscal_year                                                                  fiscal_year
+         /* --NEED TO DETERMINE IF THIS IS CORRECT FOR SC's, THE CODE ABOVE LEADS TO NULLS
+         ,CASE WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opportunity.deposit_date):: char
+               ELSE akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: char
+          END
+         ,CASE WHEN opportunity.ppfa_fiscal_year IS NOT NULL THEN opportunity.ppfa_fiscal_year
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(opportunity.deposit_date)
+               ELSE akaplan.ppfa_fiscal_year(opportunity.adjusted_deposit_date) */
           ,CASE WHEN opportunity.id = (SELECT c4_first_gift_id
                                   FROM rounddata.giving_summary x
                                   WHERE x.accountid = rc_giving__opportunity_credit.rC_Giving__Account
@@ -743,6 +751,10 @@ SELECT opportunity.closedate                                                    
 set ppid = resolved_id
 from (select resolved_id, c.accountid from idres_analytics.current_customer_graph idr join rounddata.contact c on idr.source_primary_key = c.id) j
 where j.accountid = rounddata.supreme_reporting_table.ngoc_accountid;
+
+--add giving level pre gift 7/6/2020
+update rounddata.supreme_reporting_table  
+set giving_level_pre_gift = coalesce( ( select giving_level from rounddata.giving_level_history glh where rounddata.supreme_reporting_table.ngoc_accountid = glh.rc_bios__account and  rounddata.supreme_reporting_table.closedate > glh.start_date and rounddata.supreme_reporting_table.closedate < coalesce(glh.end_date, '01-01-2050') order by value asc limit 1  ), 'Low Dollar');
  
  -- Creates Backup
  drop table if exists rounddata.supreme_reporting_table_backup;
