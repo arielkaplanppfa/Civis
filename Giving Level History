@@ -6,9 +6,15 @@ case when exists ( select 'x' from rounddata.rc_bios__preference gv where rc_bio
 rc_bios__subcategory as giving_level,
 rc_bios__start_date as start_date,
 rc_bios__end_date as end_date, 
-Case when rc_bios__end_date <= getdate() then 'N' when rc_bios__end_date is null then 'Y' else 'Y' end as active
+Case when rc_bios__end_date <= getdate() then 'N' when rc_bios__end_date is null then 'Y' else 'Y' end as active,
+Case 
+  when rc_bios__subcategory = 'Major Donor' then 1
+  when rc_bios__subcategory = 'Mid-Level VIP' then 2
+  when rc_bios__subcategory = 'Mid-Level High' then 3
+  when rc_bios__subcategory = 'Mid-Level Low' then 4
+  else 5 end as value
 from rounddata.rc_bios__preference p 
 where rc_bios__category = 'Giving Level'
-and delete_flag <> 'Y' and rc_bios__subcategory <> 'Giving Vehicle'
+and delete_flag <> 'Y' and rc_bios__subcategory not in ( 'Giving Vehicle','VIP')
 order by rc_bios__account, rc_bios__start_date asc
 );
