@@ -191,6 +191,7 @@ workflow:
       join: 1
       on-success:
         - Import_Success_ACI_81356671
+      on-error:
         - Import_Fail_ACI_81356768
     Import_Success_ACI_81356671:
       action: civis.run_job
