@@ -140,10 +140,14 @@ workflow:
       action: civis.run_job
       input:
         job_id: 48602452
+      on-success:
+        - rD_Giving_Level_History_82135633
     Import_Fail_Credit_48603493:
       action: civis.run_job
       input:
         job_id: 48603493
+      on-success:
+        - rD_Giving_Level_History_82135633
     Import_Success_Preference_48602930:
       action: civis.run_job
       input:
@@ -201,3 +205,8 @@ workflow:
       action: civis.run_job
       input:
         job_id: 81356768
+    rD_Giving_Level_History_82135633:
+      action: civis.run_job
+      input:
+        job_id: 82135633
+      join: 1
