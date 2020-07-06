@@ -1,0 +1,14 @@
+drop table if exists rounddata.giving_level_history;
+create table rounddata.giving_level_history as (
+
+select rc_bios__account, 
+case when exists ( select 'x' from rounddata.rc_bios__preference gv where rc_bios__category in ('Giving Level','Constituent Type') and rc_bios__subcategory = 'Giving Vehicle' and gv.rc_bios__account = p.rc_bios__account) then 'Y' else 'N' end as giving_vehicle, 
+rc_bios__subcategory as giving_level,
+rc_bios__start_date as start_date,
+rc_bios__end_date as end_date, 
+Case when rc_bios__end_date <= getdate() then 'N' when rc_bios__end_date is null then 'Y' else 'Y' end as active
+from rounddata.rc_bios__preference p 
+where rc_bios__category = 'Giving Level'
+and delete_flag <> 'Y' and rc_bios__subcategory <> 'Giving Vehicle'
+order by rc_bios__account, rc_bios__start_date asc
+);
