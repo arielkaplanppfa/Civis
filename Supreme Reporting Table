@@ -59,7 +59,7 @@ DROP TABLE IF EXISTS akaplan.mv_soft_credit_opportunities ;
 -- Giving Vehicle Preferences
 drop table if exists akaplan.rc_bios__preference_vehicle;
 create table akaplan.rc_bios__preference_vehicle as 
-( select rc_bios__account from rounddata.rc_bios__preference where delete_flag <> 'Y' and rc_bios__active ilike 'true' and rc_bios__subcategory = 'Giving Vehicle' );
+( select distinct rc_bios__account from rounddata.rc_bios__preference where delete_flag <> 'Y' and rc_bios__active ilike 'true' and rc_bios__subcategory = 'Giving Vehicle' );
   
     
     
