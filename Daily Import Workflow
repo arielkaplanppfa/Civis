@@ -52,6 +52,7 @@ workflow:
         - Preferences_Import_18821690
         - Account_Address_Import_39322115
         - Contacts_import_18879977
+        - Subledger_Import_24926695
     Alternate_ID_import_18980234:
       action: civis.run_job
       input:
@@ -205,3 +206,18 @@ workflow:
       input:
         job_id: 82135633
       join: 1
+    Subledger_Import_24926695:
+      action: civis.run_job
+      input:
+        job_id: 24926695
+      on-success:
+        - Import_Success_Subledger_85221855
+        - Import_Fail_Subledger_85221863
+    Import_Success_Subledger_85221855:
+      action: civis.run_job
+      input:
+        job_id: 85221855
+    Import_Fail_Subledger_85221863:
+      action: civis.run_job
+      input:
+        job_id: 85221863
