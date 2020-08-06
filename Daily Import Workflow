@@ -212,6 +212,7 @@ workflow:
         job_id: 24926695
       on-success:
         - Import_Success_Subledger_85221855
+      on-error:
         - Import_Fail_Subledger_85221863
     Import_Success_Subledger_85221855:
       action: civis.run_job
