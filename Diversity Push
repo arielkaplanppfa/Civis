@@ -53,12 +53,12 @@ where typex = 'Race' and confidence = 'Verified' );
 delete from  full_list
 where exists ( select 'x' from verifieds where full_list.contact__c = verifieds.source_primary_key );
 
---Delete the unchanged rows
+--Delete the unchanged and Invalid Rows
 create temporary table unchanged as (
 select aci.contact
 from rounddata.additional_contact_info aci 
 join full_list fl on aci.contact = fl.contact__c
-where aci.typex = 'Race' and  aci.subtype = fl.subtype__c and aci.confidence = fl.confidence__c   );
+where aci.typex = 'Race' and (  (aci.subtype = fl.subtype__c and aci.confidence = fl.confidence__c) or (aci.subtype = fl.subtype__c and aci.confidence = 'Invalid') )   );
 
 delete from  full_list
 where exists ( select 'x' from unchanged where full_list.contact__c = unchanged.contact );
