@@ -1,0 +1,132 @@
+/*This script ONLY includes:
+people with an active sustaining gift who have a successful transaction w/in the time period indicated by their payment sked plus a grace period of 10 days. As in, a monthly sustainer has an active recurring gift AND a successful transaction within 40 days then they are included. 
+
+The script groups by person/contact AND entity. A VANID with an active C3 sustaining gift and an active C4 sustaining gift will be listed twice.
+
+recurringcontributionfrequencyids
+1 = annual
+3 = monthly
+4 = semi-annual
+6 = weekly
+7 = quarterly
+*/
+drop table if exists rounddata.active_online_sustainers;
+select distinct
+--vanid,    ---Try to replace with SF accountID
+
+committeeid,
+entity,
+contactsrecurringcontributionid as contribution_id
+into rounddata.active_online_sustainers
+from
+(
+select distinct
+--a.vanid,
+  x.id,
+   a.committeeid,
+ e.entity,
+  a.contactsrecurringcontributionid
+from vansync.ppfa_contactsrecurringcontributions_mym as a
+ inner join ppfa_golden.committeeid_translation as e
+on a.committeeid = e.committeeid
+  join rounddata.alternate_id ai on vanid = ai.valuex
+  join rounddata.accountx x on ai.accountx = x.id
+where a.recurringcontributionstatusid in (1,3,5) ----Active 
+  and a.committeeid in (9816, 11607,68255,74821,72220)  ---national committee 
+  );
+
+
+  
+ 
+create temporary table active_c3 as 
+with temp as (
+select vanid, entity, ai.accountx,
+Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
+  Case 
+  when rc_bios__type ilike '%C3%' then 'PPFA C3'
+  when rc_bios__type ilike '%C4%' then 'PPAF C4'
+  when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
+from rounddata.active_online_sustainers s
+join rounddata.alternate_id ai on s.vanid = ai.valuex and ai.typex = 'Van'
+join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C3%online%' and  rc_bios__active ilike 'true'
+where s.entity like '%C3%' and p.delete_flag <> 'Y')
+select * from temp;
+
+create temporary table active_c4 as 
+with temp as (
+select vanid, entity, ai.accountx,
+Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
+  Case 
+  when rc_bios__type ilike '%C3%online%' then 'PPFA C3'
+  when rc_bios__type ilike '%C4%online%' then 'PPAF C4'
+  when rc_bios__type ilike '%votes%online%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
+from rounddata.active_online_sustainers s
+join rounddata.alternate_id ai on s.vanid = ai.valuex and ai.typex = 'Van'
+join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C4%online%' and  rc_bios__active ilike 'true'
+where s.entity like '%C4%')
+select * from temp;
+ 
+create temporary table active_votes as 
+with temp as (
+select vanid, entity, ai.accountx,
+Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
+  Case 
+  when rc_bios__type ilike '%C3%' then 'PPFA C3'
+  when rc_bios__type ilike '%C4%' then 'PPAF C4'
+  when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
+from rounddata.active_online_sustainers s
+join rounddata.alternate_id ai on s.vanid = ai.valuex and ai.typex = 'Van'
+join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%votes%online%' and  rc_bios__active ilike 'true'
+where s.entity like '%votes%')
+select * from temp
+;
+ 
+ 
+ create temporary table multi_c3 as (
+   select a3.*, ai.valuex 
+   from active_c3 a3
+   join rounddata.accountx x on a3.accountx = x.id 
+   join rounddata.alternate_id ai on ai.accountx = x.id and ai.typex = 'Van' order by x.id) 
+   ;
+ 
+ 
+ --C3s to be closed
+select distinct p.id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
+from rounddata.rc_bios__preference p
+join rounddata.alternate_id id on p.rc_bios__account = id.accountx and typex = 'Van'
+where p.rc_bios__active ilike 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type ilike '%c3%online%'
+ and not exists ( select 'x' from active_c3 where p.id = active_c3.pref_id) and p.delete_flag <> 'Y' and p.id  = 'a0O3600000AkuibEAB' 
+ and not exists ( select 'x' from multi_c3 m3 where m3.valuex = id.valuex  )
+ ;
+ 
+ 
+/*
+
+--C3s to be added
+select *
+from akaplan.Sustainers s
+where not exists ( 
+  select 'x' from  rounddata.alternate_id ai 
+join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%c3%online%' and  rc_bios__active ilike 'true'
+where  ai.typex = 'Van'  
+ and s.vanid = ai.valuex
+                ) and entity ilike '%C3%'
+ 
+ 
+ --C4s to be closed
+select distinct id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
+from rounddata.rc_bios__preference p
+where p.rc_bios__active ilike 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type ilike '%c4%online%'
+ and not exists ( select 'x' from active_c4 where p.id = active_c4.pref_id)
+*/
+/*
+--C4s to be added
+select *
+from akaplan.Sustainers s
+where not exists ( 
+  select 'x' from  rounddata.alternate_id ai 
+join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%c4%online%' and  rc_bios__active ilike 'true'
+where  ai.typex = 'Van'  
+ and s.vanid = ai.valuex
+                ) and entity ilike '%C4%'
+                */
