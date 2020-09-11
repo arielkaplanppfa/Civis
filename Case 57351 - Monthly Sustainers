@@ -13,7 +13,7 @@ recurringcontributionfrequencyids
 drop table if exists rounddata.active_online_sustainers;
 select distinct
 --vanid,    ---Try to replace with SF accountID
-
+id,
 committeeid,
 entity,
 contactsrecurringcontributionid as contribution_id
@@ -40,55 +40,51 @@ where a.recurringcontributionstatusid in (1,3,5) ----Active
  
 create temporary table active_c3 as 
 with temp as (
-select vanid, entity, ai.accountx,
+select s.id, entity,
 Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
   Case 
   when rc_bios__type ilike '%C3%' then 'PPFA C3'
   when rc_bios__type ilike '%C4%' then 'PPAF C4'
   when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
 from rounddata.active_online_sustainers s
-join rounddata.alternate_id ai on s.vanid = ai.valuex and ai.typex = 'Van'
-join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C3%online%' and  rc_bios__active ilike 'true'
-where s.entity like '%C3%' and p.delete_flag <> 'Y')
+join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C3%online%' and  rc_bios__active ilike 'true'
+where (s.entity like '%C3%' or s.entity ilike '%direct%') and p.delete_flag <> 'Y')
 select * from temp;
 
 create temporary table active_c4 as 
 with temp as (
-select vanid, entity, ai.accountx,
+select s.id, entity, 
 Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
   Case 
   when rc_bios__type ilike '%C3%online%' then 'PPFA C3'
   when rc_bios__type ilike '%C4%online%' then 'PPAF C4'
   when rc_bios__type ilike '%votes%online%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
 from rounddata.active_online_sustainers s
-join rounddata.alternate_id ai on s.vanid = ai.valuex and ai.typex = 'Van'
-join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C4%online%' and  rc_bios__active ilike 'true'
+join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C4%online%' and  rc_bios__active ilike 'true'
 where s.entity like '%C4%')
 select * from temp;
  
 create temporary table active_votes as 
 with temp as (
-select vanid, entity, ai.accountx,
+select s.id, entity,
 Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
   Case 
   when rc_bios__type ilike '%C3%' then 'PPFA C3'
   when rc_bios__type ilike '%C4%' then 'PPAF C4'
   when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
 from rounddata.active_online_sustainers s
-join rounddata.alternate_id ai on s.vanid = ai.valuex and ai.typex = 'Van'
-join rounddata.rc_bios__preference p on ai.accountx = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%votes%online%' and  rc_bios__active ilike 'true'
+join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%votes%online%' and  rc_bios__active ilike 'true'
 where s.entity like '%votes%')
 select * from temp
 ;
  
- 
+/*
  create temporary table multi_c3 as (
    select a3.*, ai.valuex 
    from active_c3 a3
-   join rounddata.accountx x on a3.accountx = x.id 
-   join rounddata.alternate_id ai on ai.accountx = x.id and ai.typex = 'Van' order by x.id) 
+   join rounddata.alternate_id ai on ai.accountx = a3.id and ai.typex = 'Van' order by a3.id) 
    ;
- 
+
  
  --C3s to be closed
 select distinct p.id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
@@ -96,9 +92,9 @@ from rounddata.rc_bios__preference p
 join rounddata.alternate_id id on p.rc_bios__account = id.accountx and typex = 'Van'
 where p.rc_bios__active ilike 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type ilike '%c3%online%'
  and not exists ( select 'x' from active_c3 where p.id = active_c3.pref_id) and p.delete_flag <> 'Y' and p.id  = 'a0O3600000AkuibEAB' 
- and not exists ( select 'x' from multi_c3 m3 where m3.valuex = id.valuex  )
+  and not exists ( select 'x' from multi_c3 m3 where m3.valuex = id.valuex  )
  ;
- 
+ */
  
 /*
 
@@ -112,7 +108,8 @@ where  ai.typex = 'Van'
  and s.vanid = ai.valuex
                 ) and entity ilike '%C3%'
  
- 
+ */
+ /*
  --C4s to be closed
 select distinct id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
 from rounddata.rc_bios__preference p
