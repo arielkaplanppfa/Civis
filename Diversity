@@ -49,7 +49,7 @@ where golden_diversity.resolved_id = f.resolved_id and noun_rank = 1 and pronoun
 Update ppfa_golden.golden_diversity  
 set Race = 
 CASE  
-when reportedracename = 'Asian' then 'Asian, Asian American, South Asian, and/or Southeast Asian'
+when reportedracename = 'Asian' then 'Asian American, East Asian, South Asian, and/or Southeast Asian'
 when reportedracename = 'Other' then 'Other'
 when reportedracename = 'Caucasian or White' then 'Caucasian or White'
 when reportedracename = 'Hispanic' then 'Hispanic and/or Latina/o/x'
@@ -70,7 +70,7 @@ where golden_diversity.resolved_id = f.resolved_id and race_rank = 1 and race is
 Update ppfa_golden.golden_diversity  
 set Race = 
 CASE  
-when subtype = 'Asian/Asian American' then 'Asian, Asian American, South Asian, and/or Southeast Asian'
+when subtype = 'Asian/Asian American' then 'Asian American, East Asian, South Asian, and/or Southeast Asian'
 when subtype = 'Other' then 'Other'
 when subtype = 'Caucasian or White' then 'Caucasian or White'
 when subtype = 'Latinx' then 'Hispanic and/or Latina/o/x'
@@ -97,7 +97,7 @@ set race =
 CASE  
 when catalist_race = 'nativeAmerican' then 'Native American and/or Indigenous'
 when catalist_race = 'other' then 'Other'
-when catalist_race = 'asian' then 'Asian, Asian American, South Asian, and/or Southeast Asian'
+when catalist_race = 'asian' then 'Asian American, East Asian, South Asian, and/or Southeast Asian'
 when catalist_race = 'hispanic' then 'Hispanic and/or Latina/o/x'
 when catalist_race = 'caucasian' then 'Caucasian or White'
 when catalist_race = 'black' then 'Black, African, or African American' else null end 
