@@ -24,7 +24,10 @@ select distinct
 --a.vanid,
   x.id,
    a.committeeid,
- e.entity,
+ Case 
+  when a.committeeid = '72220' and a.financialprogramid = '146' then 'PPFA Direct Mail C4'
+  when a.committeeid = '72220' and a.financialprogramid = '145' then 'PPFA Direct Mail C3'
+  else e.entity end as entity,
   a.contactsrecurringcontributionid
 from vansync.ppfa_contactsrecurringcontributions_mym as a
  inner join ppfa_golden.committeeid_translation as e
@@ -48,7 +51,7 @@ Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref
   when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
 from rounddata.active_online_sustainers s
 join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C3%online%' and  rc_bios__active ilike 'true'
-where (s.entity like '%C3%' or s.entity ilike '%direct%') and p.delete_flag <> 'Y')
+where (s.entity like '%C3%' or s.entity ilike '%direct%C3%') and p.delete_flag <> 'Y')
 select * from temp;
 
 create temporary table active_c4 as 
@@ -61,7 +64,7 @@ Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref
   when rc_bios__type ilike '%votes%online%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
 from rounddata.active_online_sustainers s
 join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C4%online%' and  rc_bios__active ilike 'true'
-where s.entity like '%C4%')
+where s.entity like '%C4%'  or s.entity ilike '%direct%C4%')
 select * from temp;
  
 create temporary table active_votes as 
@@ -109,13 +112,13 @@ where  ai.typex = 'Van'
                 ) and entity ilike '%C3%'
  
  */
- /*
+ 
  --C4s to be closed
 select distinct id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
 from rounddata.rc_bios__preference p
 where p.rc_bios__active ilike 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type ilike '%c4%online%'
- and not exists ( select 'x' from active_c4 where p.id = active_c4.pref_id)
-*/
+ and not exists ( select 'x' from active_c4 where p.id = active_c4.pref_id) and p.delete_flag <> 'Y';
+
 /*
 --C4s to be added
 select *
