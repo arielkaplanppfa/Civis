@@ -4,6 +4,7 @@ select distinct c.id as id, eb.email as Email, em.emailsubject as Email_Subject,
 case when coalesce(eb.countread,0) > 0 or coalesce(eb.countlinksclicked,0) > 0 then 'Opened' else 'Unread' end as Opened
 --,case when ccc.contactscontributionid is not null then 'Gave Gift' else 'No Gift' end as gave_gift
 , com.committeename as Committee
+--, u.firstname||' '||u.lastname as User
 from rounddata.contact c 
 join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
 join idres_analytics.current_customer_graph idrr on idr.resolved_id = idrr.resolved_id
@@ -11,6 +12,7 @@ join vansync.ppfa_contactsemailbatches_mym eb on idrr.source_primary_key = eb.va
 join vansync.ppfa_emailmessagedistributions_mym ed on eb.emailmessagedistributionid = ed.emailmessagedistributionid
 join vansync.ppfa_emailmessages_mym em on ed.emailmessageid = em.emailmessageid
 join vansync.ppfa_committees com on em.committeeid = com.committeeid
+--join vansync.ppfa_users u on em.createdby = u.userid
 --left join vansync.ppfa_codes_mym code on em.emailmessagename = substring(code.codename, 5, 300)
 --left join vansync.ppfa_contactscontributionscodes_mym ccc on ccc.codeid = code.codeid
 );
