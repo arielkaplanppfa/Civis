@@ -1,0 +1,248 @@
+Drop table if exists rounddata.online_sustainer_closeouts;
+
+Create table rounddata.online_sustainer_closeouts(id varchar(18),rc_bios__end_date__c date,rc_bios__active__c varchar(5),rc_bios__comments__c  Varchar(1024),pop  Varchar(5));
+/*
+ALTER TABLE  rounddata.online_sustainer_closeouts ADD COLUMN id varchar(18);
+ALTER TABLE  rounddata.online_sustainer_closeouts ADD COLUMN rc_bios__end_date__c date;
+ALTER TABLE  rounddata.online_sustainer_closeouts ADD COLUMN rc_bios__active__c varchar(5);
+ALTER TABLE  rounddata.online_sustainer_closeouts ADD COLUMN rc_bios__comments__c  Varchar(1024);
+ALTER TABLE  rounddata.online_sustainer_closeouts ADD COLUMN pop  Varchar(5);
+*/
+create temporary table active_c3 as 
+with temp as (
+select s.id, entity,
+Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
+  Case 
+  when rc_bios__type ilike '%C3%' then 'PPFA C3'
+  when rc_bios__type ilike '%C4%' then 'PPAF C4'
+  when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
+from rounddata.active_online_sustainers s
+join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C3%online%' and  rc_bios__active ilike 'true'
+where (s.entity like '%C3%' or s.entity ilike '%direct%C3%') and p.delete_flag <> 'Y')
+select * from temp;
+
+create temporary table multi_c3 as (
+   select a3.*, ai.valuex 
+   from active_c3 a3
+   join rounddata.alternate_id ai on ai.accountx = a3.id and ai.typex = 'Van' order by a3.id) 
+   ;
+ 
+ create temporary table c3_close as 
+ with temptwo as (
+ Select distinct p.id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
+from rounddata.rc_bios__preference p
+join rounddata.alternate_id id on p.rc_bios__account = id.accountx and typex = 'Van'
+where p.rc_bios__active ilike 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type ilike '%c3%online%'
+ and not exists ( select 'x' from active_c3 where p.id = active_c3.pref_id) and p.delete_flag <> 'Y'
+  and not exists ( select 'x' from multi_c3 m3 where m3.valuex = id.valuex  ) )
+  select id as pref_id, sysdate:: date as end_date, 'FALSE' as active, 'C3 Online Preference Closed out' as comment, 'C3' as pop from temptwo
+ ;
+ 
+ Insert into rounddata.online_sustainer_closeouts (select pref_id, end_date, active, comment, pop  from c3_close);
+ 
+ 
+ create temporary table active_c4 as 
+with temp as (
+select s.id, entity, 
+Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
+  Case 
+  when rc_bios__type ilike '%C3%online%' then 'PPFA C3'
+  when rc_bios__type ilike '%C4%online%' then 'PPAF C4'
+  when rc_bios__type ilike '%votes%online%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
+from rounddata.active_online_sustainers s
+join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C4%online%' and  rc_bios__active ilike 'true'
+where s.entity like '%C4%'  or s.entity ilike '%direct%C4%')
+select * from temp;
+
+create temporary table c4_close as 
+with tempthree as(
+select distinct id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
+from rounddata.rc_bios__preference p
+where p.rc_bios__active ilike 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type ilike '%c4%online%'
+ and not exists ( select 'x' from active_c4 where p.id = active_c4.pref_id) and p.delete_flag <> 'Y')
+ select id as pref_id, sysdate:: date as end_date, 'FALSE' as active, 'C4 Online Preference Closed out' as comment, 'C4' as pop from tempthree ;
+ 
+ Insert into rounddata.online_sustainer_closeouts (select pref_id, end_date, active, comment, pop  from c4_close);
+ 
+ create temporary table active_votes as 
+with temp as (
+select s.id, entity,
+Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref_active,
+  Case 
+  when rc_bios__type ilike '%C3%' then 'PPFA C3'
+  when rc_bios__type ilike '%C4%' then 'PPAF C4'
+  when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
+from rounddata.active_online_sustainers s
+join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%votes%online%' and  rc_bios__active ilike 'true'
+where s.entity ilike '%votes%')
+select * from temp
+;
+ 
+ Create temporary table votes_close as 
+ With tempfour as (
+   select distinct id, rc_bios__type, rc_bios__start_date, rc_bios__end_date
+from rounddata.rc_bios__preference p
+where p.rc_bios__active ilike 'true' and rc_bios__subcategory = 'Sustainer' and rc_bios__type ilike '%Votes%'
+ and not exists ( select 'x' from active_votes where p.id = active_votes.pref_id) and p.delete_flag <> 'Y')
+ select id as pref_id, sysdate:: date as end_date, 'FALSE' as active, 'Votes Online Preference Closed out' as comment, 'Votes' as pop from tempfour ;
+ 
+  Insert into rounddata.online_sustainer_closeouts (select pref_id, end_date, active, comment, pop  from votes_close);
+  
+ 
+  create temporary table comments as 
+  with temp as (
+select distinct ocs.id, ocs.pop, ai.valuex, 
+case when ocs.pop = 'C3' then '1,83,143,145' else '7,84,144,146' end as fp_id,
+crc.contactsrecurringcontributionid, rcs.recurringcontributionstatusname,
+RANK () OVER (PARTITION BY ocs.id ORDER BY enddate desc) as rank
+from rounddata.online_sustainer_closeouts ocs
+join rounddata.rc_bios__preference p on p.id = ocs.id
+join rounddata.alternate_id ai on p.rc_bios__account = ai.accountx and typex = 'Van'
+join vansync.ppfa_contactsrecurringcontributions_mym crc on ai.valuex = crc.vanid
+and 
+case 
+when crc.financialprogramid = '1' then '1,83,143,145'
+when crc.financialprogramid = '83' then '1,83,143,145'
+when crc.financialprogramid = '143' then '1,83,143,145'
+when crc.financialprogramid = '145' then '1,83,143,145'
+when crc.financialprogramid = '7' then '7,84,144,146'
+when crc.financialprogramid = '84' then '7,84,144,146'
+when crc.financialprogramid = '144' then '7,84,144,146'
+when crc.financialprogramid = '146' then '7,84,144,146' end  = case when ocs.pop = 'C3' then '1,83,143,145' else '7,84,144,146' end
+left join vansync.ppfa_recurringcontributionstatuses rcs on crc.recurringcontributionstatusid = rcs.recurringcontributionstatusid
+--where rcs.recurringcontributionstatusid in ('3','4')
+  )
+select * from temp where rank = '1';
+  
+update rounddata.online_sustainer_closeouts set rc_bios__comments__c = 
+Case 
+when c.recurringcontributionstatusname ilike '%fail%' then 'Preference closed due to excessive failures'
+when c.recurringcontributionstatusname ilike '%cancel%' then 'Preference closed due to donor cancelation'
+else 'Preference Closed for unknown reason' end
+from (select * from comments ) c where c.id = rounddata.online_sustainer_closeouts.id ;  
+ 
+ /* 
+  Create temporary table comments as 
+  With temp as (
+ select 
+crc.vanid,
+pref.id,
+coalesce(crc.datecancelled::date,fail.datereceived::date) as Rc_Bios__End_Date,
+'FALSE' as Rc_Bios__Active,
+(case when rcs.recurringcontributionstatusname='Inactive--Failed' then 'Preference closed due to excessive failures in EveryAction'
+when rcs.recurringcontributionstatusname='Inactive--Cancelled' then 'Online classification closed due to termination' else null end) as Rc_Bios__Comments,
+--remove after testing
+donor.firstname,
+donor.lastname,
+donor.addressline1,
+donor.city,
+donor.state_province,
+donor.zip_postal,
+donor.email,
+crc.contactsrecurringcontributionid as recurring_contribution_id,
+crc.recurringamount::numeric(19,2) as gift_amount,
+(case when crc.financialprogramid in (1,83,143,145) then 'National C3'
+when crc.financialprogramid in (7,84,144,146) then 'National C4'
+else null end) as designation,
+coalesce(crc.datecancelled::date,fail.datereceived::date) as gift_end_date,
+rcs.recurringcontributionstatusname as status,
+succ.datereceived::date as last_successful_payment,
+fail.datereceived::date as last_failed_payment
+from vansync.ppfa_contactsrecurringcontributions_mym crc
+
+inner join (SELECT DISTINCT
+             *
+             FROM (select *,
+RANK () OVER (PARTITION BY contactsrecurringcontributionid ORDER BY datereceived desc) as rank
+from vansync.ppfa_contactscontributions_mym
+where contributionstatusid = 3)
+             WHERE rank='1'
+           ) succ using (contactsrecurringcontributionid)
+           
+inner join (SELECT DISTINCT
+             *
+             FROM (select *,
+RANK () OVER (PARTITION BY contactsrecurringcontributionid ORDER BY datereceived desc) as rank
+from vansync.ppfa_contactscontributions_mym
+where contributionstatusid = 4)
+             WHERE rank='1'
+           ) fail using (contactsrecurringcontributionid)
+left join vansync.ppfa_recurringcontributionstatuses rcs using (recurringcontributionstatusid)
+inner join anneramirez.ea_sf_donorfile donor on crc.vanid=donor.vanid
+left join (select valuex, accountx from rounddata.alternate_id where typex='Van' and active='true') alt on alt.valuex=crc.vanid
+left join rounddata.rc_bios__preference pref on alt.accountx=pref.rc_bios__account
+where crc.recurringcontributionstatusid in (2,4)
+and crc.committeeid in (11607,9816,72220,72219)
+and pref.rc_bios__subcategory='Sustainer'
+and pref.rc_bios__active='true'
+and pref.rc_bios__type='National C3 Online'
+and crc.financialprogramid in (1,83,143,145)
+
+union
+
+select 
+crc.vanid,
+pref.id,
+coalesce(crc.datecancelled::date,fail.datereceived::date) as Rc_Bios__End_Date,
+'FALSE' as Rc_Bios__Active,
+(case when rcs.recurringcontributionstatusname='Inactive--Failed' then 'Preference closed due to excessive failures in EveryAction'
+when rcs.recurringcontributionstatusname='Inactive--Cancelled' then 'Online classification closed due to termination' else null end) as Rc_Bios__Comments,
+--remove after testing
+donor.firstname,
+donor.lastname,
+donor.addressline1,
+donor.city,
+donor.state_province,
+donor.zip_postal,
+donor.email,
+crc.contactsrecurringcontributionid as recurring_contribution_id,
+crc.recurringamount::numeric(19,2) as gift_amount,
+(case when crc.financialprogramid in (1,83,143,145) then 'National C3'
+when crc.financialprogramid in (7,84,144,146) then 'National C4'
+else null end) as designation,
+coalesce(crc.datecancelled::date,fail.datereceived::date) as gift_end_date,
+rcs.recurringcontributionstatusname as status,
+succ.datereceived::date as last_successful_payment,
+fail.datereceived::date as last_failed_payment
+from vansync.ppfa_contactsrecurringcontributions_mym crc
+
+inner join (SELECT DISTINCT
+             *
+             FROM (select *,
+RANK () OVER (PARTITION BY contactsrecurringcontributionid ORDER BY datereceived desc) as rank
+from vansync.ppfa_contactscontributions_mym
+where contributionstatusid = 3)
+             WHERE rank='1'
+           ) succ using (contactsrecurringcontributionid)
+          
+inner join (SELECT DISTINCT
+             *
+             FROM (select *,
+RANK () OVER (PARTITION BY contactsrecurringcontributionid ORDER BY datereceived desc) as rank
+from vansync.ppfa_contactscontributions_mym
+where contributionstatusid = 4)
+             WHERE rank='1'
+           ) fail using (contactsrecurringcontributionid)
+left join vansync.ppfa_recurringcontributionstatuses rcs using (recurringcontributionstatusid)
+inner join anneramirez.ea_sf_donorfile donor on crc.vanid=donor.vanid
+left join (select valuex, accountx from rounddata.alternate_id where typex='Van' and active='true') alt on alt.valuex=crc.vanid
+left join rounddata.rc_bios__preference pref on alt.accountx=pref.rc_bios__account
+where crc.recurringcontributionstatusid in (2,4)
+and crc.committeeid in (11607,9816,72220,72219)
+and pref.rc_bios__subcategory='Sustainer'
+and pref.rc_bios__active='true'
+and pref.rc_bios__type='National C4 Online'
+and crc.financialprogramid in (7,84,144,146) 
+  ), temptwo as 
+  (select ocs.id, ocs.pop, ai.valuex 
+from rounddata.online_sustainer_closeouts ocs
+join rounddata.rc_bios__preference p on p.id = ocs.id
+join rounddata.alternate_id ai on p.rc_bios__account = ai.accountx and typex = 'Van')
+select tt.id, t.rc_bios__comments
+from temptwo tt join temp t on tt.valuex = t.vanid;
+
+update rounddata.online_sustainer_closeouts set rc_bios__comments__c = rc_bios__comments
+from comments c where c.id = rounddata.online_sustainer_closeouts.id;
+  */
+  
+  Select * from rounddata.online_sustainer_closeouts;
