@@ -1,0 +1,51 @@
+/*This script ONLY includes:
+people with an active sustaining gift who have a successful transaction w/in the time period indicated by their payment sked plus a grace period of 10 days. As in, a monthly sustainer has an active recurring gift AND a successful transaction within 40 days then they are included. 
+
+The script groups by person/contact AND entity. A VANID with an active C3 sustaining gift and an active C4 sustaining gift will be listed twice.
+
+recurringcontributionfrequencyids
+1 = annual
+3 = monthly
+4 = semi-annual
+6 = weekly
+7 = quarterly
+*/
+drop table if exists rounddata.active_online_sustainers;
+select distinct
+--vanid,    ---Try to replace with SF accountID
+id,
+committeeid,
+committeename,
+financialprogramid,
+financialprogramname,
+entity,
+contactsrecurringcontributionid as contribution_id
+into rounddata.active_online_sustainers
+from
+(
+select distinct
+--a.vanid,
+  x.id,
+   a.committeeid,
+  c.committeename,
+  a.financialprogramid,
+  fp.financialprogramname,
+ Case 
+  when a.committeeid = '72220' and a.financialprogramid = '146' then 'PPFA Direct Mail C4'
+  when a.committeeid = '72220' and a.financialprogramid = '145' then 'PPFA Direct Mail C3'
+  when a.committeeid = '9816'  then 'PPAF C4'
+  when a.committeeid = '72219' and a.financialprogramid = '147' then 'High Touch Votes'
+  when a.committeeid = '72219' and a.financialprogramid = '148' then 'High Touch PAC'
+  when a.committeeid = '72219' and a.financialprogramid = '143' then 'High Touch C3'
+  when a.committeeid = '11607' then 'PPFA C3'
+  when a.committeeid = '74821' and a.financialprogramid = '150' then 'PP Votes'
+  else null end as entity,
+  a.contactsrecurringcontributionid
+from vansync.ppfa_contactsrecurringcontributions_mym as a
+join vansync.ppfa_financialprograms fp on a.financialprogramid = fp.financialprogramid
+join vansync.ppfa_committees c on a.committeeid = c.committeeid
+  join rounddata.alternate_id ai on vanid = ai.valuex
+  join rounddata.accountx x on ai.accountx = x.id
+where a.recurringcontributionstatusid in (1,3,5) ----Active 
+  and a.committeeid in (9816, 11607,68255,74821,72220,65401,72219) ---national committee 
+  );
