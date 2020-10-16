@@ -18,7 +18,7 @@ Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref
   when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
 from rounddata.active_online_sustainers s
 join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C3%online%' and  rc_bios__active ilike 'true'
-where (s.entity like '%C3%' or s.entity ilike '%direct%C3%') and p.delete_flag <> 'Y')
+where (s.entity ilike '%C3%' or s.entity ilike '%direct%C3%' or s.entity ilike '%high%c3%') and p.delete_flag <> 'Y')
 select * from temp;
 
 create temporary table multi_c3 as (
