@@ -107,6 +107,8 @@ workflow:
       input:
         job_id: 72767348
       join: 1
+      on-success:
+        - Case_62992__SRT_Bookable_Pledge_Payments_96628661
     Import_Success_Account_48603606:
       action: civis.run_job
       input:
@@ -222,3 +224,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 85221863
+    Case_62992__SRT_Bookable_Pledge_Payments_96628661:
+      action: civis.run_job
+      input:
+        job_id: 96628661
