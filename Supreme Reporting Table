@@ -107,7 +107,7 @@ INSERT INTO rounddata.supreme_reporting_table (
                THEN 1
                ELSE 0
           END   is_pass_through
-        ,CASE WHEN opportunity.closedate >= '2011-07-01'
+        ,CASE WHEN opportunity.closedate >= '2011-07-01'   --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
               AND (
                     (
                        campaign.sourcecode_office_code = 'N'
@@ -283,7 +283,7 @@ INSERT INTO rounddata.supreme_reporting_table (
                AND  parent_opportunity.rc_giving__is_bookable ilike 'FALSE'
                THEN 1
                WHEN recordtype.namex = 'Pledge'
-               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete')
+               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete') -- Include Open Stage per upcoming case
                THEN 1
                ELSE 0
           END             AS reportable_revenue
@@ -348,7 +348,7 @@ SELECT opportunity.closedate                                                    
                THEN 1
                ELSE 0
           END   is_pass_through
-         ,CASE WHEN opportunity.closedate >= '2011-07-01'
+         ,CASE WHEN opportunity.closedate >= '2011-07-01'  --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
               AND (
                     (
                        campaign.sourcecode_office_code = 'N'
@@ -512,17 +512,20 @@ SELECT opportunity.closedate                                                    
                AND  opportunity.rc_giving__is_bookable ilike 'FALSE'
                THEN 1
                WHEN recordtype.namex ilike 'Pledge'
-               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete')
+               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete','Open') --Include Open Stage as per upcoming case
                THEN 1
                ELSE 0
           END                                     AS reportable_revenue
-         ,NULL                                    AS has_soft_credit
+         ,CASE WHEN soft_credit.rc_giving__opportunity IS NOT NULL THEN 'TRUE'
+               ELSE NULL
+          END                                           AS has_soft_credit
     FROM rounddata.opportunity
     JOIN rounddata.v_campaign campaign                                         ON opportunity.rc_giving__source_code = campaign.unique_source_code
     JOIN rounddata.accountx a                                                  ON a.id = opportunity.accountid
     JOIN rounddata.recordtype recordtype                                       ON opportunity.recordtypeid = recordtype.id
     LEFT JOIN rounddata.rc_giving__payment_method rc_giving__payment_method  ON opportunity.rc_giving__payment_method_sele = rc_giving__payment_method.id
     LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                    ON opportunity.accountid = vehicle.rc_bios__account
+    LEFT JOIN akaplan.mv_soft_credit_opportunities   soft_credit  ON soft_credit.rc_giving__opportunity = opportunity.id
     WHERE recordtype.namex = 'Pledge'
     AND   opportunity.rc_giving__is_bookable ilike 'true'
     AND ( opportunity.delete_flag <>'Y' OR opportunity.rc_giving__archive_flag ilike 'TRUE')
@@ -577,7 +580,7 @@ SELECT opportunity.closedate                                                    
                 THEN 1
                 ELSE 0
            END                                                                                                         is_pass_through
-          ,CASE WHEN rc_Giving__opportunity_credit.credit_close_date >= '2011-07-01'
+          ,CASE WHEN rc_Giving__opportunity_credit.credit_close_date >= '2011-07-01' --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
               AND (
                     (
                       campaign.sourcecode_office_code = 'N'
