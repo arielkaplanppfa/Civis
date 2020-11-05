@@ -15,6 +15,19 @@ join vansync.ppfa_committees com on em.committeeid = com.committeeid
 --join vansync.ppfa_users u on em.createdby = u.userid
 --left join vansync.ppfa_codes_mym code on em.emailmessagename = substring(code.codename, 5, 300)
 --left join vansync.ppfa_contactscontributionscodes_mym ccc on ccc.codeid = code.codeid
+  UNION
+  select distinct c.contact as id, eb.email as Email, em.emailsubject as Email_Subject, trunc(ed.datesent) as Date_sent,
+case when coalesce(eb.countread,0) > 0 or coalesce(eb.countlinksclicked,0) > 0 then 'Opened' else 'Unread' end as Opened
+--,case when ccc.contactscontributionid is not null then 'Gave Gift' else 'No Gift' end as gave_gift
+, com.committeename as Committee
+--, u.firstname||' '||u.lastname as User
+from rounddata.additional_contact_info c 
+join vansync.ppfa_contactsemailbatches_mym eb on c.valuex = eb.email
+join vansync.ppfa_emailmessagedistributions_mym ed on eb.emailmessagedistributionid = ed.emailmessagedistributionid
+join vansync.ppfa_emailmessages_mym em on ed.emailmessageid = em.emailmessageid
+join vansync.ppfa_committees com on em.committeeid = com.committeeid
+where exists 
+( select 'x' from rounddata.contact cont join rounddata.accountx x on cont.accountid = x.id where x.recordtypeid = '01236000000Ke8lAAC'  and cont.id = c.contact  )
 );
 
 ALTER TABLE rounddata_dev.ak_47968_email_view ALTER DISTKEY id, ALTER SORTKEY (Date_sent);
