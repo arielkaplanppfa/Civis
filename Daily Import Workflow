@@ -53,6 +53,7 @@ workflow:
         - Account_Address_Import_39322115
         - Contacts_import_18879977
         - Subledger_Import_24926695
+        - Giving_Tracker_Import_92226881
     Alternate_ID_import_18980234:
       action: civis.run_job
       input:
@@ -228,3 +229,41 @@ workflow:
       action: civis.run_job
       input:
         job_id: 96628661
+    Giving_Tracker_Import_92226881:
+      action: civis.run_job
+      input:
+        job_id: 92226881
+      on-success:
+        - Import_Success_Giving_Tracker_100476022
+      on-error:
+        - Import_Fail_Giving_Tracker_100476312
+    Import_Success_Giving_Tracker_100476022:
+      action: civis.run_job
+      input:
+        job_id: 100476022
+      on-success:
+        - Proposal_Import_81216990
+    Import_Fail_Giving_Tracker_100476312:
+      action: civis.run_job
+      input:
+        job_id: 100476312
+      on-success:
+        - Proposal_Import_81216990
+    Proposal_Import_81216990:
+      action: civis.run_job
+      input:
+        job_id: 81216990
+      join: 1
+      on-success:
+        - Import_Success_Proposal_100476641
+      on-error:
+        - Import_Fail_Proposal_100476648
+        
+    Import_Fail_Proposal_100476648:
+      action: civis.run_job
+      input:
+        job_id: 100476648
+    Import_Success_Proposal_100476641:
+      action: civis.run_job
+      input:
+        job_id: 100476641
