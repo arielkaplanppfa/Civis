@@ -1,0 +1,160 @@
+---/*
+drop table if exists ppfa_golden.golden_opts;
+create table ppfa_golden.golden_opts as (select current_date as temp);
+
+alter table ppfa_golden.golden_opts add column ppid varchar(256);
+alter table ppfa_golden.golden_opts add column contact_method_type varchar(256); 
+alter table ppfa_golden.golden_opts add column join_key varchar(256); -- If this is unnecessary, we can remove this
+alter table ppfa_golden.golden_opts add column contact_method varchar(256); -- Contact method	
+alter table ppfa_golden.golden_opts add column contact_method_2 varchar(256); -- Address_line 2
+alter table ppfa_golden.golden_opts add column contact_method_3 varchar(256); -- Address_line 3
+alter table ppfa_golden.golden_opts add column city varchar(256);
+alter table ppfa_golden.golden_opts add column state varchar(256);
+alter table ppfa_golden.golden_opts add column zip varchar(256);
+alter table ppfa_golden.golden_opts add column mass_mail varchar(256); -- 3
+alter table ppfa_golden.golden_opts add column mass_call varchar(256); -- 1
+alter table ppfa_golden.golden_opts add column mass_text varchar(256); -- 4
+alter table ppfa_golden.golden_opts add column ind_text varchar(256); -- 5 Van for Now, Hustle maybe later
+alter table ppfa_golden.golden_opts add column mass_email varchar(256); -- 2
+alter table ppfa_golden.golden_opts add column high_touch varchar(256);
+alter table ppfa_golden.golden_opts drop column  temp;
+
+
+
+
+--Addresses
+Insert into ppfa_golden.golden_opts
+with temp as (
+  select *, row_number() over(partition by ppid, m_address_key order by address_rank asc) as dupe_digit from ppfa_golden.staging_mailing_address
+  )
+  select ppid, 'Address', m_address_key , street_1, street_2, street_3, city, state, zip,null as one, null as two, null as three, null as four, null as five, null as six
+  from temp
+  where dupe_digit = 1;
+  
+  
+--Phones
+insert into ppfa_golden.golden_opts
+with temp as (
+  select *, row_number() over(partition by resolved_id,phone order by phone_rank asc) as dupe_digit from ppfa_golden.staging_phones
+  )
+  select resolved_id, 'Phone', source_key, phone, null as one, null as two, null as three, null as four, null as five, null as six, null as seven, null as eight, null as nine, null as ten, null as eleven  
+  from temp
+  where dupe_digit = 1;
+  
+--emails
+insert into ppfa_golden.golden_opts
+with temp as (
+  select *, row_number() over(partition by resolved_id,email order by rank asc) as dupe_digit from ppfa_golden.golden_emails_staging
+  )
+  select resolved_id, 'Email', source_email_id, email, null as one, null as two, null as three, null as four, null as five, null as six, null as seven, null as eight, null as nine, null as ten, null as eleven 
+  from temp
+  where dupe_digit = 1;
+  
+  
+  
+  update ppfa_golden.golden_opts
+  set high_touch = 'Y'
+  where exists (
+    select 'x' from ppfa_golden.high_touch ht
+where ppfa_golden.golden_opts.ppid = ht.ppid and (giving_level in ('Major Donor','Mid-Level VIP', 'Mid-Level High') or (corporations is not null or foundation is not null or planned_giving is not null or prospect_management is not null or board_member is not null))
+    );
+  
+  
+ -- Base Mailable Addresses  --C3  -- All Supporters
+ create temporary table mailable as 
+ with temp as (
+select ppid, m_address_key --all mailable address
+from ppfa_golden.staging_mailing_address sa
+where do_not_mail = 'false'
+MINUS -- do not mails address level
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address sa
+where do_not_mail = 'true'
+MINUS --van date suppressed
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address sa
+join vansync.ppfa_contactsaddresses_mym m on sa.address_id = m.contactsaddressid
+where m.datesuppressed is not null
+MINUS -- van no mails -- Contact level
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address ma
+join vansync.ppfa_contacts_mym_cont c on ma.source_key = c.vanid
+where c.nomail = '1')
+select distinct ppid, m_address_key from temp;
+
+update ppfa_golden.golden_opts 
+set mass_mail = '3'
+from mailable m 
+where ppfa_golden.golden_opts.ppid = m.ppid and ppfa_golden.golden_opts.join_key = m.m_address_key; 
+
+--rD No contacts and mails
+Create temporary table no_mail as (
+select distinct idr.resolved_id
+from rounddata.contact c 
+join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
+join rounddata.rc_bios__preference p on  c.accountid = p.rc_bios__account
+where (upper(p.rc_bios__code_value) in ('NOMAIL','NO MAIL PRM') or rc_bios__subcategory = 'Do Not Contact') and p.rc_bios__active = 'true');
+-- */
+ 
+ --Base Mailable Addresses C4 --Those who have made a c4 gift (AK - 11/17/20 - should we add those that have an action fund membership? )
+ create temporary table c4_mailable as 
+ with temp as (
+select ppid, m_address_key --all mailable address
+from ppfa_golden.staging_mailing_address sa
+where exists ( select 'x' from idres_analytics.current_customer_graph idr join rounddata.contact c on idr.source_primary_key = c.id join rounddata.supreme_reporting_table srt on srt.ngoc_accountid = c.accountid  and source_code like '4NA%' and idr.resolved_id  = sa.ppid )
+and do_not_mail = 'false'
+MINUS -- do not mails address level
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address sa
+where do_not_mail = 'true'
+MINUS --van date suppressed
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address sa
+join vansync.ppfa_contactsaddresses_mym m on sa.address_id = m.contactsaddressid
+where m.datesuppressed is not null
+MINUS -- van no mails -- Contact level
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address ma
+join vansync.ppfa_contacts_mym_cont c on ma.source_key = c.vanid
+where c.nomail = '1')
+select distinct ppid, m_address_key from temp;
+ 
+update ppfa_golden.golden_opts 
+set mass_mail = coalesce(mass_mail,'')||'4'
+from c4_mailable m 
+where ppfa_golden.golden_opts.ppid = m.ppid and ppfa_golden.golden_opts.join_key = m.m_address_key; 
+ 
+ --Base Mailable Addresses PAC -- All ACtion Fund Members
+ create temporary table Pac_mailable as 
+ with temp as (
+select ppid, m_address_key --all mailable address
+from ppfa_golden.staging_mailing_address sa
+where exists ( select 'x' from ppfa_golden.golden_membership gm where active = 'Y' and gm.ppid = sa.ppid )
+and do_not_mail = 'false'
+MINUS -- do not mails address level
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address sa
+where do_not_mail = 'true'
+MINUS --van date suppressed
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address sa
+join vansync.ppfa_contactsaddresses_mym m on sa.address_id = m.contactsaddressid
+where m.datesuppressed is not null
+MINUS -- van no mails -- Contact level
+select ppid, m_address_key
+from ppfa_golden.staging_mailing_address ma
+join vansync.ppfa_contacts_mym_cont c on ma.source_key = c.vanid
+where c.nomail = '1')
+select distinct ppid, m_address_key from temp; 
+ 
+ update ppfa_golden.golden_opts 
+set mass_mail = coalesce(mass_mail,'')||'P'
+from Pac_mailable m 
+where ppfa_golden.golden_opts.ppid = m.ppid and ppfa_golden.golden_opts.join_key = m.m_address_key; 
+ 
+--/* 
+update ppfa_golden.golden_opts 
+  set mass_mail = null 
+  from no_mail
+  where ppfa_golden.golden_opts.ppid = no_mail.resolved_id;
+ --*/
