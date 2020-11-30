@@ -151,6 +151,42 @@ select distinct ppid, m_address_key from temp;
 set mass_mail = coalesce(mass_mail,'')||'P'
 from Pac_mailable m 
 where ppfa_golden.golden_opts.ppid = m.ppid and ppfa_golden.golden_opts.join_key = m.m_address_key; 
+
+
+create temporary table votes_mailable as --Existing relationship
+ with recency as (
+select ccg.resolved_id as ppid, row_number() over (partition by resolved_id order by es.datemodified desc) as row_num, emailsubscriptionstatusname
+from idres_analytics.current_customer_graph ccg 
+join vansync.ppfa_contactsemails_mym ce on ccg.source_primary_key = ce.vanid and ccg.source ilike '%van%'  --Contacts Emails table
+join vansync.ppfa_emailsubscriptions_mym s on ce.email = s.email
+join vansync.ppfa_emailsubscriptionstatuses es on s.emailsubscriptionstatusid = es.emailsubscriptionstatusid
+where s.committeeid = '74821' -- and emailsubscriptionstatusname = 'Subscribed'
+order by 1, 2 asc),
+temp as(
+select ppid
+from recency
+where row_num = 1 and emailsubscriptionstatusname = 'Subscribed'
+MINUS -- do not mails address level
+select ppid
+from ppfa_golden.staging_mailing_address sa
+where do_not_mail = 'true'
+MINUS --van date suppressed
+select ppid
+from ppfa_golden.staging_mailing_address sa
+join vansync.ppfa_contactsaddresses_mym m on sa.address_id = m.contactsaddressid
+where m.datesuppressed is not null
+MINUS -- van no mails -- Contact level
+select ppid
+from ppfa_golden.staging_mailing_address ma
+join vansync.ppfa_contacts_mym_cont c on ma.source_key = c.vanid
+where c.nomail = '1')
+select distinct ppid from temp; 
+ 
+  update ppfa_golden.golden_opts 
+set mass_mail = coalesce(mass_mail,'')||'V'
+from votes_mailable m 
+where ppfa_golden.golden_opts.ppid = m.ppid; 
+ 
  
 --/* 
 update ppfa_golden.golden_opts 
@@ -158,3 +194,65 @@ update ppfa_golden.golden_opts
   from no_mail
   where ppfa_golden.golden_opts.ppid = no_mail.resolved_id;
  --*/
+ 
+ --Mass Email
+ create temporary table opts as 
+ with temp as (
+select cccg.resolved_id as "ppid", ce.email as "Email", 
+Case 
+when s.committeeid = '11607' then '3'
+when s.committeeid = '9816' then '4'
+when s.committeeid = '68255' then 'P'
+when s.committeeid = '74821' then 'V' end as entity,
+Case when es.emailsubscriptionstatusname = 'Subscribed' then 'In' else 'Out' end as opt,
+ s.datemodified as date
+from idres_analytics.current_customer_graph cccg 
+join vansync.ppfa_contactsemails_mym ce on cccg.source_primary_key = ce.vanid and cccg.source ilike '%van%'  --Contacts Emails table
+join vansync.ppfa_emailsubscriptions_mym s on ce.email = s.email
+join vansync.ppfa_emailsubscriptionstatuses es on s.emailsubscriptionstatusid = es.emailsubscriptionstatusid
+join ppfa_golden.committeeid_translation com on s.committeeid = com.committeeid
+where s.committeeid in ('9816','11607','68255','74821')
+UNION
+select 
+ccg.resolved_id as "ppid", aci.valuex as "email", '3' as entity, 'Out' as opt, p.lastmodifieddate as date
+from idres_analytics.current_customer_graph ccg
+join rounddata.contact c on ccg.source_primary_key = c.id
+join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
+join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
+UNION
+select 
+ccg.resolved_id as "ppid", aci.valuex as "email", '4' as entity, 'Out' as opt, p.lastmodifieddate as date
+from idres_analytics.current_customer_graph ccg
+join rounddata.contact c on ccg.source_primary_key = c.id
+join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
+join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
+UNION
+select 
+ccg.resolved_id as "ppid", aci.valuex as "email", 'P' as entity, 'Out' as opt, p.lastmodifieddate as date
+from idres_analytics.current_customer_graph ccg
+join rounddata.contact c on ccg.source_primary_key = c.id
+join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
+join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
+UNION
+select 
+ccg.resolved_id as "ppid", aci.valuex as "email", 'V' as entity, 'Out' as opt, p.lastmodifieddate as date
+from idres_analytics.current_customer_graph ccg
+join rounddata.contact c on ccg.source_primary_key = c.id
+join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
+join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
+),
+temptwo as (
+ select *,
+ row_number() over(partition by ppid, email, entity order by date desc) as recency_rank 
+  from temp
+  order by ppid, email, entity asc, row_number() over(partition by ppid, email, entity order by date desc) asc
+ ),
+ tempthree as (
+   select ppid, email, listagg(entity) within group (order by entity asc) as opts from temptwo
+   where opt = 'In' and recency_rank = '1'
+   group by ppid, email)
+ select * from tempthree;
+ 
+ update ppfa_golden.golden_opts set mass_email = opts.opts
+ from opts
+ where opts.ppid = golden_opts.ppid and opts.email = golden_opts.contact_method;
