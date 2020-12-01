@@ -3,6 +3,6 @@ create table rounddata_dev.ak_47968_action_view as (
 select distinct c.id as ID, trunc(action_date) as action_date, action_type, action_org, codename as form_name
 from rounddata.contact c 
 join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
-join arhodes.allactions aa on idr.resolved_id = aa.ppid);
+join ppfa_golden.allactions aa on idr.resolved_id = aa.ppid);
 
 ALTER TABLE rounddata_dev.ak_47968_action_view ALTER DISTKEY ID, ALTER SORTKEY (action_date ) ;
