@@ -44,10 +44,12 @@ select distinct
 from vansync.ppfa_contactsrecurringcontributions_mym as a
 join vansync.ppfa_financialprograms fp on a.financialprogramid = fp.financialprogramid
 join vansync.ppfa_committees c on a.committeeid = c.committeeid
-  join rounddata.alternate_id ai on vanid = ai.valuex
-  join rounddata.accountx x on ai.accountx = x.id
+join idres_analytics.current_customer_graph ccg on vanid = ccg.source_primary_key and ccg.source = 'van'
+join idres_analytics.current_customer_graph cccg on ccg.resolved_id = cccg.resolved_id
+join rounddata.contact contact on cccg.source_primary_key = contact.id
+join rounddata.accountx x on contact.accountid = x.id
 where a.recurringcontributionstatusid in (1,3,5) ----Active 
-  and a.committeeid in (9816, 11607,68255,74821,72220,65401,72219) ---national committee 
+  and a.committeeid in (9816, 11607,68255,74821,72220,65401,72219) ---national committeeid_translation
   );
   
 -- Cross check by email address 
