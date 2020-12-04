@@ -4,7 +4,7 @@ LANGUAGE plpgsql
 
 as $$
 
-declare loop_count integer := 1;
+declare col_count integer ;
 
 declare old varchar ;
 declare new varchar ;
@@ -16,18 +16,20 @@ begin
 
 LOOP
 
-old = (select column_name from information_schema.columns where table_schema = 'tealium_staging' and table_name = quote_ident(tbl) 
-       and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) limit 1);
+old = quote_ident( (select column_name from information_schema.columns where table_schema = 'tealium_staging' and table_name = quote_ident(tbl) 
+       and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) limit 1) );
 
-new = replace(replace(replace(replace(quote_ident(old),' - ', '_'),' ','_'),')',''),'(','') ;
+new = replace(replace(replace(replace(old,' - ', '_'),' ','_'),')',''),'(','') ;
 
-Execute 'Alter table tealium_staging."'||quote_ident(tbl)||'" rename column '||quote_ident(old)||' to '||quote_ident(new) ;
+Execute 'Alter table tealium_staging."'||quote_ident(tbl)||'" rename column '||old||' to '||new ;
 
 
-loop_count:= loop_count + 1;
 
-EXIT tealium_rename WHEN (loop_count > 5);
+col_count:= (select count(*):: int from information_schema.columns where table_schema = 'tealium_staging' and table_name = tablename 
+                               and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) );
 
+--EXIT tealium_rename WHEN (loop_count > 5);
+EXIT tealium_rename WHEN (col_count  =  0);
 
 
 END LOOP;
