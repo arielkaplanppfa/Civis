@@ -19,16 +19,16 @@ LOOP
 old = quote_ident( (select column_name from information_schema.columns where table_schema = 'tealium_staging' and table_name = quote_ident(tbl) 
        and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) limit 1) );
 
-new = replace(replace(replace(replace(old,' - ', '_'),' ','_'),')',''),'(','') ;
+new = replace(replace(replace(replace(replace(replace(old,'-','_'),' - ', '_'),' ','_'),')',''),'(',''),'.','_') ;
 
 Execute 'Alter table tealium_staging."'||quote_ident(tbl)||'" rename column '||old||' to '||new ;
 
 
 
 col_count:= (select count(*):: int from information_schema.columns where table_schema = 'tealium_staging' and table_name = tablename 
-                               and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) );
+                               and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' or column_name like '%.%' or column_name like '% %') );
 
---EXIT tealium_rename WHEN (loop_count > 5);
+
 EXIT tealium_rename WHEN (col_count  =  0);
 
 
