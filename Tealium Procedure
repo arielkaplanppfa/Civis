@@ -1,0 +1,78 @@
+create or replace procedure akaplan.tealium_rename(tablename varchar) 
+
+LANGUAGE plpgsql
+
+as $$
+
+--declare update_cols integer := ( select count(*):: int from information_schema.columns where table_schema = 'tealium_staging' and table_name = tablename 
+ --                               and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) ) ;
+declare loop_count integer := 1;
+
+declare old varchar ;
+declare new varchar ;
+declare tbl varchar := tablename;
+--declare sql text;
+
+begin
+/*
+create temporary table column_names as 
+(
+select column_name, replace(replace(replace(replace(column_name,' - ', '_'),' ','_'),')',''),'(','') as new_column_name 
+from information_schema.columns
+where table_schema = 'tealium_staging' and table_name = tablename
+);
+*/
+drop table if exists akaplan.rename;
+create table akaplan.rename(prv varchar(500), post varchar(500) );
+
+ <<tealium_rename>>
+
+LOOP
+
+old = (select column_name from information_schema.columns where table_schema = 'tealium_staging' and table_name = quote_ident(tbl) 
+       and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) limit 1);
+
+new = replace(replace(replace(replace(quote_ident(old),' - ', '_'),' ','_'),')',''),'(','') ;
+
+insert into akaplan.rename(prv, post) values(old, new)  ;
+
+--Execute 'Alter table tealium_staging.'||tbl||' rename column '||quote_ident(old)||' to '||quote_ident(new)  ;
+
+--sql := null;
+
+--sql := 'Alter table tealium_staging.'||tablename||' rename column "'||old||'" to '||new' ;';
+
+
+
+
+/*
+update akaplan.mc_all_texts
+set broadcast_id = 
+(   
+select o.broadcast_id
+from akaplan.mc_all_texts o
+where mc_all_texts.prev_message_id = o.message_id
+and o.broadcast_id is not null)
+where mc_all_texts.broadcast_id is null;
+
+*/
+
+
+
+loop_count:= loop_count + 1;
+
+
+
+
+
+EXIT tealium_rename WHEN (loop_count > 5);
+
+
+
+END LOOP;
+
+
+
+END;
+
+$$;
