@@ -16,6 +16,8 @@ begin
 
 LOOP
 
+-- FIugre out how to check for 0 columns
+
 old = quote_ident( (select column_name from information_schema.columns where table_schema = 'tealium_staging' and table_name = quote_ident(tbl) 
        and ( column_name like '% %' or column_name like '%-%' or column_name like '%)%' or column_name like '%(%' ) limit 1) );
 
