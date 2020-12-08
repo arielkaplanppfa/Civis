@@ -1,3 +1,7 @@
+-- Policy Doc https://docs.google.com/document/d/1L-_3T8CkWf97ktHPx6g04K23CP7VFXA97z0dNYlWrBc/edit?usp=sharing
+-- Template Doc https://docs.google.com/document/d/1ymR07fgoDGul5c2wnsAhTcfiUzE4X11ZNdXaiCEAgNI/edit?usp=sharing
+
+
 ---/*
 drop table if exists ppfa_golden.golden_opts;
 create table ppfa_golden.golden_opts as (select current_date as temp);
@@ -198,7 +202,7 @@ update ppfa_golden.golden_opts
  --Mass Email
  create temporary table opts as 
  with temp as (
-select cccg.resolved_id as "ppid", ce.email as "Email", 
+select distinct cccg.resolved_id as "ppid", ce.email as "Email", 
 Case 
 when s.committeeid = '11607' then '3'
 when s.committeeid = '9816' then '4'
@@ -212,34 +216,25 @@ join vansync.ppfa_emailsubscriptions_mym s on ce.email = s.email
 join vansync.ppfa_emailsubscriptionstatuses es on s.emailsubscriptionstatusid = es.emailsubscriptionstatusid
 join ppfa_golden.committeeid_translation com on s.committeeid = com.committeeid
 where s.committeeid in ('9816','11607','68255','74821')
-UNION
+/* -- Removed preference considerations as per policy Doc
+   UNION
 select 
-ccg.resolved_id as "ppid", aci.valuex as "email", '3' as entity, 'Out' as opt, p.lastmodifieddate as date
+distinct ccg.resolved_id as "ppid", aci.valuex as "email",ent.entity, 'Out' as opt, p.createddate as date
 from idres_analytics.current_customer_graph ccg
 join rounddata.contact c on ccg.source_primary_key = c.id
 join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
-join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
-UNION
-select 
-ccg.resolved_id as "ppid", aci.valuex as "email", '4' as entity, 'Out' as opt, p.lastmodifieddate as date
-from idres_analytics.current_customer_graph ccg
-join rounddata.contact c on ccg.source_primary_key = c.id
-join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
-join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
-UNION
-select 
-ccg.resolved_id as "ppid", aci.valuex as "email", 'P' as entity, 'Out' as opt, p.lastmodifieddate as date
-from idres_analytics.current_customer_graph ccg
-join rounddata.contact c on ccg.source_primary_key = c.id
-join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
-join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
-UNION
-select 
-ccg.resolved_id as "ppid", aci.valuex as "email", 'V' as entity, 'Out' as opt, p.lastmodifieddate as date
-from idres_analytics.current_customer_graph ccg
-join rounddata.contact c on ccg.source_primary_key = c.id
-join rounddata.additional_contact_info aci on c.id = aci.contact and aci.typex = 'Email'
-join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Email - National','Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
+join rounddata.rc_bios__preference p on c.accountid = p.rc_bios__account and p.rc_bios__subcategory in ('Do Not Contact') and p.delete_flag <> 'Y' and p.rc_bios__active ilike 'true'
+join 
+( Select '3' as entity UNION select '4' UNION select 'P' UNION select 'V') ent  on 1=1 -- To generate a row for every entity, it dupes the row with 3 then 4 etc..
+   */
+UNION -- New code for SF email level opt outs
+select distinct
+ graphe.resolved_id as "ppid", aci.valuex as email, ent.entity, 'Out' as opt, aci.lastmodifieddate as date
+  FROM rounddata.additional_contact_info aci
+ join idres_analytics.current_customer_graph graphe on aci.contact = graphe.source_primary_key
+   join 
+( Select '3' as entity UNION select '4' UNION select 'P' UNION select 'V') ent  on 1=1 -- To generate a row for every entity, it dupes the row with 3 then 4 etc.. 
+ where aci.typex = 'Email' and delete_flag <> 'Y' and opt_out = 'true'   
 ),
 temptwo as (
  select *,
@@ -256,3 +251,39 @@ temptwo as (
  update ppfa_golden.golden_opts set mass_email = opts.opts
  from opts
  where opts.ppid = golden_opts.ppid and opts.email = golden_opts.contact_method;
+ 
+ --Opt out Suppressions
+ 
+ --EA Activist Codes
+ update ppfa_golden.golden_opts set mass_email = null
+ from (
+   select distinct
+ graphe.resolved_id::varchar(100) as resolved_id
+  FROM vansync.ppfa_activistcodes as aaa
+inner join vansync.ppfa_contactsactivistcodes_mym as bbb
+on aaa.activistcodeid = bbb.activistcodeid
+inner join ppfa_golden.current_customer_graph as graphe
+on bbb.vanid = graphe.source_primary_key
+  where aaa.activistcodename in ('wj_lead','Inactive','PPOL: No Comm') ) as optout
+  where optout.resolved_id = golden_opts.ppid;
+ 
+ 
+ 
+ 
+ 
+ --Mass text
+ /*'PPOL: No Comm' needs to be suppressed from mass text*/
+ 
+ 
+ --Anti's Suppression
+ update ppfa_golden.golden_opts set mass_mail = null, mass_email = null, mass_call = null, mass_text = null, ind_text = null
+ from (
+   select distinct
+ graphe.resolved_id::varchar(100) as resolved_id
+  FROM vansync.ppfa_activistcodes as aaa
+inner join vansync.ppfa_contactsactivistcodes_mym as bbb
+on aaa.activistcodeid = bbb.activistcodeid
+inner join ppfa_golden.current_customer_graph as graphe
+on bbb.vanid = graphe.source_primary_key
+  where aaa.activistcodename in ('Anti-Choice','Anti-PP') ) as anti
+  where anti.resolved_id = golden_opts.ppid;
