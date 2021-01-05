@@ -121,6 +121,41 @@ when c.recurringcontributionstatusname ilike '%cancel%' then 'Preference closed 
 else 'Preference Closed for unknown reason' end
 from (select * from comments ) c where c.id = rounddata.online_sustainer_closeouts.id ;  
  
+ 
+  -- Cross check by email address 
+
+create temporary table email_check  as 
+with temp as(
+select aos.id, aos.pop, 
+Case 
+  when crc.committeeid = '72220' and crc.financialprogramid = '146' then 'PPFA Direct Mail C4'
+  when crc.committeeid = '72220' and crc.financialprogramid = '145' then 'PPFA Direct Mail C3'
+  when crc.committeeid = '9816'  then 'PPAF C4'
+  when crc.committeeid = '72219' and crc.financialprogramid = '147' then 'High Touch Votes'
+  when crc.committeeid = '72219' and crc.financialprogramid = '148' then 'High Touch PAC'
+  when crc.committeeid = '72219' and crc.financialprogramid = '143' then 'High Touch C3'
+  when crc.committeeid = '11607' then 'PPFA C3'
+  when crc.committeeid = '74821' and crc.financialprogramid = '150' then 'PP Votes'
+  else null end as entity, crc.email, t.id as contact_id, t.namex
+from rounddata.online_sustainer_closeouts aos 
+join rounddata.rc_bios__preference p on aos.id = p.id
+join rounddata.contact t on p.rc_bios__account = t.accountid
+join rounddata.additional_contact_info aci on aci.contact = t.id
+join 
+(select c.email, cc.* from vansync.ppfa_contacts_mym c join vansync.ppfa_contactsrecurringcontributions_mym cc on c.vanid = cc.vanid 
+where  recurringcontributionstatusid in (1,3,5) and cc.committeeid in (9816, 11607,68255,74821,72220,65401,72219)  )  crc on aci.valuex = crc.email )
+select * from temp --where POSITION(pop IN entity ) = 0 
+; -- Position finds records in the same entity 
+ 
+ delete from rounddata.online_sustainer_closeouts 
+ where online_sustainer_closeouts.id in ( select id from email_check );
+ 
+ delete from rounddata.online_sustainer_closeouts 
+ where rc_bios__comments__c in ('Preference Closed for unknown reason','C3 Online Preference Closed out','C4 Online Preference Closed out');
+  
+  Select * from rounddata.online_sustainer_closeouts;
+  
+  
  /* 
   Create temporary table comments as 
   With temp as (
@@ -244,5 +279,3 @@ from temptwo tt join temp t on tt.valuex = t.vanid;
 update rounddata.online_sustainer_closeouts set rc_bios__comments__c = rc_bios__comments
 from comments c where c.id = rounddata.online_sustainer_closeouts.id;
   */
-  
-  Select * from rounddata.online_sustainer_closeouts;
