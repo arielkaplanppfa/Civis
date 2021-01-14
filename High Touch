@@ -1,11 +1,23 @@
 Drop table if exists ppfa_golden.high_touch; 
 create table ppfa_golden.high_touch as 
-with temp as ( /*might want to break giving levels out into its own temp table and choose the highest and then union back to the rest*/
- select distinct i.resolved_id as "ppid",'Giving Level' as "Category", a.current_giving_level as "High_Touch" 
+ with all_gl as (
+ select distinct i.resolved_id as "ppid",'Giving Level' as "Category", a.current_giving_level as "High_Touch",
+ row_number() over(partition by ppid order by 
+ Case 
+ when current_giving_level = 'Major Donor' Then 1
+ when current_giving_level = 'Mid-Level VIP' Then 2
+ when current_giving_level = 'Mid-Level High' Then 3
+ when current_giving_level = 'Mid-Level Low' Then 4 else 5 end asc ) as row_num
  from ppfa_golden.current_customer_graph i 
  join rounddata.contact c on i.source_primary_key = c.id 
  join rounddata.accountx a on c.accountid = a.id
- where a.current_giving_level in ('Major Donor', 'Mid-Level VIP', 'Mid-Level High')
+ where a.current_giving_level in ('Major Donor', 'Mid-Level VIP', 'Mid-Level High','Mid-Level Low') order by 1 ,4 asc ),
+ gl_final as (
+ select ppid, Category, High_touch 
+ from all_gl
+ where row_num = 1),
+ temp as (
+ select * from gl_final
  UNION -- Managed Acccounts
  select distinct i.resolved_id as "ppid", p.rc_bios__subcategory as "Category", p.rc_bios__type as "High_Touch"
  from ppfa_golden.current_customer_graph i 
@@ -58,5 +70,9 @@ with temp as ( /*might want to break giving levels out into its own temp table a
  left join ( select b.ppid, high_touch from temp b where high_touch = 'Celebrity' ) b on w.ppid = b.ppid /*Celebrity*/
  left join ( select bm.ppid, high_touch from temp bm where category = 'Board Member' ) bm on w.ppid = bm.ppid /*Board Member*/
  left join ( select pm.ppid, high_touch from temp pm where category = 'Prospect Manager' ) pm on w.ppid = pm.ppid /*prospect Managers*/
- group by  w.ppid, c.high_touch,  f.high_touch, l.high_touch, b.high_touch
+ group by  w.ppid, c.high_touch,  f.high_touch, l.high_touch, b.high_touch;
  
+ /* -- Temporarily added when we thought we needed to supplement with VanIDs-- not needed anymore
+alter table ppfa_golden.high_touch add column source varchar(30);
+update ppfa_golden.high_touch set source = 'Salesforce';
+*/
