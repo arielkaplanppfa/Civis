@@ -107,7 +107,8 @@ INSERT INTO rounddata.supreme_reporting_table (
                THEN 1
                ELSE 0
           END   is_pass_through
-        ,CASE WHEN opportunity.closedate >= '2011-07-01'   --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
+        ,CASE when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+            WHEN opportunity.closedate >= '2011-07-01'   --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
               AND (
                     (
                        campaign.sourcecode_office_code = 'N'
@@ -145,7 +146,7 @@ INSERT INTO rounddata.supreme_reporting_table (
                          OR opportunity.gau_credit_code like '_9004%'
                          OR opportunity.gau_credit_code like '_9005%')
                         )
-                  OR (campaign.sourcecode_office_code in ('N','C')
+             OR (campaign.sourcecode_office_code in ('N','C')
                       and substring(opportunity.gau_credit_code,1,3) = 'C34'
                       and substring(opportunity.gau_credit_code,8,2) = 'UR'
                       and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
@@ -153,7 +154,7 @@ INSERT INTO rounddata.supreme_reporting_table (
                  )
               THEN 'Y'
               -- PP Keystone added 2019-07-23 cdelja per ariel
-              WHEN opportunity.closedate >= '2019-07-01'
+              WHEN opportunity.closedate >= '2019-07-01'  --Section Tweaked per case 82305
               AND (
                      (     campaign.sourcecode_office_code = 'N'
                        AND opportunity.affiliate_number = '091410'
@@ -165,17 +166,17 @@ INSERT INTO rounddata.supreme_reporting_table (
                    OR (     campaign.sourcecode_office_code = 'K'
                         AND opportunity.gau_credit_code like '%CFP'
                       )
-                  )
-              THEN 'Y'
-              WHEN (substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
-                    and
-                    opportunity.affiliate_number in ('090030','090330','090430','091460','091410')
-                   )
-              OR (campaign.SourceCode_Activity_Type_Code = '3NP'
-                  and
-                  substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
-                 )
-              THEN 'Y'
+                   OR (
+				       substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+                       and
+                       opportunity.affiliate_number in ('090030','090330','090430','091460','091410')
+                      )
+                   OR (
+				       campaign.SourceCode_Activity_Type_Code = '3NP'
+                       and
+                       substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+                      ) 
+				  )  THEN 'Y'
               /* SENFL Case 56005 */
               WHEN opportunity.closedate >= '2020-07-01'
               AND (
@@ -348,7 +349,8 @@ SELECT opportunity.closedate                                                    
                THEN 1
                ELSE 0
           END   is_pass_through
-         ,CASE WHEN opportunity.closedate >= '2011-07-01'  --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
+         ,CASE when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+           WHEN opportunity.closedate >= '2011-07-01'  --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
               AND (
                     (
                        campaign.sourcecode_office_code = 'N'
@@ -384,7 +386,7 @@ SELECT opportunity.closedate                                                    
                  )
               THEN 'Y'
               -- PP Keystone added 2019-07-23 cdelja per ariel
-              WHEN opportunity.closedate >= '2019-07-01'
+           WHEN opportunity.closedate >= '2019-07-01'  --Section Tweaked per case 82305
               AND (
                      (     campaign.sourcecode_office_code = 'N'
                        AND opportunity.affiliate_number = '091410'
@@ -396,17 +398,17 @@ SELECT opportunity.closedate                                                    
                    OR (     campaign.sourcecode_office_code = 'K'
                         AND opportunity.gau_credit_code like '%CFP'
                       )
-                  )
-              THEN 'Y'
-     WHEN (substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
-           and
-           opportunity.affiliate_number in ('090030','090330','090430','091460','091410')
-          )
-     OR (campaign.SourceCode_Activity_Type_Code = '3NP'
-         and
-         substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
-        )
-              THEN 'Y'
+                   OR (
+				       substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+                       and
+                       opportunity.affiliate_number in ('090030','090330','090430','091460','091410')
+                      )
+                   OR (
+				       campaign.SourceCode_Activity_Type_Code = '3NP'
+                       and
+                       substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+                      ) 
+				  )  THEN 'Y'
            /* SENFL Case 56005               */
               WHEN opportunity.closedate >= '2020-07-01'
               AND (
@@ -581,8 +583,7 @@ SELECT opportunity.closedate                                                    
                 THEN 1
                 ELSE 0
            END                                                                                                         is_pass_through
-          ,CASE 
-             WHEN rc_Giving__opportunity_credit.nps_exclude ilike 'True'   then 'N'      
+          ,CASE WHEN rc_Giving__opportunity_credit.nps_exclude ilike 'True'   then 'N'      
              WHEN rc_Giving__opportunity_credit.credit_close_date >= '2011-07-01' --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
               AND (
                     (
@@ -619,7 +620,7 @@ SELECT opportunity.closedate                                                    
                  )
               THEN 'Y'
               -- PP Keystone added 2019-07-23 cdelja per ariel
-              WHEN rc_Giving__opportunity_credit.credit_close_date  >= '2019-07-01'
+              WHEN rc_Giving__opportunity_credit.credit_close_date  >= '2019-07-01'  --Section Tweaked per case 82305
               AND (
                      (     campaign.sourcecode_office_code = 'N'
                        AND rc_Giving__opportunity_credit.affiliate_number = '091410'
@@ -630,17 +631,17 @@ SELECT opportunity.closedate                                                    
                    OR (     campaign.sourcecode_office_code = 'K'
                         AND rc_Giving__opportunity_credit.gau_code_credit like '%CFP'
                       )
-                  )
-              THEN 'Y'
-              WHEN (substring(rc_Giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
-                    and
-                    rc_Giving__opportunity_credit.affiliate_number in ('090030','090330','090430','091460','091410')
-                   )
-              OR (campaign.SourceCode_Activity_Type_Code = '3NP'
-                  and
-                  substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
-                 )
-              THEN 'Y'
+                   OR (
+				       substring(rc_Giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
+                       and
+                       rc_Giving__opportunity_credit.affiliate_number in ('090030','090330','090430','091460','091410')
+                      )
+                   OR (
+				       campaign.SourceCode_Activity_Type_Code = '3NP'
+                       and
+                       substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+                      ) 
+				  )  THEN 'Y'
           /* SENFL Case 56005 */   
               WHEN rc_Giving__opportunity_credit.credit_close_date >= '2020-07-01'
               AND (
