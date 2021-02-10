@@ -541,7 +541,7 @@ SELECT opportunity.closedate                                                    
     -- Credits
     --
     -- --------------------------------------------
-    SELECT rc_giving__opportunity_credit.rc_giving__opportunity_close_d
+    SELECT  rc_giving__opportunity_credit.credit_close_date   -----Case 95929 -- Changed to credit close date from opp close date
           ,CASE WHEN opportunity.Adjusted ilike'true'
                 THEN opportunity.Adjusted_Deposit_Date
                 WHEN opportunity.Adjusted ilike 'false'
