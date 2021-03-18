@@ -107,108 +107,95 @@ INSERT INTO rounddata.supreme_reporting_table (
                THEN 1
                ELSE 0
           END   is_pass_through
-        ,CASE when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
-            WHEN opportunity.closedate >= '2011-07-01'   --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
-              AND (
-                    (
-                       campaign.sourcecode_office_code = 'N'
-                       AND 
+        ,CASE
+when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN opportunity.closedate >= '2011-07-01' and (
+opportunity.gau_credit_code like '_9001%' --Blanket to catch old GAU's   --- This is catching Gifts before the jouin dates202020
+  OR opportunity.gau_credit_code like '_9002%' 
+  OR opportunity.gau_credit_code like '_9003%' 
+  OR opportunity.gau_credit_code like '_9004%'
+  OR opportunity.gau_credit_code like '_9005%')
+THEN 'Y'
+/*
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date)
+     and  
+     ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) ) */
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date or (campaign.sourcecode_office_code in ('N','C') and cfp.join_date is not null and opportunity.closedate <= cfp.end_date) )
+ AND (
+        --campaign.sourcecode_office_code in ('N','C') 
+        --  AND 
                        (
-                        opportunity.affiliate_number in ('090030','090330','090430','091460')
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
+                           substring(opportunity.gau_credit_code,1,3) = 'C34'
                        AND substring(opportunity.gau_credit_code,8,2) = 'UR'
                        AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' 
+                       AND cfp.affiliate_number is not null and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) -- Active period of Affiliate
                        ) 
                        OR
                        ( 
-                         opportunity.gau_credit_code like 'C340210%' 
+                            opportunity.gau_credit_code = 'C340210UR480PMG' 
                        )
-                    )
-              OR ( campaign.sourcecode_office_code = 'C'      --Added this OR per case 52909 (Legacy Web sustainers with C Source)
-                  AND 
-                       (
-                        opportunity.affiliate_number in ('090030','090330','090430','091460')
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
-                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
-                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' 
-                       ) 
-                 ) 
-              OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
-                   AND
-                   opportunity.gau_credit_code like '%CFP'
-                 )
-              OR ( campaign.sourcecode_office_code in ('N','C')
-                   AND ( opportunity.gau_credit_code like '_9001%'
+					            OR
+					             ( 
+					                  substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                       )
+                      OR 
+					             (  
+					              opportunity.gau_credit_code like '%CFP'
+                        )
+				              OR --Non Affiliate Specific Old GAU
+				              (
+				                    opportunity.gau_credit_code like '_9001%'
                          OR opportunity.gau_credit_code like '_9002%'
                          OR opportunity.gau_credit_code like '_9003%'
                          OR opportunity.gau_credit_code like '_9004%'
-                         OR opportunity.gau_credit_code like '_9005%')
-                        )
-             OR (campaign.sourcecode_office_code in ('N','C')
-                      and substring(opportunity.gau_credit_code,1,3) = 'C34'
-                      and substring(opportunity.gau_credit_code,8,2) = 'UR'
-                      and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                         OR opportunity.gau_credit_code like '_9005%'
+				              )
+	  )
+THEN 'Y'
+WHEN  ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date) and opportunity.gau_credit_code like '%CFP' THEN 'Y' -- this should catch online gifts 
+WHEN  opportunity.closedate >= '2019-07-01'
+      and  opportunity.closedate >= cfp.join_date --Planned Giving
+      and cfp.affiliate_number is not null 
+	    and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) 
+      and (
+	         ( campaign.SourceCode_Activity_Type_Code = '3NP'
+              and 
+			        substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+		      	)
+			      OR 
+		      	( 
+			        substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+			      )
+		      )    
+THEN 'Y'  
+/*
+EN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) )
+      AND 
+                (
+                     (
+				                    opportunity.gau_credit_code like '_9001%'
+                         OR opportunity.gau_credit_code like '_9002%'
+                         OR opportunity.gau_credit_code like '_9003%'
+                         OR opportunity.gau_credit_code like '_9004%'
+                         OR opportunity.gau_credit_code like '_9005%'
+				              ) 
+				              OR
+                    (
+                            substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
                      )
-                 )
-              THEN 'Y'
-              -- PP Keystone added 2019-07-23 cdelja per ariel
-              WHEN opportunity.closedate >= '2019-07-01'  --Section Tweaked per case 82305
-              AND (
-                     (     campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number = '091410'
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
-                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
-                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' -- added NOT per case 52909
-                      )
-                   OR (     campaign.sourcecode_office_code = 'K'
-                        AND opportunity.gau_credit_code like '%CFP'
-                      )
-                   OR (
-				       substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
-                       and
-                       opportunity.affiliate_number in ('090030','090330','090430','091460','091410')
-                      )
-                   OR (
-				       campaign.SourceCode_Activity_Type_Code = '3NP'
-                       and
-                       substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
-                      ) 
-				  )  THEN 'Y'
-              /* SENFL Case 56005 */
-              WHEN opportunity.closedate >= '2020-07-01'
-              AND (
-                     (     campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number = '090320'
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
-                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
-                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' -- added NOT per case 52909
-                      )
-                   OR (     campaign.sourcecode_office_code = 'F'
-                        AND opportunity.gau_credit_code like '%CFP'
-                      )
-                   OR (
-                            substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
-                        and opportunity.affiliate_number = '090320'
-                      )
-                   OR (
-                            campaign.SourceCode_Activity_Type_Code = '3NP'
-                        and substring(Campaign.SourceCode_Segment_Code,1,1) = 'C'
-                        and opportunity.affiliate_number = '090320')
-                  )
-              THEN 'Y'
-              ELSE 'N'
-          END  AS cfp_shareable
+                )
+THEN 'Y' else 'N' */
+end as cfp_shareable
          ,CASE 
-               -- WHEN SUBSTR(opportunity.rc_giving__source_code, 2,1) IN ('L','P','E','A','W')
-               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
-                    AND  opportunity.gau_credit_code NOT LIKE '%CFP'
-               THEN 'Y'
-               ELSE 'N'
-          END   AS is_local
+  WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+      AND  opportunity.gau_credit_code NOT LIKE '%CFP'
+  THEN 'Y'
+  ELSE 'N'
+  END   AS is_local
          -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '3'
          --      THEN 'C3'
          --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '4'
@@ -300,6 +287,8 @@ JOIN rounddata.recordtype recordtype  ON opportunity.recordtypeid = recordtype.i
 JOIN rounddata.accountx a   ON a.id = opportunity.accountid
 JOIN rounddata.opportunity parent_opportunity ON opportunity.rc_giving__parent = parent_opportunity.id
 LEFT JOIN rounddata.rc_giving__payment_method rc_giving__payment_method  ON opportunity.rc_giving__payment_method_sele = rc_giving__payment_method.id
+LEFT JOIN rounddata.cfp_log cfp on opportunity.affiliate_number = cfp.affiliate_number
+Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
 LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle ON opportunity.accountid = vehicle.rc_bios__account
 -- 
 LEFT JOIN akaplan.mv_soft_credit_opportunities   soft_credit  ON soft_credit.rc_giving__opportunity = opportunity.rc_giving__parent
@@ -349,104 +338,93 @@ SELECT opportunity.closedate                                                    
                THEN 1
                ELSE 0
           END   is_pass_through
-         ,CASE when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
-           WHEN opportunity.closedate >= '2011-07-01'  --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
-              AND (
-                    (
-                       campaign.sourcecode_office_code = 'N'
-                       AND 
+         ,CASE
+when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN opportunity.closedate >= '2011-07-01' and (
+opportunity.gau_credit_code like '_9001%' --Blanket to catch old GAU's   --- This is catching Gifts before the jouin dates202020
+  OR opportunity.gau_credit_code like '_9002%' 
+  OR opportunity.gau_credit_code like '_9003%' 
+  OR opportunity.gau_credit_code like '_9004%'
+  OR opportunity.gau_credit_code like '_9005%') THEN 'Y'
+/*
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date)
+     and  
+     ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) ) */
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date or (campaign.sourcecode_office_code in ('N','C') and cfp.join_date is not null and opportunity.closedate <= cfp.end_date) )
+ AND (
+        --campaign.sourcecode_office_code in ('N','C') 
+        --  AND 
                        (
-                           opportunity.affiliate_number in ('090030','090330','090430','091460')
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
+                           substring(opportunity.gau_credit_code,1,3) = 'C34'
                        AND substring(opportunity.gau_credit_code,8,2) = 'UR'
                        AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' 
+                       AND cfp.affiliate_number is not null and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) -- Active period of Affiliate
                        ) 
                        OR
                        ( 
-                         opportunity.gau_credit_code like 'C340210%' 
+                          opportunity.gau_credit_code = 'C340210UR480PMG' 
                        )
-                    )
-              OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
-                   AND
-                   opportunity.gau_credit_code like '%CFP'
-                 )
-              OR ( campaign.sourcecode_office_code in ('N','C')
-                   AND ( opportunity.gau_credit_code like '_9001%'
+					            OR
+					             ( 
+					                  substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                       )
+                      OR 
+					             (  
+					              opportunity.gau_credit_code like '%CFP'
+                        )
+				              OR --Non Affiliate Specific Old GAU
+				              (
+				                    opportunity.gau_credit_code like '_9001%'
                          OR opportunity.gau_credit_code like '_9002%'
                          OR opportunity.gau_credit_code like '_9003%'
                          OR opportunity.gau_credit_code like '_9004%'
-                         OR opportunity.gau_credit_code like '_9005%')
-                        )
-                  OR (campaign.sourcecode_office_code in ('N','C')
-                      and substring(opportunity.gau_credit_code,1,3) = 'C34'
-                      and substring(opportunity.gau_credit_code,8,2) = 'UR'
-                      and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                         OR opportunity.gau_credit_code like '_9005%'
+				              )
+	  )
+THEN 'Y'
+WHEN  ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date) and opportunity.gau_credit_code like '%CFP' THEN 'Y' -- this should catch online gifts 
+WHEN  opportunity.closedate >= '2019-07-01'   --Planned Giving
+      and  opportunity.closedate >= cfp.join_date 
+      and cfp.affiliate_number is not null 
+	    and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) 
+      and (
+	         ( campaign.SourceCode_Activity_Type_Code = '3NP'
+              and 
+			        substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+		      	)
+			      OR 
+		      	( 
+			        substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+			      )
+		      )    
+THEN 'Y'  /*
+WHEN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) )
+      AND 
+                (
+                     (
+				                    opportunity.gau_credit_code like '_9001%'
+                         OR opportunity.gau_credit_code like '_9002%'
+                         OR opportunity.gau_credit_code like '_9003%'
+                         OR opportunity.gau_credit_code like '_9004%'
+                         OR opportunity.gau_credit_code like '_9005%'
+				              ) 
+				              OR
+                    (
+                            substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
                      )
-                 )
-              THEN 'Y'
-              -- PP Keystone added 2019-07-23 cdelja per ariel
-           WHEN opportunity.closedate >= '2019-07-01'  --Section Tweaked per case 82305
-              AND (
-                     (     campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number = '091410'
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
-                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
-                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' -- added NOT per case 52909
-                      )
-                   OR (     campaign.sourcecode_office_code = 'K'
-                        AND opportunity.gau_credit_code like '%CFP'
-                      )
-                   OR (
-				       substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
-                       and
-                       opportunity.affiliate_number in ('090030','090330','090430','091460','091410')
-                      )
-                   OR (
-				       campaign.SourceCode_Activity_Type_Code = '3NP'
-                       and
-                       substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
-                      ) 
-				  )  THEN 'Y'
-           /* SENFL Case 56005               */
-              WHEN opportunity.closedate >= '2020-07-01'
-              AND (
-                     (     campaign.sourcecode_office_code = 'N'
-                       AND opportunity.affiliate_number = '090320'
-                       AND substring(opportunity.gau_credit_code,1,3) = 'C34'
-                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
-                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND opportunity.nps_exclude not ilike 'True' -- added NOT per case 52909
-                      )
-                   OR (     campaign.sourcecode_office_code = 'F'
-                        AND opportunity.gau_credit_code like '%CFP'
-                      )
-                   OR (
-                            substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
-                        and opportunity.affiliate_number = '090320'
-                      )
-                   OR (
-                            campaign.SourceCode_Activity_Type_Code = '3NP'
-                        and substring(Campaign.SourceCode_Segment_Code,1,1) = 'C'
-                        and opportunity.affiliate_number = '090320')
-                  )
-              THEN 'Y'
-              ELSE 'N'
-          END  AS cfp_shareable
-         ,CASE -- WHEN SUBSTR(opportunity.rc_giving__source_code, 2,1) IN ('L','P','E','A','W')
-               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
-                    AND  opportunity.gau_credit_code NOT LIKE '%CFP'
-               THEN 'Y'
-               ELSE 'N'
-          END   AS is_local
-         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '3'
-         --      THEN 'C3'
-         --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '4'
-         --      THEN 'C4'
-         --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '5'
-         --      THEN 'PAC'
-         -- END AS entity
+                )
+THEN 'Y' else 'N'*/
+end as cfp_shareable
+,CASE 
+  WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+      AND  opportunity.gau_credit_code NOT LIKE '%CFP'
+  THEN 'Y'
+  ELSE 'N'
+  END   AS is_local
          ,campaign.SourceCode_Tax_Status_Description AS entity
          -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'N'
          --      THEN 'PPFA'
@@ -527,6 +505,8 @@ SELECT opportunity.closedate                                                    
     JOIN rounddata.accountx a                                                  ON a.id = opportunity.accountid
     JOIN rounddata.recordtype recordtype                                       ON opportunity.recordtypeid = recordtype.id
     LEFT JOIN rounddata.rc_giving__payment_method rc_giving__payment_method  ON opportunity.rc_giving__payment_method_sele = rc_giving__payment_method.id
+     LEFT JOIN rounddata.cfp_log cfp on opportunity.affiliate_number = cfp.affiliate_number
+    Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
     LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                    ON opportunity.accountid = vehicle.rc_bios__account
     LEFT JOIN akaplan.mv_soft_credit_opportunities   soft_credit  ON soft_credit.rc_giving__opportunity = opportunity.id
     WHERE recordtype.namex = 'Pledge'
@@ -583,95 +563,102 @@ SELECT opportunity.closedate                                                    
                 THEN 1
                 ELSE 0
            END                                                                                                         is_pass_through
-          ,CASE WHEN rc_Giving__opportunity_credit.nps_exclude ilike 'True'   then 'N'      
-             WHEN rc_Giving__opportunity_credit.credit_close_date >= '2011-07-01' --Add parent logic for NPS exclude (when nps exclude = true then CFP shareable = false)
-              AND (
-                    (
-                      campaign.sourcecode_office_code = 'N'
-                       AND 
+          ,CASE
+WHEN substring(rc_giving__opportunity_credit.soft_credit_type,1,3) not in ('SC ','DA ','TP ') THEN 'N'
+when rc_giving__opportunity_credit.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN rc_giving__opportunity_credit.credit_close_date >= '2011-07-01' AND(
+rc_giving__opportunity_credit.gau_code_credit like '_9001%' --Blanket to catch old GAU's
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9002%' 
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9003%' 
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9004%'
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9005%')
+THEN 'Y'
+/*
+WHEN (rc_giving__opportunity_credit.credit_close_date >= cfp.join_date or rc_giving__opportunity_credit.credit_close_date >= ccode.join_date)
+     and  
+     ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or rc_giving__opportunity_credit.credit_close_date <= ccode.end_date)) ) */
+WHEN (rc_giving__opportunity_credit.credit_close_date >= cfp.join_date or rc_giving__opportunity_credit.credit_close_date >= ccode.join_date or (campaign.sourcecode_office_code in ('N','C') and cfp.join_date is not null and rc_giving__opportunity_credit.credit_close_date<= cfp.end_date) )
+ 
+ AND (
+        --campaign.sourcecode_office_code in ('N','C') 
+        --  AND 
                        (
-                        rc_Giving__opportunity_credit.affiliate_number in ('090030','090330','090430','091460')
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                       AND rc_Giving__opportunity_credit.nps_exclude not ilike 'True' 
+                           substring( rc_giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                       AND substring( rc_giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                       AND substring( rc_giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND cfp.affiliate_number is not null and (cfp.end_date is null or rc_giving__opportunity_credit.credit_close_date <= cfp.end_date) -- Active period of Affiliate
                        ) 
                        OR
                        ( 
-                         rc_Giving__opportunity_credit.gau_code_credit like 'C340210%' 
+                            rc_giving__opportunity_credit.gau_code_credit = 'C340210UR480PMG'
                        )
-                    )
-              OR ( campaign.sourcecode_office_code in ('L','P','E','A','W')
-                   AND
-                   rc_Giving__opportunity_credit.gau_code_credit like '%CFP'
-                 )
-              OR ( campaign.sourcecode_office_code in ('N','C')
-                   AND ( rc_Giving__opportunity_credit.gau_code_credit like '_9001%'
-                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9002%'
-                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9003%'
-                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9004%'
-                         OR rc_Giving__opportunity_credit.gau_code_credit like '_9005%')
+					            OR
+					             ( 
+					                  substring( rc_giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                        and substring( rc_giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                        and substring( rc_giving__opportunity_credit.gau_code_credit,16,4) in ('A152','A113','A118','A126','A155')
+                       )
+                      OR 
+					             (  
+					               rc_giving__opportunity_credit.gau_code_credit like '%CFP'
                         )
-                  OR (campaign.sourcecode_office_code in ('N','C')
-                      and substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
-                      and substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
-                      and substring(rc_Giving__opportunity_credit.gau_code_credit,16,4) in ('A152','A113','A118','A126','A155')
+				              OR --Non Affiliate Specific Old GAU
+				              (
+				                   rc_giving__opportunity_credit.gau_code_credit  like '_9001%' --Blanket to catch old GAU's
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9002%' 
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9003%' 
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9004%'
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9005%'
+				              )
+	  )
+THEN 'Y'
+WHEN  ccode.campaign_code is not null and (ccode.end_date is null or rc_giving__opportunity_credit.credit_close_date <= ccode.end_date) 
+      and rc_giving__opportunity_credit.gau_code_credit like '%CFP' 
+THEN 'Y' -- this should catch online gifts 
+WHEN  rc_giving__opportunity_credit.credit_close_date >= '2019-07-01'   --Planned Giving
+      and  opportunity.closedate >= cfp.join_date 
+      and cfp.affiliate_number is not null 
+	    and (cfp.end_date is null or rc_giving__opportunity_credit.credit_close_date <= cfp.end_date) 
+      and (
+	         ( campaign.SourceCode_Activity_Type_Code = '3NP'
+              and 
+			        substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+		      	)
+			      OR 
+		      	( 
+			        substring(rc_giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
+			      )
+		      )    
+THEN 'Y'  /*
+WHEN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or rc_giving__opportunity_credit.credit_close_date <= ccode.end_date)) )
+      AND 
+                (
+                     (
+				                    rc_giving__opportunity_credit.gau_code_credit like '_9001%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9002%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9003%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9004%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9005%'
+				              ) 
+				              OR
+                    (
+                            substring(rc_giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                        and substring(rc_giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                        and substring(rc_giving__opportunity_credit.gau_code_credit,16,4) in ('A152','A113','A118','A126','A155')
                      )
-                 )
-              THEN 'Y'
-              -- PP Keystone added 2019-07-23 cdelja per ariel
-              WHEN rc_Giving__opportunity_credit.credit_close_date  >= '2019-07-01'  --Section Tweaked per case 82305
-              AND (
-                     (     campaign.sourcecode_office_code = 'N'
-                       AND rc_Giving__opportunity_credit.affiliate_number = '091410'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                      )
-                   OR (     campaign.sourcecode_office_code = 'K'
-                        AND rc_Giving__opportunity_credit.gau_code_credit like '%CFP'
-                      )
-                   OR (
-				       substring(rc_Giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
-                       and
-                       rc_Giving__opportunity_credit.affiliate_number in ('090030','090330','090430','091460','091410')
-                      )
-                   OR (
-				       campaign.SourceCode_Activity_Type_Code = '3NP'
-                       and
-                       substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
-                      ) 
-				  )  THEN 'Y'
-          /* SENFL Case 56005 */   
-              WHEN rc_Giving__opportunity_credit.credit_close_date >= '2020-07-01'
-              AND (
-                     (     campaign.sourcecode_office_code = 'N'
-                       AND rc_Giving__opportunity_credit.affiliate_number = '090320'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
-                       AND substring(rc_Giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
-                      )
-                   OR (     campaign.sourcecode_office_code = 'F'
-                        AND rc_Giving__opportunity_credit.gau_code_credit like '%CFP'
-                      )
-                   OR (
-                            substring(rc_Giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
-                        and rc_Giving__opportunity_credit.affiliate_number = '090320'
-                      )
-                   OR (
-                            campaign.SourceCode_Activity_Type_Code = '3NP'
-                        and substring(Campaign.SourceCode_Segment_Code,1,1) = 'C'
-                        and rc_Giving__opportunity_credit.affiliate_number = '090320')
-                  )
-              THEN 'Y'            
-              ELSE 'N'
-          END  AS cfp_shareable
-         ,CASE -- WHEN SUBSTR(opportunity.rc_giving__source_code, 2,1) IN ('L','P','E','A','W')
-               WHEN campaign.SourceCode_Office_Description IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
-                    AND rc_Giving__opportunity_credit.gau_code_credit NOT LIKE '%CFP'
-               THEN 'Y'
-               ELSE 'N'
-           END   AS is_local
+                      OR 
+					             (  
+					               rc_giving__opportunity_credit.gau_code_credit like '%CFP'
+                        )
+                )
+THEN 'Y' else 'N'*/
+end as cfp_shareable
+,CASE 
+  WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+      AND  rc_giving__opportunity_credit.gau_code_credit NOT LIKE '%CFP'
+  THEN 'Y'
+  ELSE 'N'
+  END   AS is_local
          -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '3'
          --      THEN 'C3'
          --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '4'
@@ -748,6 +735,8 @@ SELECT opportunity.closedate                                                    
 --    LEFT JOIN ppfa_prod.opportunity parent_opportunity                         ON opportunity.rc_giving__parent = parent_opportunity.id
     JOIN rounddata.v_campaign campaign                                                       ON opportunity.rc_giving__source_code = campaign.unique_source_code
     JOIN rounddata.accountx      a                                                           ON rc_giving__opportunity_credit.rc_giving__account = a.id
+    LEFT JOIN rounddata.cfp_log cfp on rc_giving__opportunity_credit.affiliate_number = cfp.affiliate_number
+    Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
     LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON opportunity.accountid = vehicle.rc_bios__account
   );
  
