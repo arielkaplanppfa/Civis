@@ -188,7 +188,7 @@ EN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not
                         and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
                      )
                 )
-THEN 'Y' else 'N' */
+THEN 'Y'*/ else 'N' 
 end as cfp_shareable
          ,CASE 
   WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
@@ -418,7 +418,8 @@ WHEN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is n
                      )
                 )
 THEN 'Y' else 'N'*/
-end as cfp_shareable
+ else 'N'
+nd as cfp_shareable
 ,CASE 
   WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
       AND  opportunity.gau_credit_code NOT LIKE '%CFP'
@@ -652,6 +653,7 @@ WHEN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is n
                         )
                 )
 THEN 'Y' else 'N'*/
+else 'N'
 end as cfp_shareable
 ,CASE 
   WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
