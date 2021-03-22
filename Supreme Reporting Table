@@ -419,7 +419,7 @@ WHEN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is n
                 )
 THEN 'Y' else 'N'*/
  else 'N'
-nd as cfp_shareable
+end as cfp_shareable
 ,CASE 
   WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
       AND  opportunity.gau_credit_code NOT LIKE '%CFP'
