@@ -1,0 +1,49 @@
+create or replace procedure akaplan.record_check(INOUT tablename varchar) 
+--create or replace procedure akaplan.record_check_test(INOUT tablename varchar) 
+
+LANGUAGE plpgsql
+
+as $$
+
+declare tbl varchar := tablename;
+declare rec_count int; 
+declare import_table varchar := concat(tbl, '_import');
+declare catch_up varchar := concat(tbl,'_catch_up');
+query1 text := 'Create temporary table  temp as (select distinct etl_id from akaplan.'||quote_ident(catch_up)||' MINUS select distinct etl_id from rounddata.'||quote_ident(import_table)||');' ;
+
+begin
+
+
+ select check_count into rec_count from rounddata.record_check where check_date= sysdate:: date and upper(check_table) =  upper(tbl);
+
+IF rec_count > 0 
+   THEN 
+
+     Execute query1;
+     
+     Execute 'Insert into rounddata.'||quote_ident(tbl)||'_import (select ocu.* from akaplan.'||quote_ident(tbl)||'_catch_up ocu join temp t on ocu.etl_id = t.etl_id);';
+
+     Execute 'Update  rounddata.record_check set check_fix = ''Y'' where check_date::date = sysdate::date and upper(check_table) = upper('||quote_literal(tbl)||') ;';
+     
+     tablename:= 'The rec_count was '||coalesce(rec_count:: varchar, 'Fix');
+    
+     
+    ELSE
+        IF rec_count = 0 
+          THEN
+       Execute 'Update  rounddata.record_check set check_fix = ''N'' where check_date::date = sysdate::date and upper(check_table) = upper('||quote_literal(tbl)||') ;';
+       tablename:= 'The rec_count was '||coalesce(rec_count:: varchar, 'Not Fix');
+       else
+       
+      execute 'Update  rounddata.record_check set check_fix = ''NA'' where check_date::date = sysdate::date and upper(check_table) = upper('||quote_literal(tbl)||') ;';
+       tablename:= 'The rec_count was '||coalesce(rec_count:: varchar, 'NULL');
+       end if;
+  
+ 
+
+
+END IF;
+
+END;
+
+$$;
