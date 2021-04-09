@@ -142,7 +142,7 @@ WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.j
                        )
                       OR 
 					             (  
-					              opportunity.gau_credit_code like '%CFP'
+					              opportunity.gau_credit_code like '%CFP%'
                         )
 				              OR --Non Affiliate Specific Old GAU
 				              (
@@ -192,7 +192,7 @@ THEN 'Y'*/ else 'N'
 end as cfp_shareable
          ,CASE 
   WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
-      AND  opportunity.gau_credit_code NOT LIKE '%CFP'
+      AND  opportunity.gau_credit_code NOT LIKE '%CFP%'
   THEN 'Y'
   ELSE 'N'
   END   AS is_local
@@ -372,7 +372,7 @@ WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.j
                        )
                       OR 
 					             (  
-					              opportunity.gau_credit_code like '%CFP'
+					              opportunity.gau_credit_code like '%CFP%'
                         )
 				              OR --Non Affiliate Specific Old GAU
 				              (
@@ -422,7 +422,7 @@ THEN 'Y' else 'N'*/
 end as cfp_shareable
 ,CASE 
   WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
-      AND  opportunity.gau_credit_code NOT LIKE '%CFP'
+      AND  opportunity.gau_credit_code NOT LIKE '%CFP%'
   THEN 'Y'
   ELSE 'N'
   END   AS is_local
@@ -601,7 +601,7 @@ WHEN (rc_giving__opportunity_credit.credit_close_date >= cfp.join_date or rc_giv
                        )
                       OR 
 					             (  
-					               rc_giving__opportunity_credit.gau_code_credit like '%CFP'
+					               rc_giving__opportunity_credit.gau_code_credit like '%CFP%'
                         )
 				              OR --Non Affiliate Specific Old GAU
 				              (
@@ -657,7 +657,7 @@ else 'N'
 end as cfp_shareable
 ,CASE 
   WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
-      AND  rc_giving__opportunity_credit.gau_code_credit NOT LIKE '%CFP'
+      AND  rc_giving__opportunity_credit.gau_code_credit NOT LIKE '%CFP%'
   THEN 'Y'
   ELSE 'N'
   END   AS is_local
