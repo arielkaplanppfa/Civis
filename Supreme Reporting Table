@@ -83,6 +83,8 @@ INSERT INTO rounddata.supreme_reporting_table (
                THEN 'offline'
                WHEN campaign.SourceCode_Campaign_Code = 'W'
                THEN 'online'
+               WHEN opportunity.rc_giving__comments = 'SUST  C4 ONLINE' or opportunity.rc_giving__comments = 'SUST  C3 ONLINE' or opportunity.rc_giving__comments = 'SUST  VOTES ONLINE'
+               THEN 'online'
                ELSE NULL
           END                                                                                                 is_sustainer
          ,opportunity.accountid                                                                               ngoc_accountid
@@ -536,12 +538,14 @@ end as cfp_shareable
           ,rc_giving__opportunity_credit.Affiliate_number                                                      affiliate_number
           ,campaign.rc_giving__channel                                                                         channel                --Edited per case 108404
           ,NULL                                                                                                payment_subtype
-          ,CASE WHEN opportunity.rc_giving__is_sustainer ilike 'true'
+          ,CASE WHEN parent_opportunity.rc_giving__is_sustainer ilike 'true'
                THEN 'offline'
                WHEN campaign.SourceCode_Campaign_Code = 'W'
                THEN 'online'
+               WHEN opportunity.rc_giving__comments = 'SUST  C4 ONLINE' or opportunity.rc_giving__comments = 'SUST  C3 ONLINE' or opportunity.rc_giving__comments = 'SUST  VOTES ONLINE'
+               THEN 'online'
                ELSE NULL
-           END                                                                                                 is_sustainer
+          END                                                                                                               is_sustainer
           ,rc_giving__opportunity_credit.rC_Giving__Account                                                    ngoc_accountid
           ,rc_giving__opportunity_credit.rC_Giving__Opportunity                                                parent_transaction_id
           ,rc_giving__opportunity_credit.id                                                                    transaction_id
