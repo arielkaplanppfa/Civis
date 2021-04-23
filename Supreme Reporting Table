@@ -538,7 +538,7 @@ end as cfp_shareable
           ,rc_giving__opportunity_credit.Affiliate_number                                                      affiliate_number
           ,campaign.rc_giving__channel                                                                         channel                --Edited per case 108404
           ,NULL                                                                                                payment_subtype
-          ,CASE WHEN parent_opportunity.rc_giving__is_sustainer ilike 'true'
+          ,CASE WHEN opportunity.rc_giving__is_sustainer ilike 'true'
                THEN 'offline'
                WHEN campaign.SourceCode_Campaign_Code = 'W'
                THEN 'online'
