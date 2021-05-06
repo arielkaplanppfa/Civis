@@ -111,6 +111,7 @@ INSERT INTO rounddata.supreme_reporting_table (
           END   is_pass_through
         ,CASE
 when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN opportunity.gau_credit_code = 'C340105UR422ONL' THEN 'N' --Case 114606
 WHEN opportunity.closedate >= '2011-07-01' and (
 opportunity.gau_credit_code like '_9001%' --Blanket to catch old GAU's   --- This is catching Gifts before the jouin dates202020
   OR opportunity.gau_credit_code like '_9002%' 
@@ -342,6 +343,7 @@ SELECT opportunity.closedate                                                    
           END   is_pass_through
          ,CASE
 when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN opportunity.gau_credit_code = 'C340105UR422ONL' THEN 'N' -- Case 114606
 WHEN opportunity.closedate >= '2011-07-01' and (
 opportunity.gau_credit_code like '_9001%' --Blanket to catch old GAU's   --- This is catching Gifts before the jouin dates202020
   OR opportunity.gau_credit_code like '_9002%' 
@@ -571,6 +573,7 @@ end as cfp_shareable
           ,CASE
 WHEN substring(rc_giving__opportunity_credit.soft_credit_type,1,3) not in ('SC ','DA ','TP ') THEN 'N'
 when rc_giving__opportunity_credit.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN rc_giving__opportunity_credit.gau_code_credit = 'C340105UR422ONL' THEN 'N' -- Case 114606
 WHEN rc_giving__opportunity_credit.credit_close_date >= '2011-07-01' AND(
 rc_giving__opportunity_credit.gau_code_credit like '_9001%' --Blanket to catch old GAU's
   OR rc_giving__opportunity_credit.gau_code_credit  like '_9002%' 
