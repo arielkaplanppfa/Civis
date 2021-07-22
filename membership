@@ -1,6 +1,6 @@
 /*when joing mobile commons or van from IDR, specify source bc both use 9 digit IDS*/
 
-drop table if exists ppfa_golden.golden_membership_activities;
+drop table if exists ppfa_golden.golden_membership_activities cascade;
 Create table ppfa_golden.golden_membership_activities(
  ppid varchar(30) not null,
  kind varchar(20) not null,
@@ -75,7 +75,7 @@ select resolved_id as ppid,'Action' as kind, activity_date as activity_date,acti
 
 --Lifetime and contributing
 
-drop table if exists ppfa_golden.golden_membership;
+drop table if exists ppfa_golden.golden_membership cascade;
 Create table ppfa_golden.golden_membership (
  ppid varchar(30) not null,
  Membership varchar(40) not null,
