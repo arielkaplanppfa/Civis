@@ -33,7 +33,7 @@ workflow:
         - Import_Success_Credit_48602452
       on-error:
         - Import_Fail_Credit_48603493
-      join: all
+      join: 1
     Preferences_Import_18821690:
       action: civis.run_job
       input:
@@ -58,7 +58,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 18980234
-      join: all
+      join: 1
       on-success:
         - Import_Success_Alternate_ID_49581555
       on-error:
@@ -75,7 +75,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 18978183
-      join: all
+      join: 1
       on-success:
         - Import_Success_Contact_Address_52050253
       on-error:
@@ -84,7 +84,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 52572822
-      join: all
+      join: 1
     IDR___New_Record_Append_62546388:
       action: civis.run_job
       input:
@@ -107,7 +107,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 72767348
-      join: all
+      join: 1
       on-success:
         - Case_62992__SRT_Bookable_Pledge_Payments_96628661
     Import_Success_Account_48603606:
@@ -191,7 +191,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 19428477
-      join: all
+      join: 1
       on-success:
         - Import_Success_ACI_81356671
       on-error:
@@ -208,7 +208,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 82135633
-      join: all
+      join: 1
       on-success:
         - SRT_PPID_Update_122172730
     Subledger_Import_24926695:
@@ -255,7 +255,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 81216990
-      join: all
+      join: 1
       on-success:
         - Import_Success_Proposal_100476641
       on-error:
