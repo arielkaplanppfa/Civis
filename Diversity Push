@@ -24,12 +24,12 @@ Case when race ilike '%white%' then 'White'
 when race ilike '%Black%' then 'Black'
 when race ilike '%hispanic%' then 'Latinx'
 when race ilike '%asian%' then 'Asian/Asian American'
-when race ilike '%other%' then 'Other'
+when race ilike '%other%' or race ilike '%another race or%' then 'Another Race or Ethnicity'
 when race ilike '%indigenous%' then 'Indigenous'
 when race ilike '%Arab%' then 'Middle Eastern'
 when race ilike '%pacific%' then 'Pacific Islander'
 when race ilike '%Hawai%' then 'Native Hawaiian'
-else 'Other' end as subtype__c,
+else 'Other' end as subtype__c,  -- Case 125421 - Another Race or Ethnicity
 Case when race_confidence = 'Self-Reported' then 'Self Reported'
 else 'Catalist' end as source__c,
 Case 
@@ -53,7 +53,7 @@ where typex = 'Race' and confidence = 'Verified' );
 delete from  full_list
 where exists ( select 'x' from verifieds where full_list.contact__c = verifieds.source_primary_key );
 
---Delete the unchanged and Invalid Rows
+--Delete the unchanged and Invalid ( case 59212 ) Rows
 create temporary table unchanged as (
 select aci.contact
 from rounddata.additional_contact_info aci 
