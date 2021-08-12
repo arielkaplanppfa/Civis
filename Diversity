@@ -49,7 +49,7 @@ Update ppfa_golden.golden_diversity
 set Race = 
 CASE  
 when reportedracename = 'Asian American, East Asian, South Asian, and/or Southeast Asian' then 'Asian American, East Asian, South Asian, and/or Southeast Asian'
-when reportedracename = 'Other' then 'Other'
+when reportedracename = 'Other' then 'Another Race or Ethnicity' -- Case 125421 - Another Race or Ethnicity
 when reportedracename = 'Caucasian or White' then 'Caucasian or White'
 when reportedracename = 'Hispanic and/or Latina/o/x' then 'Hispanic and/or Latina/o/x'
 when reportedracename = 'Pacific Islander' then 'Pacific Islander'
@@ -70,14 +70,16 @@ Update ppfa_golden.golden_diversity
 set Race = 
 CASE  
 when subtype = 'Asian/Asian American' then 'Asian American, East Asian, South Asian, and/or Southeast Asian'
-when subtype = 'Other' then 'Other'
+when subtype = 'Other' or subtype = 'Another Race or Ethnicity' then 'Another Race or Ethnicity'  -- Case 125421 - Another Race or Ethnicity
 when subtype = 'Caucasian or White' then 'Caucasian or White'
 when subtype = 'Latinx' then 'Hispanic and/or Latina/o/x'
 when subtype = 'Pacific Islander' then 'Pacific Islander'
 when subtype = 'Middle Eastern' then 'Arab American and/or Middle Eastern'
 when subtype = 'Indigenous' then 'Native American and/or Indigenous'
 when subtype = 'Black' then 'Black, African, and/or African American'
-when subtype = 'Native Hawaiian' then 'Native Hawaiian' else null end 
+when subtype = 'Native Hawaiian' then 'Native Hawaiian' 
+when subtype = 'Prefer not to disclose' then 'Prefer not to disclose' -- Case 125421 - Prefer not to disclose
+else null end 
 , race_confidence = 'Verified'
 from (
 select idr.resolved_id, c.id, c.subtype , coalesce(x.last_gift_date::Date, '1900-01-01'),
@@ -95,7 +97,7 @@ Update ppfa_golden.golden_diversity
 set race = 
 CASE  
 when catalist_race = 'nativeAmerican' then 'Native American and/or Indigenous'
-when catalist_race = 'other' then 'Other'
+when catalist_race = 'other' then 'Another Race or Ethnicity' -- Case 125421 - Another Race or Ethnicity
 when catalist_race = 'asian' then 'Asian American, East Asian, South Asian, and/or Southeast Asian'
 when catalist_race = 'hispanic' then 'Hispanic and/or Latina/o/x'
 when catalist_race = 'caucasian' then 'Caucasian or White'
