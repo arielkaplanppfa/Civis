@@ -29,7 +29,8 @@ when race ilike '%indigenous%' then 'Indigenous'
 when race ilike '%Arab%' then 'Middle Eastern'
 when race ilike '%pacific%' then 'Pacific Islander'
 when race ilike '%Hawai%' then 'Native Hawaiian'
-else 'Other' end as subtype__c,  -- Case 125421 - Another Race or Ethnicity
+when race ilike '%Prefer not%' then 'Prefer not to disclose'
+else 'Another Race or Ethnicity' end as subtype__c,  -- Case 125421 - Another Race or Ethnicity
 Case when race_confidence = 'Self-Reported' then 'Self Reported'
 else 'Catalist' end as source__c,
 Case 
