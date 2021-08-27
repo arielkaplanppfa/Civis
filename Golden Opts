@@ -267,6 +267,63 @@ on bbb.vanid = graphe.source_primary_key
   where aaa.activistcodename in ('wj_lead','Inactive','PPOL: No Comm') ) as optout
   where optout.resolved_id = golden_opts.ppid;
  
+ -- Mass Text
+ create temporary table mc_opt as 
+with temp as (
+  --My tables
+  select ccg.resolved_id as ppid, s.phone_number, activated_at:: date as start_date, run_date:: date as updated_at,
+case when campaign_id = '180941' then 'V' when campaign_id = '193425' then '3' when campaign_id = '154363' then '4' else null end as entity,
+case when opted_out_at is null then 'in' else 'out' end as opt
+from mobile_commons.subscribers s 
+join idres_analytics.current_customer_graph ccg on s.profile_id = ccg.source_primary_key
+where campaign_id in ('193425','154363','180941')
+UNION
+  -- Annes Tables
+select  ccg.resolved_id as ppid, coalesce(p.phone_number, pp.phone_number),
+activated_at:: date as start_date, s.created_at:: date as updated_at,
+case when campaign_id = '180941' then 'V' when campaign_id = '193425' then '3' when campaign_id = '154363' then '4' else null end as entity,
+case when s.opted_out_at is null then 'in' else 'out' end as opt 
+from mobile_commons.depreciated_subscriptions s 
+left join mobile_commons.depreciated_profiles p on s.profile_id = p.profile_id
+left join mobile_commons.profiles pp on s.profile_id = pp.profile_id
+join idres_analytics.current_customer_graph ccg on s.profile_id = ccg.source_primary_key
+where campaign_id in ('193425','154363','180941') ),
+temptwo as (
+select *,
+row_number() over(partition by ppid, phone_number, entity order by updated_at desc) as rec_rank
+from temp)
+select * from temptwo
+order by ppid, phone_number, entity, rec_rank asc;
+
+-- Do Not Contacts
+create temporary table suppress as 
+select distinct ccg.resolved_id, p.rc_bios__start_date:: date, p.lastmodifieddate:: date
+from rounddata.rc_bios__preference p
+join rounddata.contact c on p.rc_bios__account = c.accountid and c.delete_flag <> 'Y'
+join idres_analytics.current_customer_graph ccg on c.id = ccg.source_primary_key
+where rc_bios__subcategory ilike 'Do Not Contact' and p.delete_flag <> 'Y' and  (rc_bios__end_date is null or rc_bios__end_date:: date >= sysdate)
+UNION
+select ccg.resolved_id, datecreated:: date as start_date, datemodified:: date as lastmodifieddate
+from vansync.ppfa_contactsactivistcodes_mym a
+join idres_analytics.current_customer_graph ccg on a.vanid = ccg.source_primary_key and source ilike '%van%'
+ where activistcodeid = '4402974';
+ 
+ --Suppress the more recent opt outs
+ create temporary table mc_opt_in as 
+select * from 
+mc_opt o 
+where opt = 'in' and rec_rank = 1
+and not exists ( select 'x' from suppress s where s.resolved_id = o.ppid and s.rc_bios__start_date > o.start_date);
+ 
+ --Update golden table
+ update ppfa_golden.golden_opts set mass_text = opts
+from 
+(
+  select ppid,phone_number, listagg(entity) within group (order by entity asc) as opts 
+from mc_opt_in
+   group by ppid, phone_number
+ ) t
+  where t.ppid = golden_opts.ppid and t.phone_number = golden_opts.contact_method;
  
  
  
