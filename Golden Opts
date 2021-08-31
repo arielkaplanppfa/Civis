@@ -316,14 +316,15 @@ where opt = 'in' and rec_rank = 1
 and not exists ( select 'x' from suppress s where s.resolved_id = o.ppid and s.rc_bios__start_date > o.start_date);
  
  --Update golden table
- update ppfa_golden.golden_opts set mass_text = opts
+update ppfa_golden.golden_opts set mass_text = opts
 from 
 (
-  select ppid,phone_number, listagg(entity) within group (order by entity asc) as opts 
-from mc_opt_in
-   group by ppid, phone_number
+  select ppid,
+  case when length(phone_number ) = 11 then right(phone_number, 10) else phone_number:: varchar end as phone_number, listagg(entity) within group (order by entity asc) as opts 
+from akaplan.mc_opt_in
+   group by ppid, case when length(phone_number) = 11 then right(phone_number, 10) else phone_number:: varchar end
  ) t
-  where t.ppid = golden_opts.ppid and t.phone_number = golden_opts.contact_method;
+  where t.ppid = golden_opts.ppid and t.phone_number:: varchar = golden_opts.contact_method;
  
  
  
