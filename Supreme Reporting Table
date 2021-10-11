@@ -24,7 +24,7 @@ CREATE TABLE rounddata.supreme_reporting_table (
 ,bookable                VARCHAR(6)    DEFAULT NULL
 ,payment_method          VARCHAR(150)  DEFAULT NULL
 ,gau_credit_code         VARCHAR(30)   DEFAULT NULL
-,gau_debit_code          VARCHAR(30)   DEFAULT NULL
+,gau_debit_code          VARCHAR(50)   DEFAULT NULL --- CB 9/18/21 changed size to 50
 ,recordtype              VARCHAR(80)   DEFAULT NULL
 ,is_pass_through         INT      DEFAULT NULL
 ,cfp_shareable           VARCHAR(7)    DEFAULT NULL
@@ -51,7 +51,7 @@ CREATE TABLE rounddata.supreme_reporting_table (
 ---Table for has_soft_credit field
 DROP TABLE IF EXISTS akaplan.mv_soft_credit_opportunities ;
   CREATE TABLE akaplan.mv_soft_credit_opportunities (rC_Giving__Opportunity VARCHAR(18), PRIMARY KEY (rC_Giving__Opportunity) ) ;
-  INSERT INTO mv_soft_credit_opportunities
+  INSERT INTO akaplan.mv_soft_credit_opportunities   --- CB 9/20/21 added "akaplan."
   SELECT DISTINCT rC_Giving__Opportunity AS rc_giving__opportunity
   FROM rounddata.rc_giving__opportunity_credit
   WHERE delete_flag<>'Y' OR rc_giving__archive_flag ilike 'true'  ;
@@ -752,10 +752,26 @@ end as cfp_shareable
  
  --add ppid 6/15/20
  alter table rounddata.supreme_reporting_table add column ppid varchar(30);
+ 
+ /*
+ 
+ ----UPDATE REMOVED AND MOVED TO: https://platform.civisanalytics.com/spa/#/scripts/sql/128950004
  update rounddata.supreme_reporting_table
 set ppid = resolved_id
 from (select resolved_id, c.accountid from idres_analytics.current_customer_graph idr join rounddata.contact c on idr.source_primary_key = c.id) j
 where j.accountid = rounddata.supreme_reporting_table.ngoc_accountid;
+
+ --Possible supplemental Update
+
+update rounddata.supreme_reporting_table set ppid = coalesce(t.acc_res, t.cont_res)
+  from (
+ select c.id, c.accountid, cid.resolved_id as cont_res, cid.source_primary_key as cont_spk, accid.resolved_id as acc_res, accid.source_primary_key as acc_SPK 
+from rounddata.contact c 
+left join idres_analytics.current_customer_graph cid on c.id = cid.resolved_id
+left join idres_analytics.current_customer_graph accid on accid.source_primary_key = c.accountid) t
+where ngoc_accountid = t.accountid and ppid is null;
+*/
+
 
 --add giving level pre gift 7/6/2020
 update rounddata.supreme_reporting_table  
@@ -765,6 +781,8 @@ set giving_level_pre_gift = coalesce( ( select giving_level from rounddata.givin
  drop table if exists rounddata.supreme_reporting_table_backup;
  create table rounddata.supreme_reporting_table_backup as 
  (select * from rounddata.supreme_reporting_table);
+ 
+ grant select on rounddata.supreme_reporting_table to agrandbois; --- CB 9/21/21 - added grant
   
   -- drop table if exists rounddata.ak_supreme_reporting_table;
   -- create table rounddata.ak_supreme_reporting_table as (select * from akaplan.supreme_reporting_table);
