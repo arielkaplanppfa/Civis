@@ -746,7 +746,7 @@ end as cfp_shareable
     JOIN rounddata.accountx      a                                                           ON rc_giving__opportunity_credit.rc_giving__account = a.id
     LEFT JOIN rounddata.cfp_log cfp on rc_giving__opportunity_credit.affiliate_number = cfp.affiliate_number
     Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
-    LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON opportunity.accountid = vehicle.rc_bios__account
+    LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON rc_giving__opportunity_credit.rc_giving__account = vehicle.rc_bios__account
   );
  
  
