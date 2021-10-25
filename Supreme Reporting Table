@@ -96,6 +96,7 @@ INSERT INTO rounddata.supreme_reporting_table (
          ,opportunity.original_source_code                                                                    original_source_code
          ,CASE WHEN recordtype.namex = 'Pledge Payment'
                THEN opportunity.pledge_number
+               ELSE parent_opportunity.opportunity_external_id
           END                                                                                                 pledge_number
          ,opportunity.stagename                                                                               stagename
          ,opportunity.rc_giving__archive_flag                                                                 rc_giving__archive_flag
