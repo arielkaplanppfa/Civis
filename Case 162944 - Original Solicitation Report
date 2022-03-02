@@ -1,0 +1,211 @@
+/*
+--Notify 
+Eronn Strickland -  Associate Director, Donor Services • Direct Response
+Karina Murrieta - Coordinator, Donor Services • Direct Response
+Jason Zuckerman - Coordinator, Donor Services • Direct Response
+*/
+
+/*
+Buckets: 
+A) Linked Campiagns offline and Sourced digital gifts - if the send date is within active membership then Y else N
+B) Whitemail and generic webform digital gifts - If the most recent pac solicitation across channels was within active membership then Y Else Prove they were unsolicited else N
+*/
+
+drop table if exists rounddata.pac_eligibility;
+Create table rounddata.pac_eligibility (
+
+bup_id varchar(20),
+deposit_date date sortkey,
+contact varchar(20),
+first_name varchar (30),
+last_name varchar (30),
+campaignid varchar(20),
+source_code varchar(40),
+vendor_source varchar(20),
+vanid varchar(20),
+contribution_id varchar(20),
+drop_date date,
+solicitation_eligible varchar(1),
+membership varchar(20),
+start_date date,
+end_date date,
+source varchar(30) ) 
+distkey(bup_id) ;
+
+
+--Create temporary table of all pac gifts
+Create temporary table pac_gifts  as 
+With bup as (select rc_connect__batch_upload_campa as campaignid,
+             rC_Connect__Batch_Upload_Statu,
+             rc_connect__batch_upload_conta as contact_matched,
+             cont.firstname, cont.lastname,
+             bu.id, 
+             coalesce(rc_connect__giving_primary_cam , c.namex) as source_code,
+             coalesce(c.rc_giving__drop_date, cc.rc_giving__drop_date) as drop_date,
+             bu.vendor_source,
+             giving_deposit_date as deposit_date, -- can remove
+             alternate_id as vanid, 
+             alternate_id_type as id_type,
+case when vendor_source = 'EveryAction' then rc_connect__batch_upload_seque else null end  as contribution_id,
+case when c.sourcecode_initiative_code like '__00%' or cc.sourcecode_initiative_code like '__00%' then 'whitemail' else null end as whitemail
+from rounddata.rc_connect__batch_upload bu
+left join rounddata.rc_giving__batch b on bu.rc_connect__batch_upload_batc0 = b.id 
+left join rounddata.campaign c on bu.rc_connect__batch_upload_campa = c.id
+left join rounddata.campaign cc on bu.rc_connect__giving_primary_cam = c.namex
+left join rounddata.contact cont on cont.id = rc_connect__batch_upload_conta
+where rC_Connect__Batch_Upload_Statu not in ( --'Committed',
+                                              'Action Taker Committed') -- Remove Committed as suppression, add Contact Name, Auto contact Number
+and bu.delete_flag <> 'Y' and bu.createddate >= sysdate - 100 and rc_connect__exclude_giving = 'false' --set date range to a week
+and (b.affiliation = 'PPAF' or (bu.vendor_source is not null and bu.vendor_source <> 'EveryAction') ) --to suppress digital gifts and include TM/Merkle etc..
+            and (rc_connect__giving_primary_cam like '5N%' or c.namex like '5N%' or b.designation_entity = 'PAC' ) )
+select * from bup;
+
+--Insert gifts into Pac Eligibility Table
+Insert into rounddata.pac_eligibility
+select distinct id , deposit_date, contact_matched, firstname, lastname, campaignid, source_code, vendor_source, vanid, contribution_id, drop_date,null,null,null:: date,null:: date,
+case when pg.whitemail is not null then pg.whitemail else null end 
+from pac_gifts pg 
+where not exists (select 'x' from rounddata.pac_eligibility pe where pg.id = pe.bup_id );
+
+
+--Linked DR Campaign for offline gifts
+create temporary table linked_offline as 
+with gm as (
+  select *, row_number() over (partition by ppid order by decode(membership,'Lifetime',3,'Contributing',2,'Associate',1) asc  ) as rank 
+    from ppfa_golden.golden_membership ship
+  where exists ( select 'x' from pac_gifts b join idres_analytics.current_customer_graph idr on b.contact_matched = idr.source_primary_key
+                 where ship.ppid = idr.resolved_id and b.drop_date >= ship.start_date and (b.drop_date<= ship.end_date or ship.end_date is null)  
+               ) 
+      ),
+ gmm as (
+ select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
+        ),
+membership as(
+select distinct  b.*, Case when gmm.ppid is not null then 'Y' else 'N' end as solicitation_eligible,
+  gmm.ppid, gmm.membership, gmm.start_date, gmm.end_date
+from pac_gifts b 
+left join idres_analytics.current_customer_graph ccg on b.contact_matched = ccg.source_primary_key
+left join gmm on ccg.resolved_id = gmm.ppid 
+  order by b.contact_matched)
+select * 
+from membership  where contribution_id is null and whitemail is null ;
+
+--Mark the eligible ones, Populate source, leave the ineligible ones for further checks further down
+update rounddata.pac_eligibility  set 
+solicitation_eligible = lo.solicitation_eligible,
+membership = lo.membership,
+start_date = lo.start_date,
+end_date = lo.end_date,
+source = 'Linked Offline Campaign'
+from linked_offline lo where lo.id = pac_eligibility.bup_id and pac_eligibility.solicitation_eligible is null  ;
+
+
+--Get digital gifts
+create temporary table pac_digital as
+With dates as (
+  select
+distinct b.transaction_id,bu.id  as bup_id, a.onlineform_name,
+first_value(a.datesent) over(partition by a.ppid, a.onlineform_name, a.codeid
+order by a.datesent
+rows between unbounded preceding and unbounded following) as credit_date_sent
+from dfse_ads.outbound_emails as a
+inner join ea_sourcecodes.opportunities_ppid as b
+on b.onlineformname = a.onlineform_name
+and a.ppid = b.ppid
+and a.codeid = b.codeid
+and b.closedate >=a.datesent
+--AND a.onlineform_fpi_entity in (The Pac Financial entities)
+join rounddata.rc_connect__batch_upload bu on bu.rc_connect__batch_upload_givin = b.parent_transaction_id
+),
+wm as (select rc_connect__batch_upload_campa,
+case when vendor_source = 'EveryAction' then rc_connect__batch_upload_seque else null end  as contribution_id,
+            bu.giving_deposit_date, bu.alternate_id,  bu.vendor_source,
+bu.id, bu.rc_connect__batch_upload_seque, bu.rc_connect__giving_primary_cam, bu.rc_connect__batch_upload_conta,
+ Case when c.site = 'PP Site' and  substring(bu.rc_connect__giving_primary_cam,10,1) = 'W' then 'whitemail' else null end as whitemail
+from rounddata.rc_connect__batch_upload bu
+join vansync.ppfa_contactscontributionscodes_mym as b on bu.rc_connect__batch_upload_seque = b.contactscontributionid
+join ea_sourcecodes.ea_source_code_parsing as c on b.codeid = c.codeid
+ where vendor_source = 'EveryAction' --limit to EA 
+             and rC_Connect__Batch_Upload_Statu not in ( --'Committed',
+                                              'Action Taker Committed') -- Remove Committed as suppression, add Contact Name, Auto contact Number
+        and bu.delete_flag <> 'Y' and bu.createddate >= sysdate - 20 and rc_connect__exclude_giving = 'false' --set date range to a week
+        and (rc_connect__giving_primary_cam like '4N%' 
+                ) ),
+bup as (
+  select wm.id, wm.rc_connect__batch_upload_seque as contribution_id, wm.rc_connect__giving_primary_cam as source_code, wm.whitemail,
+  vf.submittedfirstname as firstname, vf.submittedlastname as  lastname, d.credit_date_sent, d.onlineform_name,
+  wm.rc_connect__batch_upload_campa, wm.giving_deposit_date, wm.alternate_id, wm.vendor_source, wm.rc_connect__batch_upload_conta
+ from wm
+left join dates d on wm.id = d.bup_id
+join vansync.ppfa_contactscontributions_mym vc on wm.rc_connect__batch_upload_seque = vc.contactscontributionid              
+join vansync.ppfa_contactsonlineforms_mym  vf on vc.contactsonlineformid = vf.contactsonlineformid)
+select distinct id as bup_id, giving_deposit_date,rc_connect__batch_upload_conta as contact_matched, firstname, lastname,
+rc_connect__batch_upload_campa as campaignid,onlineform_name as source_code,vendor_source,alternate_id as vanid ,contribution_id, credit_date_sent as drop_date, whitemail
+from bup;
+            
+
+--Insert gifts into Pac Eligibility Table
+Insert into rounddata.pac_eligibility
+select distinct bup_id , giving_deposit_date, contact_matched, firstname, lastname, campaignid, source_code, vendor_source, vanid, contribution_id, drop_date,null,null,null:: date,null:: date,
+Case when pg.whitemail is not null then 'online whitemail' else null end 
+from pac_digital pg 
+where not exists (select 'x' from rounddata.pac_eligibility pe where pg.bup_id = pe.bup_id );
+
+
+
+--Linked Digital  gifts
+create temporary table linked_online as 
+with gm as (
+  select *, row_number() over (partition by ppid order by decode(membership,'Lifetime',3,'Contributing',2,'Associate',1) asc  ) as rank 
+    from ppfa_golden.golden_membership ship
+  where exists ( select 'x' from pac_digital b join idres_analytics.current_customer_graph idr on b.vanid = idr.source_primary_key
+                 where ship.ppid = idr.resolved_id and b.drop_date >= ship.start_date and (b.drop_date<= ship.end_date or ship.end_date is null)  
+               ) 
+      ),
+ gmm as (
+ select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
+        ),
+membership as(
+select distinct  b.*, Case when gmm.ppid is not null then 'Y' else 'N' end as solicitation_eligible,
+  gmm.ppid, gmm.membership, gmm.start_date, gmm.end_date
+from pac_digital b 
+left join idres_analytics.current_customer_graph ccg on b.contact_matched = ccg.source_primary_key
+left join gmm on ccg.resolved_id = gmm.ppid 
+  order by b.contact_matched)
+select * 
+from membership  where contribution_id is not null and whitemail is null ;
+
+--Mark the eligible ones, Populate source, leave the ineligible ones for further checks further down
+update rounddata.pac_eligibility  set 
+solicitation_eligible = lo.solicitation_eligible,
+membership = lo.membership,
+start_date = lo.start_date,
+end_date = lo.end_date,
+source = 'Linked Online Campaign'
+from linked_online lo where lo.bup_id = pac_eligibility.bup_id and pac_eligibility.solicitation_eligible is null  ;
+
+
+
+           
+/*
+--Campaign Side
+Select cm.id, campaignid, contactid, accountid,  cm.statusx, cm.createddate, contacted_date, response_category, response_type, cm.typex, file_name,
+c.unique_source_code as source_code, c.rc_giving__channel as channel, c.startdate, c.rc_giving__drop_date as drop_date, rc_connect__merchant_name as merchant, solicitor
+,sourcecode_activity_type_code as activity_type,
+sourcecode_activity_type_descr as activity_desc,
+sourcecode_tax_status_code as entity, 
+sourcecode_tax_status_descript as entity_desc,
+sourcecode_office_code as office,
+sourcecode_office_description as office_desc,
+sourcecode_business_unit_code as unit, 
+sourcecode_business_unit_descr as unit_desc,
+sourcecode_activity_group_code as group,
+sourcecode_activity_group_desc as group_desc,
+sourcecode_campaign_code as campaign, 
+sourcecode_campaign_descriptio as  campaign_desc,
+c.gau_name,  c.gau_description, g.gl_category
+from rounddata.campaignmember cm 
+join rounddata.campaign c on cm.campaignid = c.id
+join rounddata.rc_giving__gau g on c.rc_giving__gau = g.id
+where c.recordtypeid = '01236000000Ke9xAAC' and cm.migrated_record not ilike 'true' and c.unique_source_code like '5N%'
+*/
