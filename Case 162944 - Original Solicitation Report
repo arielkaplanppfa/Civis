@@ -242,7 +242,7 @@ membership = wm.membership,
 start_date = wm.start_date,
 end_date = wm.end_date,
 source = wm.source
-from whitemail wm where wm.bup_id = pac_eligibility.bup_id and pac_eligibility.source in ('whitemail','online whitemail') and solicitation_eligible is null ;
+from whitemail wm where wm.bup_id = pac_eligibility.bup_id and pac_eligibility.source in ('whitemail','online whitemail') and pac_eligibility.solicitation_eligible is null ;
 
 
 
