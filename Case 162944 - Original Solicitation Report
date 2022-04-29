@@ -3,6 +3,8 @@
 Eronn Strickland -  Associate Director, Donor Services • Direct Response
 Karina Murrieta - Coordinator, Donor Services • Direct Response
 Jason Zuckerman - Coordinator, Donor Services • Direct Response
+Mike
+Amy C
 */
 
 /*
@@ -11,6 +13,7 @@ A) Linked Campiagns offline and Sourced digital gifts - if the send date is with
 B) Whitemail and generic webform digital gifts - If the most recent pac solicitation across channels was within active membership then Y Else Prove they were unsolicited else N
 */
 
+/*
 drop table if exists rounddata.pac_eligibility;
 Create table rounddata.pac_eligibility (
 
@@ -29,17 +32,17 @@ solicitation_eligible varchar(1),
 membership varchar(20),
 start_date date,
 end_date date,
-source varchar(30) ) 
+source varchar(60) ) 
 distkey(bup_id) ;
-
+*/
 
 --Create temporary table of all pac gifts
 Create temporary table pac_gifts  as 
 With bup as (select rc_connect__batch_upload_campa as campaignid,
              rC_Connect__Batch_Upload_Statu,
              coalesce(rc_connect__batch_upload_conta,rc_connect__hardcreditcontact) as contact_matched,
-             coalesce(cont.firstname, rc_connect__contact_1_first_na) as firstname, 
-             coalesce(cont.lastname,rc_connect__contact_1_last_nam) as lastname,
+             coalesce(cont.firstname, hccont.firstname) as firstname, 
+             coalesce(cont.lastname,hccont.lastname) as lastname,
              bu.id, 
              coalesce(rc_connect__giving_primary_cam , c.namex) as source_code,
              coalesce(c.rc_giving__drop_date, cc.rc_giving__drop_date) as drop_date,
@@ -54,9 +57,9 @@ left join rounddata.rc_giving__batch b on bu.rc_connect__batch_upload_batc0 = b.
 left join rounddata.campaign c on bu.rc_connect__batch_upload_campa = c.id
 left join rounddata.campaign cc on bu.rc_connect__giving_primary_cam = c.namex
 left join rounddata.contact cont on cont.id = rc_connect__batch_upload_conta
-where rC_Connect__Batch_Upload_Statu not in ( --'Committed',
-                                              'Action Taker Committed') -- Remove Committed as suppression, add Contact Name, Auto contact Number
-and bu.delete_flag <> 'Y' and bu.createddate >= sysdate -14  and rc_connect__exclude_giving = 'false' --set date range to a week
+left join rounddata.contact hccont on bu.rc_connect__hardcreditcontact = hccont.id
+where rC_Connect__Batch_Upload_Statu in ( 'Committed') -- changed to committed to ensure contact and account populated
+and bu.delete_flag <> 'Y' and bu.createddate >= sysdate - 7  and rc_connect__exclude_giving = 'false' --set date range to a week
 and (b.affiliation = 'PPAF' or (bu.vendor_source is not null and bu.vendor_source <> 'EveryAction') ) --to suppress digital gifts and include TM/Merkle etc..
             and (rc_connect__giving_primary_cam like '5N%' or c.namex like '5N%' or b.designation_entity = 'PAC' ) )
 select * 
@@ -128,31 +131,32 @@ join rounddata.rc_connect__batch_upload bu on bu.rc_connect__batch_upload_givin 
 wm as (select rc_connect__batch_upload_campa,
 case when vendor_source = 'EveryAction' then rc_connect__batch_upload_seque else null end  as contribution_id,
             bu.giving_deposit_date, bu.alternate_id,  bu.vendor_source,
-bu.id, bu.rc_connect__batch_upload_seque, bu.rc_connect__giving_primary_cam, bu.rc_connect__batch_upload_conta,
+bu.id, bu.rc_connect__batch_upload_seque, bu.rc_connect__giving_primary_cam, bu.rc_connect__batch_upload_conta, p.namex as campaign_name,
  Case when c.site = 'PP Site' and  substring(bu.rc_connect__giving_primary_cam,10,1) = 'W' then 'digital whitemail'
-      when c.site = 'SMS' or c.site_type = 'Text' then 'text'
-      when c.site = 'Direct Mail' and c.site_type = 'Offline' then 'offline'
+      when c.site IN ('SMS','Hustle') or c.site_type = 'Text' then 'text'
+      when c.site = 'Direct Mail' and c.site_type = 'Offline' then 'EA - offline'
       when c.site = 'Email' and c.site_type = 'Email' then 'email'
       end as whitemail
 from rounddata.rc_connect__batch_upload bu
+left join rounddata.campaign p on bu.rc_connect__batch_upload_campa = p.id
 join vansync.ppfa_contactscontributionscodes_mym as b on bu.rc_connect__batch_upload_seque = b.contactscontributionid
 join ea_sourcecodes.ea_source_code_parsing as c on b.codeid = c.codeid
  where vendor_source = 'EveryAction' --limit to EA 
-             and rC_Connect__Batch_Upload_Statu not in ( --'Committed',
-                                              'Action Taker Committed') -- Remove Committed as suppression, add Contact Name, Auto contact Number
-        and bu.delete_flag <> 'Y' and bu.createddate >= sysdate - 20 and rc_connect__exclude_giving = 'false' --set date range to a week
-        and (rc_connect__giving_primary_cam like '4N%' 
+             and rC_Connect__Batch_Upload_Statu in ( 'Committed'
+             ) --Chagned to committed to ensure contact and account populated
+        and bu.delete_flag <> 'Y' and bu.createddate >= sysdate - 7 and rc_connect__exclude_giving = 'false' --set date range to a week
+        and (rc_connect__giving_primary_cam like '5N%' 
                 ) ),
 bup as (
   select wm.id, wm.rc_connect__batch_upload_seque as contribution_id, wm.rc_connect__giving_primary_cam as source_code, wm.whitemail,
-  vf.submittedfirstname as firstname, vf.submittedlastname as  lastname, d.credit_date_sent, d.onlineform_name,
-  wm.rc_connect__batch_upload_campa, wm.giving_deposit_date, wm.alternate_id, wm.vendor_source, wm.rc_connect__batch_upload_conta
+  vf.submittedfirstname as firstname, vf.submittedlastname as  lastname, d.credit_date_sent, coalesce(d.onlineform_name,wm.campaign_name) as onlineform_name,
+  wm.rc_connect__batch_upload_campa, wm.giving_deposit_date, wm.alternate_id, wm.whitemail as vendor_source, wm.rc_connect__batch_upload_conta
  from wm
 left join dates d on wm.id = d.bup_id
 join vansync.ppfa_contactscontributions_mym vc on wm.rc_connect__batch_upload_seque = vc.contactscontributionid              
 join vansync.ppfa_contactsonlineforms_mym  vf on vc.contactsonlineformid = vf.contactsonlineformid)
 select distinct id as bup_id, giving_deposit_date,rc_connect__batch_upload_conta as contact_matched, firstname, lastname,
-rc_connect__batch_upload_campa as campaignid,onlineform_name as source_code,vendor_source,alternate_id as vanid ,contribution_id, credit_date_sent as drop_date, whitemail
+rc_connect__batch_upload_campa as campaignid,onlineform_name as source_code,coalesce(vendor_source,'EveryAction') as vendor_source,alternate_id as vanid ,contribution_id, credit_date_sent as drop_date, whitemail
 from bup;
             
 
@@ -180,25 +184,62 @@ with gm as (
  select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
         ),
 membership as(
-select distinct  b.*, Case when gmm.ppid is not null then 'Y' else 'N' end as solicitation_eligible,
+select distinct  b.*, Case when gmm.ppid is not null and b.drop_date is not null then 'Y' else 'N' end as solicitation_eligible,
   gmm.ppid, gmm.membership, gmm.start_date, gmm.end_date
 from pac_digital b 
 left join idres_analytics.current_customer_graph ccg on b.contact_matched = ccg.source_primary_key
 left join gmm on ccg.resolved_id = gmm.ppid 
   order by b.contact_matched)
 select * 
-from membership  where contribution_id is not null and whitemail is null ;
+from membership  where contribution_id is not null and (whitemail not in('digital whitemail','EA - offline') or whitemail is null) ;
 
 --Mark the eligible ones, Populate source, leave the ineligible ones for further checks further down
 update rounddata.pac_eligibility  set 
-solicitation_eligible = lo.solicitation_eligible,
+solicitation_eligible = case when lo.drop_date is not null then lo.solicitation_eligible else null end,
 membership = lo.membership,
 start_date = lo.start_date,
 end_date = lo.end_date,
-source = 'Linked Online Campaign'
+source =  case when lo.drop_date is not null then 'Linked Online Campaign' else 'Unlinked Online Campaign' end
 from linked_online lo where lo.bup_id = pac_eligibility.bup_id and pac_eligibility.solicitation_eligible is null  ;
 
----NEED TO WORK IN NON-EMAIL DIGITAL GIFT CHECK HERE
+-----------New Van ID Email fix
+create temporary table email_new_van_ids as 
+with email_gifts as (
+select bup_id, contact, contribution_id, drop_date, pe.source, coalesce (ccg.resolved_id, 'Not in IDR')  as ppid 
+from rounddata.pac_eligibility pe
+left join idres_analytics.current_customer_graph ccg on pe.contact = ccg.source_primary_key
+where pe.channel = 'email' and (solicitation_eligible is null or solicitation_eligible in ('U','N') )
+order by deposit_date),
+gm as (
+  select *, row_number() over (partition by ppid order by decode(membership,'Lifetime',3,'Contributing',2,'Associate',1) asc  ) as rank 
+    from ppfa_golden.golden_membership ship
+  where exists ( select 'x' from email_gifts b 
+                 where ship.ppid = b.ppid and b.drop_date >= ship.start_date and (b.drop_date<= ship.end_date or ship.end_date is null)  
+               ) 
+      ),
+ gmm as (
+ select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
+        )
+select distinct  b.bup_id, 
+Case when b.ppid = 'Not in IDR' then 'U'
+     when gmm.ppid is not null and b.drop_date is not null then 'Y'
+     else 'N' end as solicitation_eligible,
+  gmm.ppid, gmm.membership, gmm.start_date, gmm.end_date,
+  case when b.ppid = 'Not in IDR' then 'Linked Online Campaign - Not in IDR' 
+       when gmm.ppid is not null and b.drop_date is not null then 'Linked Online Campaign'
+       else b.source end as source
+from email_gifts b 
+left join gmm on b.ppid = gmm.ppid;
+
+update rounddata.pac_eligibility
+set 
+solicitation_eligible = tg.solicitation_eligible,
+membership = tg.membership,
+start_date = tg.start_date,
+end_date = tg.end_date,
+source = tg.source
+from email_new_van_ids tg 
+where tg.bup_id = pac_eligibility.bup_id and pac_eligibility.solicitation_eligible in ('U','N')  ;
 
 
 -- Whitemail and unsolicited Check
@@ -233,16 +274,249 @@ select distinct  b.*, Case when gmm.ppid is not null then 'Y' else 'N' end as so
 from sol b
  left join gmm on b.ppid = gmm.ppid )
   select distinct bup_id, ppid, deposit_date, drop_date, case when drop_date is null and solicitation_eligible = 'N' then 'Y' else solicitation_eligible end as solicitation_eligible,
- case when drop_date is null then source||' - unsolicited' else source end as source,membership, start_date, end_date 
+ case when drop_date is null then source||' - unsolicited' else source||' - solicited' end as source,membership, start_date, end_date 
   from  membership;
   
 update rounddata.pac_eligibility  set 
 solicitation_eligible = wm.solicitation_eligible,
+drop_date = wm.drop_date,
 membership = wm.membership,
 start_date = wm.start_date,
 end_date = wm.end_date,
 source = wm.source
 from whitemail wm where wm.bup_id = pac_eligibility.bup_id and pac_eligibility.source in ('whitemail','online whitemail') and pac_eligibility.solicitation_eligible is null ;
+
+--- Online Offline section here
+
+create temporary table online_offline as 
+With temp as ( --Get the Online Offline channel
+select bup_id, contact, source_code from rounddata.pac_eligibility where source is null and solicitation_eligible is null and channel = 'EA - offline'
+  ),
+  drop_dates as (
+  select bup_id, contact, source_code, c.rc_giving__drop_date as drop_date
+  from temp t 
+  left join rounddata.campaign c on t.source_code = c.unique_source_code),
+  gm as (
+  select *, row_number() over (partition by ppid order by decode(membership,'Lifetime',3,'Contributing',2,'Associate',1) asc  ) as rank 
+    from ppfa_golden.golden_membership ship
+  where exists ( select 'x' from drop_dates b join idres_analytics.current_customer_graph idr on b.contact = idr.source_primary_key
+                 where ship.ppid = idr.resolved_id and b.drop_date >= ship.start_date and (b.drop_date<= ship.end_date or ship.end_date is null)  
+               ) 
+      ),
+ gmm as (
+ select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
+        ),
+ membership as (
+  select distinct  b.*, Case when gmm.ppid is not null and b.drop_date is not null then 'Y' else 'N' end as solicitation_eligible,
+  gmm.ppid, gmm.membership, gmm.start_date, gmm.end_date
+from drop_dates b 
+left join idres_analytics.current_customer_graph ccg on b.contact = ccg.source_primary_key
+left join gmm on ccg.resolved_id = gmm.ppid 
+  order by b.contact)
+  select * from membership;
+  
+update rounddata.pac_eligibility  set 
+solicitation_eligible = case when oo.drop_date is not null then oo.solicitation_eligible else null end,
+drop_date =  case when oo.drop_date is not null then oo.drop_date else null end,
+membership = oo.membership,
+start_date = oo.start_date,
+end_date = oo.end_date,
+source =  case when oo.drop_date is not null then 'Linked Online-Offline Campaign' else 'Unlinked Online-Offline Campaign' end
+from online_offline oo where oo.bup_id = pac_eligibility.bup_id and pac_eligibility.solicitation_eligible is null;
+
+
+-- Text Gifts 
+create temporary table text_gifts as 
+with temp as (select distinct  pe.bup_id, pe.contribution_id ,code.codeid, ccg.resolved_id as ppid,  ic.*
+from rounddata.pac_eligibility pe 
+join vansync.ppfa_contactscontributionscodes_mym con on pe.contribution_id  = con.contactscontributionid
+join vansync.ppfa_codes_mym code on con.codeid = code.codeid
+join ppfa_golden.integratedcampaign_code_translation ic on code.codeid = ic.dfse_code_id
+left join idres_analytics.current_customer_graph ccg on pe.vanid  = ccg.source_primary_key and ccg.source = 'van' 
+where pe.channel ilike '%text%' and pe.solicitation_eligible is null),
+temptwo as (
+  select distinct m.id as message_id, m.organization_id, m.message,
+Case when m.organization_id = 'YDbnUdAlkz' then 'Votes'
+     when m.organization_id = 'KlCYrIYpcN' then 'C4 Dev'
+     when m.organization_id = '4LQvFELkle' then 'C3 Dev'
+     when m.organization_id = '0HjxEY9hPL' then 'PAC'
+     else null end as org_name,
+     g.name as group_name, m.direction, ak.vanid, ak.sf_contact_id, coalesce(van.resolved_id,rd.resolved_id) as ppid,
+     ak.ppid as old_ppid,
+     case when van.resolved_id is not null then 'van' when rd.resolved_id is not null then 'salesforce' else 'unknown' end as lead_source,
+     ak.phone_number, m.created_at as send_date, mg.name as outbound_goal, mg.type as ob_goal_type
+from hustle_20.messages m
+left join hustle_20.groups g on m.group_id = g.id
+left join hustle_20.workflows w on m.workflow_id = w.id
+left join hustle_20.goals mg on w.goal_id = mg.id
+left join hustle_projects.leads_standard ak on m.lead_id = ak.hustle_id
+left join idres_analytics.current_customer_graph van on ak.vanid = van.source_primary_key and van.source = 'van'
+left join idres_analytics.current_customer_graph rd on ak.sf_contact_id = rd.source_primary_key
+where m.organization_id  in ('0HjxEY9hPL') and direction = 'outbound' --ORG ID is PAC
+-- and m.message ilike '%sms.give%'
+order by m.created_at desc),
+three as (
+select t.bup_id, tt.*
+from temp t 
+join temptwo tt  on left(tt.outbound_goal,17) = t.par_sf_codename and t.ppid = tt.ppid
+order by t.bup_id),
+drop_dates as (
+select distinct bup_id, ppid, first_value(send_date) over(partition by bup_id
+order by send_date  desc
+rows between unbounded preceding and unbounded following) as drop_date
+from three),
+gm as (
+  select *, row_number() over (partition by ppid order by decode(membership,'Lifetime',3,'Contributing',2,'Associate',1) asc  ) as rank 
+    from ppfa_golden.golden_membership ship
+  where exists ( select 'x' from drop_dates b where ship.ppid = b.ppid and b.drop_date >= ship.start_date and (b.drop_date<= ship.end_date or ship.end_date is null)  
+               ) 
+      ),
+ gmm as (
+ select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
+        ),
+membership as(
+select distinct  b.*, Case when gmm.ppid is not null and b.drop_date is not null then 'Y' else 'N' end as solicitation_eligible,
+  gmm.membership, gmm.start_date, gmm.end_date
+from drop_dates b 
+left join gmm on b.ppid = gmm.ppid 
+  order by b.ppid)
+select * 
+from membership ;
+
+update rounddata.pac_eligibility
+set 
+drop_date = tg.drop_date,
+solicitation_eligible = tg.solicitation_eligible,
+membership = tg.membership,
+start_date = tg.start_date,
+end_date = tg.end_date,
+source = 'Linked Text Campaign'
+from text_gifts tg 
+where tg.bup_id = pac_eligibility.bup_id and pac_eligibility.solicitation_eligible is null ;
+
+-- Catch the rest
+create temporary table remainder as 
+with wm as(
+  select coalesce(ccg.resolved_id, 'Not in IDR') as ppid, pac.* 
+  from rounddata.pac_eligibility pac
+  left join idres_analytics.current_customer_graph ccg on pac.contact = ccg.source_primary_key
+  where (pac.solicitation_eligible is null or pac.solicitation_eligible = 'U') and contribution_id is null
+  union
+  select coalesce(ccg.resolved_id, 'Not in IDR') as ppid, pac.* 
+  from rounddata.pac_eligibility pac
+  left join idres_analytics.current_customer_graph ccg on pac.vanid = ccg.source_primary_key and ccg.source = 'van'
+  where (pac.solicitation_eligible is null or pac.solicitation_eligible = 'U') and contribution_id is not null
+),
+  sol as (
+    select wm.bup_id, wm.ppid, wm.deposit_date, golden_sol.date_sent as drop_date, wm.source, case when golden_sol.date_sent is null then 'No Solicitations' end as solicited
+    from wm
+    left join (select matchfield,source_communication_id,ppid,contact_id,date_sent,data_source,source_code,channel,van_id,onlineform_name,codeid, row_number() over(partition by ppid order by date_sent desc) as recency
+               From ppfa_golden.pac_solicitations_ak ) golden_sol on wm.ppid = golden_sol.ppid and recency = 1),
+   gm as (
+  select *, row_number() over (partition by ship.ppid order by decode(membership,'Lifetime',3,'Contributing',2,'Associate',1) asc  ) as rank 
+    from ppfa_golden.golden_membership ship
+  where exists ( select 'x' from sol  where ship.ppid = sol.ppid and sol.drop_date >= ship.start_date and (sol.drop_date<= ship.end_date or ship.end_date is null)  
+               ) 
+      ),
+ gmm as (
+ select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
+        ),
+        membership as(
+select distinct  b.*, Case when gmm.ppid is not null then 'Y' when b.ppid = 'Not in IDR' then 'U'  else 'N' end as solicitation_eligible, gmm.membership, gmm.start_date, gmm.end_date
+from sol b
+ left join gmm on b.ppid = gmm.ppid )
+  select distinct bup_id, ppid, deposit_date, drop_date, 
+  case when drop_date is null and solicitation_eligible = 'N' then 'Y' 
+  else solicitation_eligible end as solicitation_eligible,
+ case when drop_date is null and solicitation_eligible <> 'U' then  left(source,40)||' - unsolicited' 
+ when solicitation_eligible <> 'U' then left(source,40)||' - Not in IDR' 
+ when source like ' - solicited' then left(source, 60)
+ else left(source,40)||' - solicited' end as source,membership, start_date, end_date 
+  from  membership;
+  
+update rounddata.pac_eligibility  set 
+solicitation_eligible = wm.solicitation_eligible,
+drop_date = wm.drop_date,
+membership = wm.membership,
+start_date = wm.start_date,
+end_date = wm.end_date,
+source = wm.source
+from remainder wm where wm.bup_id = pac_eligibility.bup_id and (pac_eligibility.solicitation_eligible is null or pac_eligibility.solicitation_eligible = 'U') ;
+
+
+----FIX FOR TEXT GIFTS WITH NEW VAN IDS BEING CREATED (The data sharing issue between the EA committees)
+
+create temporary table text_new_van_ids as
+with temp as (select distinct  pe.bup_id, pe.contribution_id ,code.codeid, ccg.resolved_id as ppid,  ic.*
+from rounddata.pac_eligibility pe 
+join vansync.ppfa_contactscontributionscodes_mym con on pe.contribution_id  = con.contactscontributionid
+join vansync.ppfa_codes_mym code on con.codeid = code.codeid
+join ppfa_golden.integratedcampaign_code_translation ic on code.codeid = ic.dfse_code_id
+left join idres_analytics.current_customer_graph ccg on pe.contact  = ccg.source_primary_key 
+where pe.channel ilike '%text%' and (pe.solicitation_eligible is null or pe.solicitation_eligible = 'U')),
+temptwo as (
+  select distinct m.id as message_id, m.organization_id, m.message,
+Case when m.organization_id = 'YDbnUdAlkz' then 'Votes'
+     when m.organization_id = 'KlCYrIYpcN' then 'C4 Dev'
+     when m.organization_id = '4LQvFELkle' then 'C3 Dev'
+     when m.organization_id = '0HjxEY9hPL' then 'PAC'
+     else null end as org_name,
+     g.name as group_name, m.direction, ak.vanid, ak.sf_contact_id, coalesce(van.resolved_id,rd.resolved_id) as ppid,
+     ak.ppid as old_ppid,
+     case when van.resolved_id is not null then 'van' when rd.resolved_id is not null then 'salesforce' else 'unknown' end as lead_source,
+     ak.phone_number, m.created_at as send_date, mg.name as outbound_goal, mg.type as ob_goal_type
+from hustle_20.messages m
+left join hustle_20.groups g on m.group_id = g.id
+left join hustle_20.workflows w on m.workflow_id = w.id
+left join hustle_20.goals mg on w.goal_id = mg.id
+left join hustle_projects.leads_standard ak on m.lead_id = ak.hustle_id
+left join idres_analytics.current_customer_graph van on ak.vanid = van.source_primary_key and van.source = 'van'
+left join idres_analytics.current_customer_graph rd on ak.sf_contact_id = rd.source_primary_key
+where m.organization_id  in ('0HjxEY9hPL') and direction = 'outbound' --ORG ID is PAC
+-- and m.message ilike '%sms.give%'
+order by m.created_at desc),
+three as (
+select t.bup_id, tt.*
+from temp t 
+join temptwo tt  on left(tt.outbound_goal,17) = t.par_sf_codename and t.ppid = tt.ppid
+order by t.bup_id),
+drop_dates as (
+select distinct bup_id, ppid, first_value(send_date) over(partition by bup_id
+order by send_date  desc
+rows between unbounded preceding and unbounded following) as drop_date
+from three),
+gm as (
+  select *, row_number() over (partition by ppid order by decode(membership,'Lifetime',3,'Contributing',2,'Associate',1) asc  ) as rank 
+    from ppfa_golden.golden_membership ship
+  where exists ( select 'x' from drop_dates b where ship.ppid = b.ppid and b.drop_date >= ship.start_date and (b.drop_date<= ship.end_date or ship.end_date is null)  
+               ) 
+      ),
+ gmm as (
+ select * from gm where rank = (select max(rank) from gm t where t.ppid = gm.ppid)
+        ),
+membership as(
+select distinct  b.*, Case when gmm.ppid is not null and b.drop_date is not null then 'Y' else 'N' end as solicitation_eligible,
+  gmm.membership, gmm.start_date, gmm.end_date
+from drop_dates b 
+left join gmm on b.ppid = gmm.ppid 
+  order by b.ppid)
+select * 
+from membership;
+
+update rounddata.pac_eligibility
+set 
+drop_date = tg.drop_date,
+solicitation_eligible = tg.solicitation_eligible,
+membership = tg.membership,
+start_date = tg.start_date,
+end_date = tg.end_date,
+source = 'Linked Text Campaign'
+from text_new_van_ids tg 
+where tg.bup_id = pac_eligibility.bup_id and (pac_eligibility.solicitation_eligible is null or pac_eligibility.solicitation_eligible = 'U')  ; 
+
+
+
+select * from rounddata.pac_eligibility where solicitation_eligible = 'N' or solicitation_eligible is null or solicitation_eligible = 'U';
 
 
 
