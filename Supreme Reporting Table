@@ -783,6 +783,16 @@ where ngoc_accountid = t.accountid and ppid is null;
 update rounddata.supreme_reporting_table  
 set giving_level_pre_gift = coalesce( ( select giving_level from rounddata.giving_level_history glh where rounddata.supreme_reporting_table.ngoc_accountid = glh.rc_bios__account and  rounddata.supreme_reporting_table.closedate > glh.start_date and rounddata.supreme_reporting_table.closedate < coalesce(glh.end_date, '01-01-2050') order by value asc limit 1  ), 'Low Dollar');
  
+-- GAU Description and Category via Case 164733
+Alter table rounddata.supreme_reporting_table add column gau_credit_code_description varchar(150);
+Alter table rounddata.supreme_reporting_table add column gau_credit_code_category varchar(25);
+
+update rounddata.supreme_reporting_table set 
+gau_credit_code_description = gau.rc_giving__description ,
+gau_credit_code_category = gau.gl_category 
+from rounddata.rc_giving__gau gau 
+where gau.namex = rounddata.supreme_reporting_table.gau_credit_code and gau.delete_flag = 'N';
+
  -- Creates Backup
  drop table if exists rounddata.supreme_reporting_table_backup;
  create table rounddata.supreme_reporting_table_backup as 
