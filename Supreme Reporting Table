@@ -34,6 +34,7 @@ CREATE TABLE rounddata.supreme_reporting_table (
 ,business_unit           VARCHAR(19)    DEFAULT NULL
 ,group_code              VARCHAR(21)    DEFAULT NULL
 ,campaign_code           VARCHAR(25)    DEFAULT NULL
+,technique               VARCHAR(25)    DEFAULT NULL -- added via case 165733
 ,fiscal_month            VARCHAR(2)    DEFAULT NULL
 ,fiscal_year             VARCHAR(42)    DEFAULT NULL
 ,First_Gift_Natl_c3      VARCHAR(12)    DEFAULT 'N'
@@ -232,6 +233,7 @@ end as cfp_shareable
          ,campaign.sourceCode_Activity_Group_Description AS group_code
          -- SUBSTR(opportunity.rc_giving__source_code,5,1) AS campaign_code
          ,campaign.sourceCode_Campaign_Description       AS campaign_code
+         ,campaign.sourcecode_effort_description as technique, --added via case 165733
          ,CASE WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
                WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opportunity.deposit_date):: char
                ELSE akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: char
@@ -456,6 +458,7 @@ end as cfp_shareable
          ,campaign.sourceCode_Activity_Group_Description AS group_code
          -- SUBSTR(opportunity.rc_giving__source_code,5,1) AS campaign_code
          ,campaign.sourceCode_Campaign_Description       AS campaign_code
+         ,campaign.sourcecode_effort_description         as technique   -- added via case 165733
          ,CASE WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
                WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opportunity.deposit_date):: char
                ELSE akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: char
@@ -701,6 +704,7 @@ end as cfp_shareable
           ,campaign.sourceCode_Activity_Group_Description AS group_code
          -- SUBSTR(opportunity.rc_giving__source_code,5,1) AS campaign_code
          ,campaign.sourceCode_Campaign_Description       AS campaign_code
+         ,campaign.sourcecode_effort_description         as technique -- added via case 165733
 --          ,parent_opportunity.ppfa_fiscal_month                                                                 fiscal_month
 --          ,parent_opportunity.ppfa_fiscal_year                                                                  fiscal_year
           ,opportunity.ppfa_fiscal_month                                                                 fiscal_month
