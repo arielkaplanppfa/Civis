@@ -337,6 +337,27 @@ from rounddata.rc_giving__gau gau
 where gau.namex = rounddata.supreme_reporting_table_bpp.gau_credit_code and gau.delete_flag = 'N';
 
 
+--Move TPP for Bookable Pledges to this table via case 165733
+create temporary table tpp as 
+select *
+from akaplan.srt_test 
+where data_source = 'CREDIT'
+and recordtype ilike 'TP%'
+and bookable = 'BC';
+
+Insert into rounddata.supreme_reporting_table_bpp
+(select * from tpp);
+
+delete from rounddata.supreme_reporting_table
+where data_source = 'CREDIT'
+and recordtype ilike 'TP%'
+and bookable = 'BC';
+
+delete from rounddata.supreme_reporting_table_backup
+where data_source = 'CREDIT'
+and recordtype ilike 'TP%'
+and bookable = 'BC';
+
 /* 
  -- Creates Backup
  drop table if exists rounddata.supreme_reporting_table_backup;
