@@ -561,7 +561,7 @@ end as cfp_shareable
           ,Coalesce(opportunity.rc_giving__giving_number,opportunity.pledge_number)                       pledge_number
           ,rc_giving__opportunity_credit.rc_giving__opportunity_stage                                          stagename
           ,rc_giving__opportunity_credit.rc_giving__archive_flag                                               rc_giving__archive_flag
-          ,NULL                                                                                                bookable
+          , Case opportunity.rc_giving__is_bookable = 'true' then 'BC' else null end                              bookable  -- added via case 165733
           ,NULL                                                                                                payment_method
           ,rc_giving__opportunity_credit.gau_code_credit                                                       gau_credit_code
           ,NULL                                                                                                gau_debit_code
