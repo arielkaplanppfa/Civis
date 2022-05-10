@@ -562,9 +562,9 @@ end as cfp_shareable
           ,rc_giving__opportunity_credit.rc_giving__opportunity_stage                                          stagename
           ,rc_giving__opportunity_credit.rc_giving__archive_flag                                               rc_giving__archive_flag
           , Case when opportunity.rc_giving__is_bookable = 'true' then 'BC' else null end                              bookable  -- added via case 165733
-          ,NULL                                                                                                payment_method
-          ,rc_giving__opportunity_credit.gau_code_credit                                                       gau_credit_code
-          ,NULL                                                                                                gau_debit_code
+          ,opportunity.rc_giving__payment_method                                                               payment_method
+          ,rc_giving__opportunity_credit.gau_code_credit                                                       gau_credit_code -- added via case 165733
+          ,opportunity.gau_debit_code                                                                          gau_debit_code -- added via case 165733
           ,rc_giving__opportunity_credit.soft_credit_type                                                              recordtype
           ,CASE WHEN rc_giving__opportunity_credit.gau_code_credit IN
                  ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') -- added C340100TR422ONL per case 52904
