@@ -242,7 +242,7 @@ update ppfa_golden.catalist_source
 set email = u.email
 From (
   select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datefirstread desc) as "email_rank"
-  from ppfa_golden.current_customer_graph g join vansync.ppfa_contactsemailbatches_mym e on g.source_primary_key = e.vanid
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contactsemailbatches_mym_alltime e on g.source_primary_key = e.vanid
   where datebounced is null ) u
   where catalist_source.resolved_id = u.resolved_id
   and u.email_rank = 1;
@@ -280,9 +280,11 @@ From (
   update ppfa_golden.catalist_source
 set email = u.email
 From (
-  select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "email_rank"
-  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym e on g.source_primary_key = e.vanid
-  where email is not null ) u
+  select g.resolved_id, ce.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "email_rank"
+  from ppfa_golden.current_customer_graph g 
+  join vansync.ppfa_contacts_mym e on g.source_primary_key = e.vanid
+  join vansync.ppfa_contactsemails_mym ce on e.emailid = ce.contactsemailid and e.vanid = ce.vanid 
+  where ce.email is not null  ) u
   where catalist_source.resolved_id = u.resolved_id
   and u.email_rank = 1 and catalist_source.email is null;
   
