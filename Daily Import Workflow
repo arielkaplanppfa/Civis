@@ -95,13 +95,27 @@ workflow:
         job_id: 48609005
       on-success:
         - Sustainer_Payments_Table_Build_52572822
-        - Case_46027___Supreme_Reporting_Table_Build_72767348
+        - Campaign_Import_18880719                                 
     Import_Fail___Opportunity_48609396:
       action: civis.run_job
       input:
         job_id: 48609396
       on-success:
         - Sustainer_Payments_Table_Build_52572822
+        - Campaign_Import_18880719
+    Campaign_Import_18880719:
+      action: civis.run_job
+      input:
+        job_id: 18880719
+      join: 1
+      on-success:
+        - V_Campaign_Import_72791132
+    V_Campaign_Import_72791132:
+      action: civis.run_job
+      input:
+        job_id: 72791132
+      join: 1
+      on-success:
         - Case_46027___Supreme_Reporting_Table_Build_72767348
     Case_46027___Supreme_Reporting_Table_Build_72767348:
       action: civis.run_job
