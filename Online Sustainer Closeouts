@@ -16,7 +16,7 @@ Case when rc_bios__active ilike 'true' then 'Active' else 'Inactive' end as pref
   when rc_bios__type ilike '%C3%' then 'PPFA C3'
   when rc_bios__type ilike '%C4%' then 'PPAF C4'
   when rc_bios__type ilike '%votes%' then 'PP Votes' else 'Unknown' end as pref_entity, p.id as pref_id
-from rounddata.active_online_sustainers s
+from rounddata.active_online_sustainers s    ---Keep in mind when this table builds
 join rounddata.rc_bios__preference p on s.id = p.rc_bios__account and p.rc_bios__subcategory = 'Sustainer' and p.rc_bios__type ilike '%C3%online%' and  rc_bios__active ilike 'true'
 where (s.entity ilike '%C3%' or s.entity ilike '%direct%C3%' or s.entity ilike '%high%c3%') and p.delete_flag <> 'Y')
 select * from temp;
@@ -142,7 +142,10 @@ join rounddata.rc_bios__preference p on aos.id = p.id
 join rounddata.contact t on p.rc_bios__account = t.accountid
 join rounddata.additional_contact_info aci on aci.contact = t.id
 join 
-(select c.email, cc.* from vansync.ppfa_contacts_mym c join vansync.ppfa_contactsrecurringcontributions_mym cc on c.vanid = cc.vanid 
+(select em.email, cc.* 
+from vansync.ppfa_contacts_mym c
+join vansync.ppfa_contactsemails_mym em on c.vanid = em.vanid and c.emailid = em.contactsemailid
+join vansync.ppfa_contactsrecurringcontributions_mym cc on c.vanid = cc.vanid 
 where  recurringcontributionstatusid in (1,3,5) and cc.committeeid in (9816, 11607,68255,74821,72220,65401,72219)  )  crc on aci.valuex = crc.email )
 select * from temp --where POSITION(pop IN entity ) = 0 
 ; -- Position finds records in the same entity 
@@ -153,7 +156,12 @@ select * from temp --where POSITION(pop IN entity ) = 0
  delete from rounddata.online_sustainer_closeouts 
  where rc_bios__comments__c in ('Preference Closed for unknown reason','C3 Online Preference Closed out','C4 Online Preference Closed out');
   
-  Select * from rounddata.online_sustainer_closeouts;
+  drop table if exists rounddata_dev.sus_prefs_to_close;
+  create table rounddata_dev.sus_prefs_to_close as 
+  Select id, rc_bios__end_date__c, rc_bios__active__c, rc_bios__comments__c 
+  from rounddata.online_sustainer_closeouts;
+  
+  select * from rounddata.online_sustainer_closeouts;
   
   
  /* 
