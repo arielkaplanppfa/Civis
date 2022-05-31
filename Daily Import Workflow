@@ -80,11 +80,6 @@ workflow:
         - Import_Success_Contact_Address_52050253
       on-error:
         - Import_Fail_Contact_Address_52050260
-    Sustainer_Payments_Table_Build_52572822:
-      action: civis.run_job
-      input:
-        job_id: 52572822
-      join: 1
     IDR___New_Record_Append_62546388:
       action: civis.run_job
       input:
@@ -94,15 +89,15 @@ workflow:
       input:
         job_id: 48609005
       on-success:
-        - Sustainer_Payments_Table_Build_52572822
-        - Campaign_Import_18880719                                 
+        - Campaign_Import_18880719
+        - Sustainer_Payments_Table_Build_V2___WIP___ACR_QC_155478753
     Import_Fail___Opportunity_48609396:
       action: civis.run_job
       input:
         job_id: 48609396
       on-success:
-        - Sustainer_Payments_Table_Build_52572822
         - Campaign_Import_18880719
+        - Sustainer_Payments_Table_Build_V2___WIP___ACR_QC_155478753
     Campaign_Import_18880719:
       action: civis.run_job
       input:
@@ -280,3 +275,8 @@ workflow:
       action: civis.run_job
       input:
         job_id: 100476641
+    Sustainer_Payments_Table_Build_V2___WIP___ACR_QC_155478753:
+      action: civis.run_job
+      input:
+        job_id: 155478753
+      join: 1
