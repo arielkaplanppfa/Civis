@@ -1,0 +1,806 @@
+Drop table if exists ppfa_golden.golden_opportunities; 
+
+CREATE  temporary TABLE srt_temp (
+ closedate               DATETIME      DEFAULT NULL
+,deposit_date            DATETIME      DEFAULT NULL
+,datepulled              DATETIME
+,amount                  DECIMAL(38,2) DEFAULT NULL
+,data_source             VARCHAR(15)   NOT NULL
+,etl_id                  INT       NOT NULL
+,delete_flag             VARCHAR(24)    NOT NULL
+,affiliate_number        VARCHAR(100)  DEFAULT NULL
+,channel                 VARCHAR(30)   DEFAULT NULL
+,payment_subtype         varchar(30)
+,is_sustainer            VARCHAR(7)    DEFAULT NULL
+,ngoc_accountid          VARCHAR(18)   DEFAULT NULL
+,parent_transaction_id   VARCHAR(18)   DEFAULT NULL
+,transaction_id          VARCHAR(18)   DEFAULT NULL
+,contribution_id         VARCHAR(50)   DEFAULT NULL
+,recurringcontribution_id VARCHAR(50)   DEFAULT NULL
+,createdbyid             VARCHAR(18)   DEFAULT NULL
+,lastmodifiedbyid        VARCHAR(18)   DEFAULT NULL
+,source_code             VARCHAR(150)  DEFAULT NULL
+,original_source_code    VARCHAR(25)   DEFAULT NULL
+,pledge_number           VARCHAR(150)  DEFAULT NULL
+,stagename               VARCHAR(150)  DEFAULT NULL
+,rc_giving__archive_flag VARCHAR(5)    DEFAULT NULL
+,bookable                VARCHAR(6)    DEFAULT NULL
+,payment_method          VARCHAR(150)  DEFAULT NULL
+,gau_credit_code         VARCHAR(30)   DEFAULT NULL
+,gau_debit_code          VARCHAR(50)   DEFAULT NULL --- CB 9/18/21 changed size to 50
+,recordtype              VARCHAR(80)   DEFAULT NULL
+,is_pass_through         INT      DEFAULT NULL
+,cfp_shareable           VARCHAR(7)    DEFAULT NULL
+,is_local                VARCHAR(8)    DEFAULT NULL
+,entity                  VARCHAR(3)    DEFAULT NULL
+,office                  VARCHAR(41)    DEFAULT NULL
+,business_unit           VARCHAR(19)    DEFAULT NULL
+,group_code              VARCHAR(21)    DEFAULT NULL
+,campaign_code           VARCHAR(25)    DEFAULT NULL
+,technique               VARCHAR(25)    DEFAULT NULL -- added via case 165733
+,fiscal_month            VARCHAR(2)    DEFAULT NULL
+,fiscal_year             VARCHAR(42)    DEFAULT NULL
+,First_Gift_Natl_c3      VARCHAR(12)    DEFAULT 'N'
+,First_Gift_Natl_c4      VARCHAR(13)    DEFAULT 'N'
+,Donor_c3_affil_number   VARCHAR(22)   DEFAULT NULL
+,Donor_C4_affil_number   VARCHAR(23)   DEFAULT NULL
+,Adjusted                VARCHAR(14)    DEFAULT NULL
+,IsGivingVehicle         VARCHAR(15)
+,Credit_Type             VARCHAR(43)
+,Giving_level_pre_gift   VARCHAR(24)    DEFAULT NULL
+,Giving_Number           VARCHAR(500)
+,reportable_revenue      varchar(26)
+,has_soft_credit         varchar(27)
+,ppid                    varchar(30)
+,gau_credit_code_description varchar(150)
+,gau_credit_code_category varchar(25)
+);
+
+---Table for has_soft_credit field
+DROP TABLE IF EXISTS akaplan.mv_soft_credit_opportunities ;
+  CREATE TABLE akaplan.mv_soft_credit_opportunities (rC_Giving__Opportunity VARCHAR(18), PRIMARY KEY (rC_Giving__Opportunity) ) ;
+  INSERT INTO akaplan.mv_soft_credit_opportunities   --- CB 9/20/21 added "akaplan."
+  SELECT DISTINCT rC_Giving__Opportunity AS rc_giving__opportunity
+  FROM rounddata.rc_giving__opportunity_credit
+  WHERE delete_flag<>'Y' OR rc_giving__archive_flag ilike 'true'  ;
+ 
+-- Giving Vehicle Preferences
+drop table if exists akaplan.rc_bios__preference_vehicle;
+create table akaplan.rc_bios__preference_vehicle as 
+( select distinct rc_bios__account from rounddata.rc_bios__preference where delete_flag <> 'Y' and rc_bios__active ilike 'true' and rc_bios__subcategory = 'Giving Vehicle' );
+  
+    
+    
+INSERT INTO srt_temp (  
+  --------------------------
+  --TRANSACTIONS
+  --------------------------
+    SELECT opportunity.closedate                                                                              closedate
+         ,CASE WHEN opportunity.deposit_date IS NOT NULL THEN opportunity.deposit_date
+               ELSE opportunity.adjusted_deposit_date
+          END                                                                                                 deposit_date
+         ,SYSDATE                                                                                             datepulled
+         ,coalesce(opportunity.final_amount, opportunity.amount)                                             amount
+         ,recordtype.namex                                                                                    data_source
+         ,opportunity.etl_id                                                                                  etl_id
+         ,opportunity.delete_flag                                                                             delete_flag
+         ,opportunity.affiliate_number                                                                        affiliate_number
+         ,campaign.rc_giving__channel                                                                         channel
+         ,rc_giving__payment_method.payment_subtype                                                           payment_subtype
+         ,CASE WHEN parent_opportunity.rc_giving__is_sustainer ilike 'true'
+               THEN 'offline'
+               WHEN campaign.SourceCode_Campaign_Code = 'W'
+               THEN 'online'
+               WHEN opportunity.rc_giving__comments = 'SUST  C4 ONLINE' or opportunity.rc_giving__comments = 'SUST  C3 ONLINE' or opportunity.rc_giving__comments = 'SUST  VOTES ONLINE'
+               THEN 'online'
+               ELSE NULL
+          END                                                                                                 is_sustainer
+         ,opportunity.accountid                                                                               ngoc_accountid
+         ,opportunity.rc_giving__parent                                                                       parent_transaction_id
+         ,opportunity.id                                                                                      transaction_id
+         ,Case when parent_opportunity.originator = 'EveryAction' 
+                then parent_opportunity.acquired_batch_seq
+                else null end                                                                                 contribution_id
+         ,Case when parent_opportunity.originator = 'EveryAction' 
+               then parent_opportunity.Opportunity_External_ID 
+               else null end                                                                                  recurringcontribution_id
+         ,opportunity.createdbyid                                                                             createdbyid
+         ,opportunity.lastmodifiedbyid                                                                        lastmodifiedbyid
+         ,opportunity.rc_giving__source_code                                                                  source_code
+         ,opportunity.original_source_code                                                                    original_source_code
+         ,CASE WHEN recordtype.namex = 'Pledge Payment'
+               THEN opportunity.pledge_number
+               ELSE parent_opportunity.opportunity_external_id
+          END                                                                                                 pledge_number
+         ,opportunity.stagename                                                                               stagename
+         ,opportunity.rc_giving__archive_flag                                                                 rc_giving__archive_flag
+         ,parent_opportunity.rc_giving__is_bookable                                                           bookable
+         ,opportunity.rc_giving__payment_method                                                               payment_method
+         ,opportunity.gau_credit_code                                                                         gau_credit_code
+         ,opportunity.gau_debit_code                                                                          gau_debit_code
+         ,recordtype.namex                                                                                    recordtype
+         ,CASE WHEN opportunity.gau_credit_code IN
+               ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') -- added C340100TR422ONL per case 52904
+               THEN 1
+               ELSE 0
+          END   is_pass_through
+        ,CASE
+when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN opportunity.gau_credit_code = 'C340105UR422ONL' THEN 'N' --Case 114606
+WHEN opportunity.closedate >= '2011-07-01' and (
+opportunity.gau_credit_code like '_9001%' --Blanket to catch old GAU's   --- This is catching Gifts before the jouin dates202020
+  OR opportunity.gau_credit_code like '_9002%' 
+  OR opportunity.gau_credit_code like '_9003%' 
+  OR opportunity.gau_credit_code like '_9004%'
+  OR opportunity.gau_credit_code like '_9005%')
+THEN 'Y'
+/*
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date)
+     and  
+     ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) ) */
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date or (campaign.sourcecode_office_code in ('N','C') and cfp.join_date is not null and opportunity.closedate <= cfp.end_date) )
+ AND (
+        --campaign.sourcecode_office_code in ('N','C') 
+        --  AND 
+                       (
+                           substring(opportunity.gau_credit_code,1,3) = 'C34'
+                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
+                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND cfp.affiliate_number is not null and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) -- Active period of Affiliate
+                       ) 
+                       OR
+                       ( 
+                            opportunity.gau_credit_code = 'C340210UR480PMG' 
+                       )
+					            OR
+					             ( 
+					                  substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                       )
+                      OR 
+					             (  
+					              opportunity.gau_credit_code like '%CFP%'
+                        )
+				              OR --Non Affiliate Specific Old GAU
+				              (
+				                    opportunity.gau_credit_code like '_9001%'
+                         OR opportunity.gau_credit_code like '_9002%'
+                         OR opportunity.gau_credit_code like '_9003%'
+                         OR opportunity.gau_credit_code like '_9004%'
+                         OR opportunity.gau_credit_code like '_9005%'
+				              )
+	  )
+THEN 'Y'
+WHEN  ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date) and opportunity.gau_credit_code like '%CFP' THEN 'Y' -- this should catch online gifts 
+WHEN  opportunity.closedate >= '2019-07-01'
+      and  opportunity.closedate >= cfp.join_date --Planned Giving
+      and cfp.affiliate_number is not null 
+	    and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) 
+      and (
+	         ( campaign.SourceCode_Activity_Type_Code = '3NP'
+              and 
+			        substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+		      	)
+			      OR 
+		      	( 
+			        substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+			      )
+		      )    
+THEN 'Y'  
+/*
+EN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) )
+      AND 
+                (
+                     (
+				                    opportunity.gau_credit_code like '_9001%'
+                         OR opportunity.gau_credit_code like '_9002%'
+                         OR opportunity.gau_credit_code like '_9003%'
+                         OR opportunity.gau_credit_code like '_9004%'
+                         OR opportunity.gau_credit_code like '_9005%'
+				              ) 
+				              OR
+                    (
+                            substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                     )
+                )
+THEN 'Y'*/ else 'N' 
+end as cfp_shareable
+         ,CASE 
+  WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+      AND  opportunity.gau_credit_code NOT LIKE '%CFP%'
+  THEN 'Y'
+  ELSE 'N'
+  END   AS is_local
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '3'
+         --      THEN 'C3'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '4'
+         --      THEN 'C4'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '5'
+         --      THEN 'PAC'
+         -- END AS entity
+         ,campaign.SourceCode_Tax_Status_Description AS entity
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'N'
+         --      THEN 'PPFA'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'L'
+         --      THEN 'PPIL'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'P'
+         --      THEN 'PPSP'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'A'
+         --      THEN 'PPAZ'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'E'
+         --      THEN 'PPSE'
+         -- END AS office
+         ,campaign.sourceCode_Office_description AS office
+         -- SUBSTR(opportunity.rc_giving__source_code,3,1) AS business_unit
+         ,campaign.sourceCode_Business_Unit_Description    AS business_unit
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'L'
+         --      THEN 'Low'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'D'
+         --      THEN 'Mid'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'M'
+         --      THEN 'Major'
+         -- END AS group_code
+         ,campaign.sourceCode_Activity_Group_Description AS group_code
+         -- SUBSTR(opportunity.rc_giving__source_code,5,1) AS campaign_code
+         ,campaign.sourceCode_Campaign_Description       AS campaign_code
+         ,campaign.sourcecode_effort_description as technique --added via case 165733
+         ,CASE WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opportunity.deposit_date):: char
+               ELSE akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: char
+          END
+         ,CASE WHEN opportunity.ppfa_fiscal_year IS NOT NULL THEN opportunity.ppfa_fiscal_year
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(opportunity.deposit_date)
+               ELSE akaplan.ppfa_fiscal_year(opportunity.adjusted_deposit_date)
+          END
+         ,CASE WHEN opportunity.id = (SELECT c3_first_gift_id
+                                  FROM rounddata.giving_summary x
+                                  WHERE x.accountid = opportunity.accountid
+                                 )
+               THEN 'Y'
+               ELSE 'N'
+          END                                              AS First_Gift_Natl_c3
+         ,CASE WHEN opportunity.id = (SELECT c4_first_gift_id
+                                  FROM rounddata.giving_summary x
+                                  WHERE x.accountid = opportunity.accountid
+                                     )
+               THEN 'Y'
+               ELSE 'N'
+          END                                            AS First_Gift_Natl_c4
+         ,a.c3_affiliate_number                          AS Donor_c3_affil_number
+         ,a.c4_affiliate_number                          AS Donor_C4_affil_number
+         ,CASE WHEN opportunity.adjusted ilike 'TRUE'
+               THEN 'Y'
+               ELSE 'N'
+          END                                            AS Adjusted
+         ,CASE WHEN vehicle.rc_bios__account IS NOT NULL
+               THEN 'Y'
+               ELSE 'N'
+           END                                           AS IsGivingVehicle
+         ,'HARD'                                         AS Credit_Type
+         ,NULL                                           AS Giving_level_pre_gift
+         ,opportunity.rC_Giving__Giving_Number           AS Giving_Number
+         ,CASE WHEN recordtype.namex = 'Transaction'
+               AND opportunity.stagename = 'Completed'
+               THEN 1
+               WHEN recordtype.namex ilike 'Pledge Payment'
+               AND  opportunity.stagename  ilike 'Completed'
+               AND  parent_opportunity.rc_giving__is_bookable ilike 'FALSE'
+               THEN 1
+               WHEN recordtype.namex = 'Pledge'
+               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete') -- Include Open Stage per upcoming case
+               THEN 1
+               ELSE 0
+          END             AS reportable_revenue
+         ,CASE WHEN soft_credit.rc_giving__opportunity IS NOT NULL THEN 'TRUE'
+               ELSE NULL
+          END       as has_soft_credit
+          ,null as ppid
+          ,null as gau_credit_code_description
+          ,null as gau_credit_code_category
+FROM rounddata.opportunity opportunity
+--JOIN supremeReporting_ID_tracker tracker                         ON opportunity.etl_id = tracker.etl_id
+--    AND tracker.seq >= i
+--    AND tracker.seq <= i + i_batch_size
+JOIN rounddata.v_campaign campaign  ON opportunity.rc_giving__source_code = campaign.unique_source_code
+JOIN rounddata.recordtype recordtype  ON opportunity.recordtypeid = recordtype.id
+JOIN rounddata.accountx a   ON a.id = opportunity.accountid
+JOIN rounddata.opportunity parent_opportunity ON opportunity.rc_giving__parent = parent_opportunity.id
+LEFT JOIN rounddata.rc_giving__payment_method rc_giving__payment_method  ON opportunity.rc_giving__payment_method_sele = rc_giving__payment_method.id
+LEFT JOIN rounddata.cfp_log cfp on opportunity.affiliate_number = cfp.affiliate_number
+Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
+LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle ON opportunity.accountid = vehicle.rc_bios__account
+-- 
+LEFT JOIN akaplan.mv_soft_credit_opportunities   soft_credit  ON soft_credit.rc_giving__opportunity = opportunity.rc_giving__parent
+-- 
+WHERE recordtype.namex in ('Transaction','Pledge Payment')
+AND opportunity.stagename = 'Completed'
+AND parent_opportunity.rc_giving__is_bookable ilike 'false'
+AND ( opportunity.delete_flag <>'Y' OR opportunity.rc_giving__archive_flag ilike 'TRUE')
+AND opportunity.amount>0   -- added 20190520 by cdelja to remove adjustments
+UNION ALL
+    -- --------------------------------------------
+    --
+    -- Pledges
+    --
+    -- --------------------------------------------
+SELECT opportunity.closedate                                                                              closedate
+         ,CASE WHEN opportunity.deposit_date IS NOT NULL THEN opportunity.deposit_date
+               ELSE opportunity.adjusted_deposit_date
+          END                                                                                                 deposit_date
+         ,SYSDATE                                                                                           datepulled
+         -- ,opportunity.RC_GIVING__EXPECTED_GIVING_AMO                                     amount changed to rc_giving__current_giving_amou by cdelja 20190520
+         ,opportunity.rc_giving__current_giving_amou                                                           amount
+         ,'PLEDGE'                                                                                            data_source
+         ,opportunity.etl_id                                                                                  etl_id
+         ,opportunity.delete_flag                                                                             delete_flag
+         ,opportunity.affiliate_number                                                                        affiliate_number
+         ,campaign.rc_giving__channel                                                                         channel
+         ,rc_giving__payment_method.payment_subtype                                                           payment_subtype
+         ,NULL                                                                                                is_sustainer
+         ,opportunity.accountid                                                                               ngoc_accountid
+         ,opportunity.rc_giving__parent                                                                       parent_transaction_id
+         ,opportunity.id                                                                                      transaction_id
+         ,null                                                                                                contribution_id
+         ,null                                                                                                recurringcontribution_id
+         ,opportunity.createdbyid                                                                             createdbyid
+         ,opportunity.lastmodifiedbyid                                                                        lastmodifiedbyid
+         ,opportunity.rc_giving__source_code                                                                  source_code
+         ,opportunity.original_source_code                                                                    original_source_code
+         ,opportunity.opp_giving_number                                                                                                 pledge_number
+         ,opportunity.stagename                                                                               stagename
+         ,opportunity.rc_giving__archive_flag                                                                 rc_giving__archive_flag
+         ,opportunity.rc_giving__is_bookable                                                                  bookable
+         ,opportunity.rc_giving__payment_method                                                               payment_method
+         ,opportunity.gau_credit_code                                                                         gau_credit_code
+         ,opportunity.gau_debit_code                                                                          gau_debit_code
+         ,recordtype.namex                                                                                    recordtype
+         ,CASE WHEN opportunity.gau_credit_code IN
+                ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') -- added C340100TR422ONL per case 52904
+               THEN 1
+               ELSE 0
+          END   is_pass_through
+         ,CASE
+when opportunity.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN opportunity.gau_credit_code = 'C340105UR422ONL' THEN 'N' -- Case 114606
+WHEN opportunity.closedate >= '2011-07-01' and (
+opportunity.gau_credit_code like '_9001%' --Blanket to catch old GAU's   --- This is catching Gifts before the jouin dates202020
+  OR opportunity.gau_credit_code like '_9002%' 
+  OR opportunity.gau_credit_code like '_9003%' 
+  OR opportunity.gau_credit_code like '_9004%'
+  OR opportunity.gau_credit_code like '_9005%') THEN 'Y'
+/*
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date)
+     and  
+     ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) ) */
+WHEN (opportunity.closedate >= cfp.join_date or opportunity.closedate >= ccode.join_date or (campaign.sourcecode_office_code in ('N','C') and cfp.join_date is not null and opportunity.closedate <= cfp.end_date) )
+ AND (
+        --campaign.sourcecode_office_code in ('N','C') 
+        --  AND 
+                       (
+                           substring(opportunity.gau_credit_code,1,3) = 'C34'
+                       AND substring(opportunity.gau_credit_code,8,2) = 'UR'
+                       AND substring(opportunity.gau_credit_code,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND cfp.affiliate_number is not null and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) -- Active period of Affiliate
+                       ) 
+                       OR
+                       ( 
+                          opportunity.gau_credit_code = 'C340210UR480PMG' 
+                       )
+					            OR
+					             ( 
+					                  substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                       )
+                      OR 
+					             (  
+					              opportunity.gau_credit_code like '%CFP%'
+                        )
+				              OR --Non Affiliate Specific Old GAU
+				              (
+				                    opportunity.gau_credit_code like '_9001%'
+                         OR opportunity.gau_credit_code like '_9002%'
+                         OR opportunity.gau_credit_code like '_9003%'
+                         OR opportunity.gau_credit_code like '_9004%'
+                         OR opportunity.gau_credit_code like '_9005%'
+				              )
+	  )
+THEN 'Y'
+WHEN  ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date) and opportunity.gau_credit_code like '%CFP' THEN 'Y' -- this should catch online gifts 
+WHEN  opportunity.closedate >= '2019-07-01'   --Planned Giving
+      and  opportunity.closedate >= cfp.join_date 
+      and cfp.affiliate_number is not null 
+	    and (cfp.end_date is null or opportunity.closedate <= cfp.end_date) 
+      and (
+	         ( campaign.SourceCode_Activity_Type_Code = '3NP'
+              and 
+			        substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+		      	)
+			      OR 
+		      	( 
+			        substring(opportunity.gau_credit_code,1,9) = 'C340600UR'
+			      )
+		      )    
+THEN 'Y'  /*
+WHEN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or opportunity.closedate <= ccode.end_date)) )
+      AND 
+                (
+                     (
+				                    opportunity.gau_credit_code like '_9001%'
+                         OR opportunity.gau_credit_code like '_9002%'
+                         OR opportunity.gau_credit_code like '_9003%'
+                         OR opportunity.gau_credit_code like '_9004%'
+                         OR opportunity.gau_credit_code like '_9005%'
+				              ) 
+				              OR
+                    (
+                            substring(opportunity.gau_credit_code,1,3) = 'C34'
+                        and substring(opportunity.gau_credit_code,8,2) = 'UR'
+                        and substring(opportunity.gau_credit_code,16,4) in ('A152','A113','A118','A126','A155')
+                     )
+                )
+THEN 'Y' else 'N'*/
+ else 'N'
+end as cfp_shareable
+,CASE 
+  WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+      AND  opportunity.gau_credit_code NOT LIKE '%CFP%'
+  THEN 'Y'
+  ELSE 'N'
+  END   AS is_local
+         ,campaign.SourceCode_Tax_Status_Description AS entity
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'N'
+         --      THEN 'PPFA'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'L'
+         --      THEN 'PPIL'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'P'
+         --      THEN 'PPSP'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'A'
+         --      THEN 'PPAZ'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'E'
+         --      THEN 'PPSE'
+         -- END AS office
+         ,campaign.sourceCode_Office_description AS office
+         -- SUBSTR(opportunity.rc_giving__source_code,3,1) AS business_unit
+         ,campaign.sourceCode_Business_Unit_Description    AS business_unit
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'L'
+         --      THEN 'Low'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'D'
+         --      THEN 'Mid'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'M'
+         --      THEN 'Major'
+         -- END AS group_code
+         ,campaign.sourceCode_Activity_Group_Description AS group_code
+         -- SUBSTR(opportunity.rc_giving__source_code,5,1) AS campaign_code
+         ,campaign.sourceCode_Campaign_Description       AS campaign_code
+         ,campaign.sourcecode_effort_description         as technique   -- added via case 165733
+         ,CASE WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opportunity.deposit_date):: char
+               ELSE akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: char
+          END
+         ,CASE WHEN opportunity.ppfa_fiscal_year IS NOT NULL THEN opportunity.ppfa_fiscal_year
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(opportunity.deposit_date)
+               ELSE akaplan.ppfa_fiscal_year(opportunity.adjusted_deposit_date)
+          END
+         ,CASE WHEN opportunity.id = (SELECT c3_first_gift_id
+                                  FROM rounddata.giving_summary x
+                                  WHERE x.accountid = opportunity.accountid
+                                     )
+               THEN 'Y'
+               ELSE 'N'
+          END                                              AS First_Gift_Natl_c3
+         ,CASE WHEN opportunity.id = (SELECT c4_first_gift_id
+                                  FROM rounddata.giving_summary x
+                                  WHERE x.accountid = opportunity.accountid
+                                     )
+               THEN 'Y'
+               ELSE 'N'
+          END                                            AS First_Gift_Natl_c4
+         ,a.c3_affiliate_number                          AS Donor_c3_affil_number
+         ,a.c4_affiliate_number                          AS Donor_C4_affil_number
+         ,CASE WHEN opportunity.adjusted ilike 'TRUE'
+               THEN 'Y'
+               ELSE 'N'
+          END                                            AS Adjusted
+         ,CASE WHEN vehicle.rc_bios__account IS NOT NULL
+               THEN 'Y'
+               ELSE 'N'
+           END                                           AS IsGivingVehicle
+         ,'HARD'                                         AS Credit_Type
+         ,NULL                                           AS Giving_level_pre_gift
+         ,opportunity.rC_Giving__Giving_Number           AS Giving_Number
+         ,CASE WHEN recordtype.namex ilike 'Transaction'
+               AND opportunity.stagename ilike 'Completed'
+               THEN 1
+               WHEN recordtype.namex ilike 'Pledge Payment'
+               AND  opportunity.stagename  ilike 'Completed'
+               AND  opportunity.rc_giving__is_bookable ilike 'FALSE'
+               THEN 1
+               WHEN recordtype.namex ilike 'Pledge'
+               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete','Open') --Include Open Stage as per upcoming case
+               THEN 1
+               ELSE 0
+          END                                     AS reportable_revenue
+         ,CASE WHEN soft_credit.rc_giving__opportunity IS NOT NULL THEN 'TRUE'
+               ELSE NULL
+          END                                           AS has_soft_credit
+          ,null as ppid
+          ,null as gau_credit_code_description
+          ,null as gau_credit_code_category
+    FROM rounddata.opportunity
+    JOIN rounddata.v_campaign campaign                                         ON opportunity.rc_giving__source_code = campaign.unique_source_code
+    JOIN rounddata.accountx a                                                  ON a.id = opportunity.accountid
+    JOIN rounddata.recordtype recordtype                                       ON opportunity.recordtypeid = recordtype.id
+    LEFT JOIN rounddata.rc_giving__payment_method rc_giving__payment_method  ON opportunity.rc_giving__payment_method_sele = rc_giving__payment_method.id
+     LEFT JOIN rounddata.cfp_log cfp on opportunity.affiliate_number = cfp.affiliate_number
+    Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
+    LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                    ON opportunity.accountid = vehicle.rc_bios__account
+    LEFT JOIN akaplan.mv_soft_credit_opportunities   soft_credit  ON soft_credit.rc_giving__opportunity = opportunity.id
+    WHERE recordtype.namex = 'Pledge'
+    AND   opportunity.rc_giving__is_bookable ilike 'true'
+    AND ( opportunity.delete_flag <>'Y' OR opportunity.rc_giving__archive_flag ilike 'TRUE')
+    AND opportunity.RC_GIVING__CURRENT_GIVING_AMOU > 0   -- added 20190520 by cdelja to remove adjustments
+    -- 20191114 cdelja changed opportunity.amount to opportunity.rc_giving__current_giving_amou per PPFA request
+    -- AND opportunity.amount>0
+   UNION ALL
+    -- --------------------------------------------
+    --
+    -- Credits
+    --
+    -- --------------------------------------------
+    SELECT  rc_giving__opportunity_credit.credit_close_date   -----Case 95929 -- Changed to credit close date from opp close date
+          ,CASE WHEN opportunity.Adjusted ilike'true'
+                THEN opportunity.Adjusted_Deposit_Date
+                WHEN opportunity.Adjusted ilike 'false'
+                THEN opportunity.Deposit_Date
+           END                                                                                                 deposit_date
+          ,SYSDATE                                                                                            datepulled
+          ,rc_giving__opportunity_credit.rC_Giving__Amount                                                     amount
+          ,'CREDIT'                                                                                            data_source
+          ,rc_giving__opportunity_credit.etl_id                                                                etl_id
+          ,rc_giving__opportunity_credit.delete_flag                                                           delete_flag
+          ,rc_giving__opportunity_credit.Affiliate_number                                                      affiliate_number
+          ,campaign.rc_giving__channel                                                                         channel                --Edited per case 108404
+          ,NULL                                                                                                payment_subtype
+          ,CASE WHEN opportunity.rc_giving__is_sustainer ilike 'true'
+               THEN 'offline'
+               WHEN campaign.SourceCode_Campaign_Code = 'W'
+               THEN 'online'
+               WHEN opportunity.rc_giving__comments = 'SUST  C4 ONLINE' or opportunity.rc_giving__comments = 'SUST  C3 ONLINE' or opportunity.rc_giving__comments = 'SUST  VOTES ONLINE'
+               THEN 'online'
+               ELSE NULL
+          END                                                                                                               is_sustainer
+          ,rc_giving__opportunity_credit.rC_Giving__Account                                                    ngoc_accountid
+          ,rc_giving__opportunity_credit.rC_Giving__Opportunity                                                parent_transaction_id
+          ,rc_giving__opportunity_credit.id                                                                    transaction_id
+         ,Case when opportunity.originator = 'EveryAction' 
+                then opportunity.acquired_batch_seq
+                else null end                                                                                 contribution_id
+         ,Case when opportunity.originator = 'EveryAction' 
+               then opportunity.Opportunity_External_ID 
+               else null end                                                                                  recurringcontribution_id
+          ,rc_giving__opportunity_credit.createdbyid                                                           createdbyid
+          ,rc_giving__opportunity_credit.lastmodifiedbyid                                                      lastmodifiedbyid
+--          ,parent_opportunity.rc_giving__source_code                                                           source_code
+--          ,parent_opportunity.original_source_code                                                             original_source_code
+          ,opportunity.rc_giving__source_code                                                                  source_code
+          ,opportunity.original_source_code                                                                    original_source_code
+          ,Coalesce(opportunity.rc_giving__giving_number,opportunity.pledge_number)                       pledge_number
+          ,rc_giving__opportunity_credit.rc_giving__opportunity_stage                                          stagename
+          ,rc_giving__opportunity_credit.rc_giving__archive_flag                                               rc_giving__archive_flag
+          , Case when opportunity.rc_giving__is_bookable = 'true' then 'BC' else null end                              bookable  -- added via case 165733
+          ,opportunity.rc_giving__payment_method                                                               payment_method
+          ,rc_giving__opportunity_credit.gau_code_credit                                                       gau_credit_code -- added via case 165733
+          ,opportunity.gau_debit_code                                                                          gau_debit_code -- added via case 165733
+          ,rc_giving__opportunity_credit.soft_credit_type                                                              recordtype
+          ,CASE WHEN rc_giving__opportunity_credit.gau_code_credit IN
+                 ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') -- added C340100TR422ONL per case 52904
+                THEN 1
+                ELSE 0
+           END                                                                                                         is_pass_through
+          ,CASE
+WHEN substring(rc_giving__opportunity_credit.soft_credit_type,1,3) not in ('SC ','DA ','TP ') THEN 'N'
+when rc_giving__opportunity_credit.nps_exclude ilike 'true' then 'N' -- Blanket rule for NPS exclude
+WHEN rc_giving__opportunity_credit.gau_code_credit = 'C340105UR422ONL' THEN 'N' -- Case 114606
+WHEN rc_giving__opportunity_credit.credit_close_date >= '2011-07-01' AND(
+rc_giving__opportunity_credit.gau_code_credit like '_9001%' --Blanket to catch old GAU's
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9002%' 
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9003%' 
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9004%'
+  OR rc_giving__opportunity_credit.gau_code_credit  like '_9005%')
+THEN 'Y'
+/*
+WHEN (rc_giving__opportunity_credit.credit_close_date >= cfp.join_date or rc_giving__opportunity_credit.credit_close_date >= ccode.join_date)
+     and  
+     ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or rc_giving__opportunity_credit.credit_close_date <= ccode.end_date)) ) */
+WHEN (rc_giving__opportunity_credit.credit_close_date >= cfp.join_date or rc_giving__opportunity_credit.credit_close_date >= ccode.join_date or (campaign.sourcecode_office_code in ('N','C') and cfp.join_date is not null and rc_giving__opportunity_credit.credit_close_date<= cfp.end_date) )
+ 
+ AND (
+        --campaign.sourcecode_office_code in ('N','C') 
+        --  AND 
+                       (
+                           substring( rc_giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                       AND substring( rc_giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                       AND substring( rc_giving__opportunity_credit.gau_code_credit,13,3) in ('AQT','RSO','MLS','ONL','PMG')
+                       AND cfp.affiliate_number is not null and (cfp.end_date is null or rc_giving__opportunity_credit.credit_close_date <= cfp.end_date) -- Active period of Affiliate
+                       ) 
+                       OR
+                       ( 
+                            rc_giving__opportunity_credit.gau_code_credit = 'C340210UR480PMG'
+                       )
+					            OR
+					             ( 
+					                  substring( rc_giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                        and substring( rc_giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                        and substring( rc_giving__opportunity_credit.gau_code_credit,16,4) in ('A152','A113','A118','A126','A155')
+                       )
+                      OR 
+					             (  
+					               rc_giving__opportunity_credit.gau_code_credit like '%CFP%'
+                        )
+				              OR --Non Affiliate Specific Old GAU
+				              (
+				                   rc_giving__opportunity_credit.gau_code_credit  like '_9001%' --Blanket to catch old GAU's
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9002%' 
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9003%' 
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9004%'
+                        OR rc_giving__opportunity_credit.gau_code_credit  like '_9005%'
+				              )
+	  )
+THEN 'Y'
+WHEN  ccode.campaign_code is not null and (ccode.end_date is null or rc_giving__opportunity_credit.credit_close_date <= ccode.end_date) 
+      and rc_giving__opportunity_credit.gau_code_credit like '%CFP' 
+THEN 'Y' -- this should catch online gifts 
+WHEN  rc_giving__opportunity_credit.credit_close_date >= '2019-07-01'   --Planned Giving
+      and  opportunity.closedate >= cfp.join_date 
+      and cfp.affiliate_number is not null 
+	    and (cfp.end_date is null or rc_giving__opportunity_credit.credit_close_date <= cfp.end_date) 
+      and (
+	         ( campaign.SourceCode_Activity_Type_Code = '3NP'
+              and 
+			        substring(campaign.SourceCode_Segment_Code,1,1) = 'C'
+		      	)
+			      OR 
+		      	( 
+			        substring(rc_giving__opportunity_credit.gau_code_credit,1,9) = 'C340600UR'
+			      )
+		      )    
+THEN 'Y'  /*
+WHEN ( campaign.sourcecode_office_code in ('N','C') or (ccode.campaign_code is not null and (ccode.end_date is null or rc_giving__opportunity_credit.credit_close_date <= ccode.end_date)) )
+      AND 
+                (
+                     (
+				                    rc_giving__opportunity_credit.gau_code_credit like '_9001%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9002%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9003%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9004%'
+                         OR rc_giving__opportunity_credit.gau_code_credit like '_9005%'
+				              ) 
+				              OR
+                    (
+                            substring(rc_giving__opportunity_credit.gau_code_credit,1,3) = 'C34'
+                        and substring(rc_giving__opportunity_credit.gau_code_credit,8,2) = 'UR'
+                        and substring(rc_giving__opportunity_credit.gau_code_credit,16,4) in ('A152','A113','A118','A126','A155')
+                     )
+                      OR 
+					             (  
+					               rc_giving__opportunity_credit.gau_code_credit like '%CFP'
+                        )
+                )
+THEN 'Y' else 'N'*/
+else 'N'
+end as cfp_shareable
+,CASE 
+  WHEN ccode.campaign_description is not null -- IN ('Arizona','Illinois','Southeastern Pennsylvania','Southeast','Keystone','South East North Florida')
+      AND  rc_giving__opportunity_credit.gau_code_credit NOT LIKE '%CFP%'
+  THEN 'Y'
+  ELSE 'N'
+  END   AS is_local
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '3'
+         --      THEN 'C3'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '4'
+         --      THEN 'C4'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,1,1) = '5'
+         --      THEN 'PAC'
+         -- END AS entity
+          ,campaign.SourceCode_Tax_Status_Description AS entity
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'N'
+         --      THEN 'PPFA'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'L'
+         --      THEN 'PPIL'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'P'
+         --      THEN 'PPSP'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'A'
+         --      THEN 'PPAZ'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,2,1) = 'E'
+         --      THEN 'PPSE'
+         -- END AS office
+         ,campaign.sourceCode_Office_description AS office
+         -- SUBSTR(opportunity.rc_giving__source_code,3,1) AS business_unit
+         ,campaign.sourceCode_Business_Unit_Description    AS business_unit
+         -- CASE WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'L'
+         --      THEN 'Low'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'D'
+         --      THEN 'Mid'
+         --      WHEN SUBSTR(opportunity.rc_giving__source_code,4,1) = 'M'
+         --      THEN 'Major'
+         -- END AS group_code
+          ,campaign.sourceCode_Activity_Group_Description AS group_code
+         -- SUBSTR(opportunity.rc_giving__source_code,5,1) AS campaign_code
+         ,campaign.sourceCode_Campaign_Description       AS campaign_code
+         ,campaign.sourcecode_effort_description         as technique -- added via case 165733
+--          ,parent_opportunity.ppfa_fiscal_month                                                                 fiscal_month
+--          ,parent_opportunity.ppfa_fiscal_year                                                                  fiscal_year
+          ,opportunity.ppfa_fiscal_month                                                                 fiscal_month
+          ,opportunity.ppfa_fiscal_year                                                                  fiscal_year
+         /* --NEED TO DETERMINE IF THIS IS CORRECT FOR SC's, THE CODE ABOVE LEADS TO NULLS
+         ,CASE WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opportunity.deposit_date):: char
+               ELSE akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: char
+          END
+         ,CASE WHEN opportunity.ppfa_fiscal_year IS NOT NULL THEN opportunity.ppfa_fiscal_year
+               WHEN opportunity.deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(opportunity.deposit_date)
+               ELSE akaplan.ppfa_fiscal_year(opportunity.adjusted_deposit_date) */
+          ,CASE WHEN opportunity.id = (SELECT c4_first_gift_id
+                                  FROM rounddata.giving_summary x
+                                  WHERE x.accountid = rc_giving__opportunity_credit.rC_Giving__Account
+                                      )
+                THEN 'Y'
+                ELSE 'N'
+           END                                              AS First_Gift_Natl_c3
+          ,CASE WHEN opportunity.id = (SELECT c4_first_gift_id
+                                  FROM rounddata.giving_summary x
+                                  WHERE x.accountid = rc_giving__opportunity_credit.rC_Giving__Account
+
+                                      )
+                THEN 'Y'
+                ELSE 'N'
+           END                                                                          AS First_Gift_Natl_c4
+          ,a.c3_affiliate_number                                                        AS Donor_c3_affil_number
+          ,a.c4_affiliate_number                                                        AS Donor_C4_affil_number
+          ,NULL                                                                         AS Adjusted
+          ,CASE WHEN vehicle.rc_bios__account IS NOT NULL
+                THEN 'Y'
+                ELSE 'N'
+           END                                                                         AS IsGivingVehicle
+          ,SUBSTRING(rc_giving__opportunity_credit.soft_credit_type,1,2)                  AS Credit_Type
+          ,NULL                                                                        AS Giving_level_pre_gift
+          ,opportunity.rC_Giving__Giving_Number                                        AS Giving_Number
+          ,0                                                                           AS reportable_revenue
+          ,NULL                                                                        AS has_soft_credit
+          ,null                                                                        as ppid
+          ,null                                                                       as gau_credit_code_description
+          ,null                                                                        as gau_credit_code_category
+    FROM rounddata.rc_giving__opportunity_credit
+    JOIN rounddata.opportunity opportunity                                     ON rc_giving__opportunity = opportunity.id
+--    LEFT JOIN ppfa_prod.opportunity parent_opportunity                         ON opportunity.rc_giving__parent = parent_opportunity.id
+    JOIN rounddata.v_campaign campaign                                                       ON opportunity.rc_giving__source_code = campaign.unique_source_code
+    JOIN rounddata.accountx      a                                                           ON rc_giving__opportunity_credit.rc_giving__account = a.id
+    LEFT JOIN rounddata.cfp_log cfp on rc_giving__opportunity_credit.affiliate_number = cfp.affiliate_number
+    Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
+    LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON rc_giving__opportunity_credit.rc_giving__account = vehicle.rc_bios__account
+     where UPPER(rc_giving__opportunity_credit.delete_flag || rc_giving__opportunity_credit.rc_giving__archive_flag) <> 'YFALSE' -- added via case 165733
+  );
+
+
+--add giving level pre gift 7/6/2020
+update srt_temp  
+set giving_level_pre_gift = coalesce( ( select giving_level from rounddata.giving_level_history glh where srt_temp.ngoc_accountid = glh.rc_bios__account and  srt_temp.closedate > glh.start_date and srt_temp.closedate < coalesce(glh.end_date, '01-01-2050') order by value asc limit 1  ), 'Low Dollar');
+ 
+-- GAU Description and Category via Case 165733
+update srt_temp set 
+gau_credit_code_description = gau.rc_giving__description ,
+gau_credit_code_category = gau.gl_category 
+from rounddata.rc_giving__gau gau 
+where gau.namex = srt_temp.gau_credit_code and gau.delete_flag = 'N';
+
+select * from srt_temp where transaction_id = '0063p000010ZOKWAA4';
+
+/*
+ -- Creates Backup
+ drop table if exists rounddata.supreme_reporting_table_backup;
+ create table rounddata.supreme_reporting_table_backup as 
+ (select * from rounddata.supreme_reporting_table);*/
