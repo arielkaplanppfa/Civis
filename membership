@@ -98,7 +98,12 @@ else 5 end as membership_rank
 from rounddata.rc_bios__preference p
 join rounddata.contact c on p.rc_bios__account = c.accountid
 join idres_analytics.current_customer_graph idr on c.id = idr.source_primary_key
-where p.delete_flag <> 'Y' and p.rc_bios__category = 'Constituent Type' and p.rc_bios__subcategory = 'Action Fund Member' and p.rc_bios__type not in ('Affiliate PPAZ Annual','National Associate','Affiliate PPSE Lifetime') ),
+where p.delete_flag <> 'Y' 
+  and p.rc_bios__category = 'Constituent Type' 
+  and p.rc_bios__subcategory = 'Action Fund Member' 
+  and p.rc_bios__type not in ('Affiliate PPAZ Annual','National Associate','Affiliate PPSE Lifetime')
+  and p.createdbyid in ('005360000073TQTAA2','00536000005iG3HAAU','00536000008RGOMAA4','0051R00000GsY8qQAF','00536000005iVjwAAE') 
+  ),
 ass_temp as(
   select
   idr.resolved_id,
