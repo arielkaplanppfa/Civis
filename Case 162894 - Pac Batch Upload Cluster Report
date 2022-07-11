@@ -1,4 +1,5 @@
-var queryString =' With bup as (select distinct rc_connect__giving_giving_amou as amount,  '+
+var queryString ='With bup as (select distinct   '+
+             ' rc_connect__giving_giving_amou as amount,  '+
              ' rC_Connect__Batch_Upload_Statu as status, '+
              ' coalesce(rc_connect__batch_upload_conta,rc_connect__hardcreditcontact) as contact_matched, '+
              ' coalesce(cont.firstname, hccont.firstname) as firstname,  '+
@@ -19,21 +20,32 @@ var queryString =' With bup as (select distinct rc_connect__giving_giving_amou a
 ' left join rounddata.contact hccont on bu.rc_connect__hardcreditcontact = hccont.id '+
 ' where rC_Connect__Batch_Upload_Statu not in ( \'Committed\', '+
                                               ' \'Action Taker Committed\')  '+
-' and bu.delete_flag <> \'Y\' and bu.createddate >= sysdate -30  and rc_connect__exclude_giving = \'false\' '+
+' and bu.delete_flag <> \'Y\' and bu.createddate >= sysdate -30  and rc_connect__exclude_giving = \'false\'  '+
 ' and (b.affiliation = \'PPAF\' or bu.vendor_source is not null  )  '+
             ' and (rc_connect__giving_primary_cam like \'5N%\' or c.namex like \'5N%\' or b.designation_entity = \'PAC\' ) ), '+
- ' calc as ( '+
-' select distinct  idr.resolved_id as ppid, b.firstname, b.lastname,listagg( b.auto_contact_number, \'; \') as auto_contact_number, listagg(b.bup_id,\'; \') as bup_ids, count(b.bup_id) as num_in_bup, sum(b.amount) amount_in_bup,  sum(c.current_calendar_year_pac_gift) as all_cal_pac '+
+ ' idr  as ( '+
+' select distinct  idr.resolved_id, b.firstname, b.lastname, '+
+' listagg( b.auto_contact_number, \'; \') as auto_contact_number,  '+
+' listagg( b.bup_id,\'; \') as bup_ids,     '+
+' count( b.bup_id) as num_in_bup, sum(b.amount) amount_in_bup '+
 ' from bup b '+
 ' join idres_analytics.current_customer_graph idr on b.contact_matched = idr.source_primary_key '+
-' join idres_analytics.current_customer_graph ccg on idr.resolved_id = ccg.resolved_id  '+
-' join rounddata.contact c on ccg.source_primary_key = c.id '+
 ' group by 1,2,3 '+
-' order by idr.resolved_id desc) '+
+' order by idr.resolved_id desc), '+
+' calc as ( '+
+' select idr.resolved_id, sum(c.current_calendar_year_pac_gift) as all_cal_pac '+
+' from idr '+
+' join idres_analytics.current_customer_graph ccg on idr.resolved_id = ccg.resolved_id '+
+' join rounddata.contact c on ccg.source_primary_key = c.id  '+
+' group by 1), '+
+' combine as ( '+
+' select b.*, c.all_cal_pac '+
+' from idr b  '+
+' join calc c on b.resolved_id = c.resolved_id) '+
 ' select *, '+
 ' case when amount_in_bup + all_cal_pac > 5000 then \'Exceeds Limit\' when amount_in_bup + all_cal_pac = 5000 then \'At Limit\' else \'Below Limit\' end as Limit_check, '+
 ' Case when num_in_bup > 1 then \'Multiple gifts in Bup\' else null end as Multi_gift '+
-' from calc c ;';
+' from combine ;'; 
 
 var results = query(queryString);
 var mdTable = toMarkdownTable(results);
