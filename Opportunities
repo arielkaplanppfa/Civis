@@ -1,15 +1,38 @@
-Drop table if exists ppfa_golden.golden_opportunities; 
+/* 
+select data_source, count(*) 
+from akaplan.golden_opportunities go
+where not exists ( select 'x' from ea_sourcecodes.opportunities_ppid o where go.transaction_id = o.transaction_id)
+group by 1
+
+Differences between opp_ppid and this:
+-- Credits in this -- Good (accounts for all credits difference)
+-- Amount = 0 in this -- Added in final_amount > 0
+-- Archived in this -- Good (accounts for bulk  of Transaction Difference, bulk of pledge_payment difference)
+-- GAU's that dont exist in this -- Good, but data fix  (accounts for remaining transaction difference, remaining pledge_payment_differnce, bulk of pledge differences)
+-- Includes 'Uncollectible' Bookable Pledges (accounts for remainder of the pledge difference)
+-- Null GAU's exist in this -- Good, but data fix
+-- 0063p000010N1BNAA0 Uknown why this isnt in opp_ppid -- Solved, 0 dollar transaction, data delay
+*/
+
+/*
+CFP sharebale flag edge case  - CFP shareable Pass through 
+Case - 1 -- 3NALZ2%00M1PTS Cheat Code
+*/
+
+Drop table if exists akaplan.golden_opportunities;
+Drop table if exists rounddata_dev.golden_opportunities; 
 
 CREATE  temporary TABLE srt_temp (
- closedate               DATETIME      DEFAULT NULL
-,deposit_date            DATETIME      DEFAULT NULL
-,datepulled              DATETIME
+ closedate               DATETIME      DEFAULT NULL  --change to date
+,deposit_date            DATETIME      DEFAULT NULL  --change to date
+,datepulled              DATETIME                    --change to date
 ,amount                  DECIMAL(38,2) DEFAULT NULL
 ,data_source             VARCHAR(15)   NOT NULL
 ,etl_id                  INT       NOT NULL
 ,delete_flag             VARCHAR(24)    NOT NULL
 ,affiliate_number        VARCHAR(100)  DEFAULT NULL
 ,channel                 VARCHAR(30)   DEFAULT NULL
+,channel_group           varchar(10)   DEFAULT NULL
 ,payment_subtype         varchar(30)
 ,is_sustainer            VARCHAR(7)    DEFAULT NULL
 ,ngoc_accountid          VARCHAR(18)   DEFAULT NULL
@@ -54,6 +77,32 @@ CREATE  temporary TABLE srt_temp (
 ,ppid                    varchar(30)
 ,gau_credit_code_description varchar(150)
 ,gau_credit_code_category varchar(25)
+,gl_entity                varchar(15)
+,dept                     varchar(20)
+,sub_dept                 varchar(20)
+,contacts_onlineform_id     bigint        
+,onlineform_name           varchar(200)  
+,code_id                   bigint        
+,code_name                 varchar(150)  
+,code_org                  varchar(30)   
+,code_date                 date          
+,marketing_campaign       varchar(50)   
+,ask_type                 varchar(50)
+,misc                     varchar(30)   
+,site                     varchar(15) 
+,site_type                varchar(15)
+,cc_exp_date              date
+,rownm_byPPID             bigint   
+,rownm_byPPID_desc        bigint  
+,f_or_l_channel_group     varchar(1) -- f_or_l_channel_group
+,f_or_l_hpc               varchar(1) -- f_or_l_hpc
+--,rownm_byPPID_GL          bigint
+--,rownm_byPPID_GL_desc     bigint
+,f_or_l_sus               varchar(1)  -- f_or_l_sus    --------TESTING WITH THE SUSTAINER FIELDS
+--,rownm_byPPID_sustainerC4 bigint
+--,rownm_byPPID_sustainerC3 bigint
+,f_or_l_sc_sus            varchar(1) -- f_or_l_sc_sus
+--,rownm_byPPIDandsc_sustainer_desc bigint-- l_ppid_sc_sus_desc
 );
 
 ---Table for has_soft_credit field
@@ -86,6 +135,7 @@ INSERT INTO srt_temp (
          ,opportunity.delete_flag                                                                             delete_flag
          ,opportunity.affiliate_number                                                                        affiliate_number
          ,campaign.rc_giving__channel                                                                         channel
+         ,case when campaign.rc_giving__channel IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')  then 'online' else 'offline' end as channel_group
          ,rc_giving__payment_method.payment_subtype                                                           payment_subtype
          ,CASE WHEN parent_opportunity.rc_giving__is_sustainer ilike 'true'
                THEN 'offline'
@@ -98,10 +148,10 @@ INSERT INTO srt_temp (
          ,opportunity.accountid                                                                               ngoc_accountid
          ,opportunity.rc_giving__parent                                                                       parent_transaction_id
          ,opportunity.id                                                                                      transaction_id
-         ,Case when parent_opportunity.originator = 'EveryAction' 
+         ,Case when parent_opportunity.originator in ('Convio','EveryAction') 
                 then parent_opportunity.acquired_batch_seq
                 else null end                                                                                 contribution_id
-         ,Case when parent_opportunity.originator = 'EveryAction' 
+         ,Case when parent_opportunity.originator in ('Convio','EveryAction')
                then parent_opportunity.Opportunity_External_ID 
                else null end                                                                                  recurringcontribution_id
          ,opportunity.createdbyid                                                                             createdbyid
@@ -282,15 +332,18 @@ end as cfp_shareable
          ,'HARD'                                         AS Credit_Type
          ,NULL                                           AS Giving_level_pre_gift
          ,opportunity.rC_Giving__Giving_Number           AS Giving_Number
-         ,CASE WHEN recordtype.namex = 'Transaction'
+         ,CASE WHEN recordtype.namex = 'Transaction'    
                AND opportunity.stagename = 'Completed'
+             --  AND opportunity.gau_credit_code not in ('C325005','C325015','C425005','11000000000002340','11000000000002356') --Pass throughs and Donor Directed
                THEN 1
                WHEN recordtype.namex ilike 'Pledge Payment'
                AND  opportunity.stagename  ilike 'Completed'
+             --  AND opportunity.gau_credit_code not in ('C325005','C325015','C425005','11000000000002340','11000000000002356')--Pass throughs and Donor Directed
                AND  parent_opportunity.rc_giving__is_bookable ilike 'FALSE'
                THEN 1
                WHEN recordtype.namex = 'Pledge'
-               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete') -- Include Open Stage per upcoming case
+               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete','Open')  
+             --  AND opportunity.gau_credit_code not in ('C325005','C325015','C425005','11000000000002340','11000000000002356') --Pass throughs and Donor Directed
                THEN 1
                ELSE 0
           END             AS reportable_revenue
@@ -300,6 +353,32 @@ end as cfp_shareable
           ,null as ppid
           ,null as gau_credit_code_description
           ,null as gau_credit_code_category
+          ,null as gl_entity
+          ,null as dept
+          ,null as sub_dept
+          ,null:: bigint as contacts_onlineform_id
+          ,null as onlineform_name          
+          ,null:: bigint code_id  
+          ,null as code_name        
+          ,null as code_org                
+          ,null:: date as code_date   
+          ,null as marketing_campaign 
+          ,null as ask_type              
+          ,null as misc                
+          ,null as site
+          ,null as site_type
+          ,null:: date as cc_exp_date
+          ,NULL::bigint as rownm_byPPID
+          ,NULL::bigint as rownm_byPPID_desc
+          ,NULL::varchar as f_or_l_channel_group
+          ,NULL::varchar as f_or_l_hpc
+         -- ,NULL::bigint as rownm_byPPID_GL
+         -- ,NULL::bigint as rownm_byPPID_GL_desc
+          ,NULL::varchar as f_or_l_sus
+         -- ,NULL::bigint as rownm_byPPID_sustainerC4
+         -- ,NULL::bigint as rownm_byPPID_sustainerC3
+          ,NULL::varchar as f_or_l_sc_sus
+          --,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
 FROM rounddata.opportunity opportunity
 --JOIN supremeReporting_ID_tracker tracker                         ON opportunity.etl_id = tracker.etl_id
 --    AND tracker.seq >= i
@@ -319,7 +398,7 @@ WHERE recordtype.namex in ('Transaction','Pledge Payment')
 AND opportunity.stagename = 'Completed'
 AND parent_opportunity.rc_giving__is_bookable ilike 'false'
 AND ( opportunity.delete_flag <>'Y' OR opportunity.rc_giving__archive_flag ilike 'TRUE')
-AND opportunity.amount>0   -- added 20190520 by cdelja to remove adjustments
+AND opportunity.amount>0 and (opportunity.final_amount > 0 or opportunity.final_amount is null)  -- added 20190520 by cdelja to remove adjustments
 UNION ALL
     -- --------------------------------------------
     --
@@ -338,6 +417,7 @@ SELECT opportunity.closedate                                                    
          ,opportunity.delete_flag                                                                             delete_flag
          ,opportunity.affiliate_number                                                                        affiliate_number
          ,campaign.rc_giving__channel                                                                         channel
+         ,case when campaign.rc_giving__channel IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')  then 'online' else 'offline' end as channel_group
          ,rc_giving__payment_method.payment_subtype                                                           payment_subtype
          ,NULL                                                                                                is_sustainer
          ,opportunity.accountid                                                                               ngoc_accountid
@@ -514,13 +594,15 @@ end as cfp_shareable
          ,opportunity.rC_Giving__Giving_Number           AS Giving_Number
          ,CASE WHEN recordtype.namex ilike 'Transaction'
                AND opportunity.stagename ilike 'Completed'
+               --AND opportunity.gau_credit_code not in ('C325005','C325015','C425005','11000000000002340','11000000000002356') --Pass throughs and Donor Directed
                THEN 1
                WHEN recordtype.namex ilike 'Pledge Payment'
                AND  opportunity.stagename  ilike 'Completed'
+              -- AND opportunity.gau_credit_code not in ('C325005','C325015','C425005','11000000000002340','11000000000002356') --Pass throughs and Donor Directed
                AND  opportunity.rc_giving__is_bookable ilike 'FALSE'
                THEN 1
                WHEN recordtype.namex ilike 'Pledge'
-               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete','Open') --Include Open Stage as per upcoming case
+               AND opportunity.stagename IN ( 'Completed','Partially Collected','Partially Complete','Open') 
                THEN 1
                ELSE 0
           END                                     AS reportable_revenue
@@ -530,6 +612,32 @@ end as cfp_shareable
           ,null as ppid
           ,null as gau_credit_code_description
           ,null as gau_credit_code_category
+          ,null as gl_entity
+          ,null as dept
+          ,null as sub_dept
+          ,null:: bigint as contactsonlineformid
+          ,null as onlineformname          
+          ,null:: bigint codeid  
+          ,null as codename        
+          ,null as codeorg                
+          ,null:: date as codedate   
+          ,null as Campaign 
+          ,null as ask_type              
+          ,null as misc 
+          ,null as site
+          ,null as site_type
+          ,null:: date as cc_exp_date
+          ,NULL::bigint as rownm_byPPID
+          ,NULL::bigint as rownm_byPPID_desc
+          ,NULL::varchar as f_or_l_channel_group
+          ,NULL::varchar as f_or_l_hpc
+         -- ,NULL::bigint as rownm_byPPID_GL
+         -- ,NULL::bigint as rownm_byPPID_GL_desc
+          ,NULL::varchar as f_or_l_sus
+          --,NULL::bigint as rownm_byPPID_sustainerC4
+          --,NULL::bigint as rownm_byPPID_sustainerC3
+          ,NULL::varchar as f_or_l_sc_sus
+          --,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
     FROM rounddata.opportunity
     JOIN rounddata.v_campaign campaign                                         ON opportunity.rc_giving__source_code = campaign.unique_source_code
     JOIN rounddata.accountx a                                                  ON a.id = opportunity.accountid
@@ -562,8 +670,9 @@ end as cfp_shareable
           ,'CREDIT'                                                                                            data_source
           ,rc_giving__opportunity_credit.etl_id                                                                etl_id
           ,rc_giving__opportunity_credit.delete_flag                                                           delete_flag
-          ,rc_giving__opportunity_credit.Affiliate_number                                                      affiliate_number
+          ,rc_giving__opportunity_credit.Affiliate_number                                                      affiliate_number 
           ,campaign.rc_giving__channel                                                                         channel                --Edited per case 108404
+          ,case when campaign.rc_giving__channel IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')  then 'online' else 'offline' end as channel_group
           ,NULL                                                                                                payment_subtype
           ,CASE WHEN opportunity.rc_giving__is_sustainer ilike 'true'
                THEN 'offline'
@@ -774,6 +883,32 @@ end as cfp_shareable
           ,null                                                                        as ppid
           ,null                                                                       as gau_credit_code_description
           ,null                                                                        as gau_credit_code_category
+          ,null                                                                        as gl_entity
+          ,null as dept
+          ,null as sub_dept
+          ,null:: bigint as contactsonlineformid
+          ,null as onlineformname          
+          ,null:: bigint codeid  
+          ,null as codename        
+          ,null as codeorg                
+          ,null:: date as codedate   
+          ,null as Campaign 
+          ,null as ask_type              
+          ,null as misc 
+          ,null as site
+          ,null as site_type
+          ,null:: date as cc_exp_date
+          ,NULL::bigint as rownm_byPPID
+          ,NULL::bigint as rownm_byPPID_desc
+          ,NULL::varchar as f_or_l_channel_group
+          ,NULL::varchar as f_or_l_hpc
+         -- ,NULL::bigint as rownm_byPPID_GL
+         -- ,NULL::bigint as rownm_byPPID_GL_desc
+          ,NULL::varchar as f_or_l_sus
+         -- ,NULL::bigint as rownm_byPPID_sustainerC4
+         -- ,NULL::bigint as rownm_byPPID_sustainerC3
+          ,NULL::varchar as f_or_l_sc_sus
+         -- ,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
     FROM rounddata.rc_giving__opportunity_credit
     JOIN rounddata.opportunity opportunity                                     ON rc_giving__opportunity = opportunity.id
 --    LEFT JOIN ppfa_prod.opportunity parent_opportunity                         ON opportunity.rc_giving__parent = parent_opportunity.id
@@ -793,14 +928,424 @@ set giving_level_pre_gift = coalesce( ( select giving_level from rounddata.givin
 -- GAU Description and Category via Case 165733
 update srt_temp set 
 gau_credit_code_description = gau.rc_giving__description ,
-gau_credit_code_category = gau.gl_category 
+gau_credit_code_category = gau.gl_category,
+gl_entity = 
+case when gl_category  = 'C4 PPAF' and LEFT(srt_temp.gau_credit_code,3) IN (111,711,773) then 'C4'
+ when gl_category  = 'C4 PPAF' and LEFT(srt_temp.gau_credit_code,2) = 'C4' then 'C4'
+ when gl_category  = 'C4 PPAF' and LEFT(srt_temp.gau_credit_code,3) =771 then 'PAC'
+ when gl_category  = 'C4 PPAF' and LEFT(srt_temp.gau_credit_code,2) ='PC' then 'PAC'
+ when gl_category  = 'C4 PPAF' and LEFT(srt_temp.gau_credit_code,3) ='772' then 'PPVotes'
+ when gl_category  = 'C4 PPAF' and LEFT(srt_temp.gau_credit_code,2) ='PV' then 'PPVotes'
+ ELSE gl_category end,
+dept = 
+case 
+  when substring(srt_temp.source_code,3,1) = 'F' then 'Foundations'
+  when substring(gau.namex,10,3) = 422 then 'Direct Response' 
+  when substring(gau.namex,10,3) = 475 then 'Gift Planning' 
+  when substring(gau.namex,10,3) = 480 then 'Major Gifts' 
+  else 'Other' end,
+sub_dept = 
+case 
+  when substring(gau.namex,10,3) = 422 and substring(gau.namex,3,5) IN (40100,40105) then 'DFSE'
+  when  srt_temp.group_code ='Low D' then 'Low Dollar'
+  when srt_temp.group_code = 'Mid-L' then 'Mid-Level'
+  else srt_temp.group_code end,
+site = 
+case 
+ when srt_temp.channel = 'Broadcast Email' then 'Email' 
+ when srt_temp.channel = 'Mobile' then 'SMS'
+ when srt_temp.channel = 'Peer to Peer' then 'Hustle' 
+ when substring(srt_temp.source_code, 10,1)='W' then 'PP Site' 
+ else NULL end,
+site_type = 
+case 
+ when srt_temp.channel = 'Broadcast Email' then 'Email' 
+ when srt_temp.channel In ('Mobile','Peer to Peer') then 'Text' 
+ when substring(srt_temp.source_code, 10,1)='K' then 'Ads' 
+ when srt_temp.channel = 'Social' then 'Social' 
+ when substring(srt_temp.source_code, 10,1)='W' then 'PP Site' 
+ else NULL end
 from rounddata.rc_giving__gau gau 
 where gau.namex = srt_temp.gau_credit_code and gau.delete_flag = 'N';
 
-select * from srt_temp where transaction_id = '0063p000010ZOKWAA4';
+----------------
+----VAN Side
+----------------
+
+   
+create temporary table vangifts as (
+select distinct
+--van.vanid as ppid,
+van.contactscontributionid,
+van.contactsrecurringcontributionid,
+van.contactsonlineformid,
+van.datereceived,
+van.amount,
+sourcecodes.codeid,
+sourcecodes.codename,
+sourcecodes.Org as code_org,
+sourcecodes.code_date,
+sourcecodes.Campaign,
+sourcecodes."Ask Type" as Ask_Type,
+sourcecodes.Misc,
+sourcecodes.Site,
+sourcecodes.Site_Type,
+c.paymenttypename,
+van.creditcardexpirationdate,
+giftfile.onlineformname ,
+van.financialprogramid,
+giftfile.creditaccount
+
+FROM vansync.ppfa_contactscontributions_mym as van  
+inner join vansync.ppfa_contactscontributionscodes_mym as codes
+                      on van.contactscontributionid = codes.contactscontributionid
+inner join ea_sourcecodes.EA_source_code_parsing as sourcecodes
+                      on codes.codeid = sourcecodes.codeid
+inner join vansync.ppfa_paymenttypes as c
+                      on van.paymenttypeid = c.paymenttypeid
+left join anneramirez.ea_sf_giftfile as giftfile
+                      on van.contactscontributionid = giftfile.contactscontributionid
+  
+WHERE van.contributionstatusid in (1,6,3)   ---1 is pending, 6 is deposited, 3 is settled. 
+  --and van.datereceived >= dateadd('day',-45,current_date)
+  
+ )
+ ;
+---Might need to break this out into two update statements, I THINK not all of the digital fields ar egetting updates and/or Im not getting the same coverage of digital Pk's that opp_id is
+update srt_temp
+set
+ contribution_id = Case when srt_temp.contribution_id is null then vangifts.contactscontributionid:: varchar else srt_temp.contribution_id end ,
+ recurringcontribution_id = Case when srt_temp.recurringcontribution_id is null then vangifts.contactsrecurringcontributionid:: varchar else srt_temp.recurringcontribution_id end ,
+ contacts_onlineform_id = vangifts.contactsonlineformid,
+ code_id = vangifts.codeid,
+ code_name = vangifts.codename,
+ code_org = vangifts.code_org,
+ code_date = vangifts.code_date,
+ marketing_campaign = vangifts.campaign,
+ ask_Type = vangifts.Ask_Type,
+ Misc= vangifts.Misc,
+ Site = vangifts.Site,
+ Site_Type = vangifts.Site_Type,
+ payment_method = vangifts.paymenttypename,
+ CC_exp_date = vangifts.creditcardexpirationdate,
+ onlineform_name = vangifts.onlineformname
+from vangifts 
+where vangifts.contactscontributionid:: varchar = coalesce(srt_temp.contribution_id, srt_temp.recurringcontribution_id);
+
+
+--Insert new gifts
+
+insert into srt_temp (data_source, etl_id, delete_flag, transaction_id, closedate,amount,channel,gl_entity,gau_credit_code_category,gau_credit_code, dept,sub_dept,  channel_group, contribution_id, recurringcontribution_id,
+contacts_onlineform_id, code_id, code_name, code_org, code_date, marketing_campaign, Ask_Type,Misc, Site,Site_Type, reportable_revenue)
+
+select
+'new_van',
+van.contactscontributionid,
+'N',
+van.contactscontributionid:: varchar,  --transaction_id
+van.datereceived   ,   ---closedate
+van.amount ,
+van.Site_Type, ---channel
+ van.code_org, ---gl_entity
+  van.code_org, ---gl_category
+van.creditaccount, ---gau_credit_code
+'Direct Response',
+'DFSE',
+--'National',
+'online',
+van.contactscontributionid:: varchar,
+van.contactsrecurringcontributionid:: varchar,
+van.contactsonlineformid,
+van.codeid,
+van.codename,
+van.code_org,
+van.code_date,
+van.campaign,
+van."Ask_Type",
+van.Misc,
+van.Site,
+van.Site_Type,
+'1'
+
+from vangifts as van
+/*
+left outer join ea_sourcecodes.opportunities_PPID as opps
+              on van.contactscontributionid = opps.acquired_batch_seq
+left outer join ea_sourcecodes.opportunities_PPID as recur
+              on van.contactsrecurringcontributionid = recur.acquired_batch_seq   ----- Wouldnt more than one sustainer gift have the same recurring ID, in other words, whats this catching?
+*/
+where van.code_org in ('PPAF C4','PPFA C3')
+and van.datereceived >= dateadd('day',-20,current_date) and van.datereceived <= current_date
+and not exists ( select 'x' from srt_temp where srt_temp.contribution_id = van.contactscontributionid:: varchar )
+;
+
+---------------------------
+----PPID ASSIGNMENT
+---------------------------
+
+---Update PPID based on ContactContributionID
+create temporary table temp as (select distinct srt.transaction_id, ccg.resolved_id
+from srt_temp srt 
+join vansync.ppfa_contactscontributions_mym c on srt.contribution_id = c.contactscontributionid
+join idres_analytics.current_customer_graph ccg on c.vanid = ccg.source_primary_key and ccg.source = 'van'
+where (srt.contribution_id is not null )
+and srt.data_source <> 'CREDIT' --and length(acquired_batch_seq) > 3
+                           );
+ 
+Commit;
+
+Lock table temp;
+
+---Update PPID based on recurringContributionID
+insert into temp  (select distinct srt.transaction_id, ccg.resolved_id
+from srt_temp srt 
+join vansync.ppfa_contactsrecurringcontributions_mym c on srt.recurringcontribution_id = c.contactsrecurringcontributionid 
+join idres_analytics.current_customer_graph ccg on c.vanid = ccg.source_primary_key and ccg.source = 'van'
+where (srt.recurringcontribution_id is not null)
+and srt.data_source <> 'CREDIT' --and length(acquired_batch_seq) > 3
+and  not exists (select 'x' from temp where temp.transaction_id = srt.transaction_id)                           );
+ 
+Commit;
+
+Lock table temp;
+                           
+
+--- Through Batch Upload (Not too many caught here)
+insert into temp (
+select distinct transaction_id, ccg.resolved_id
+from srt_temp srt 
+join rounddata.sf_bup bu on srt.transaction_id = bu.batch_upload_child_giving_matched__c
+join vansync.ppfa_contactscontributions_mym c on bu.other_external_id__c = c.contactsrecurringcontributionid:: varchar
+join idres_analytics.current_customer_graph ccg on c.vanid = ccg.source_primary_key and ccg.source ='van'
+where not exists (select 'x' from temp where temp.transaction_id = srt.transaction_id) );
+
+ 
+Commit;
+
+Insert into temp (
+select distinct  srt.transaction_id, ccg.resolved_id
+from  rounddata.rc_connect__batch_upload bu 
+join vansync.ppfa_contactscontributions_mym c on bu.other_external_id = c.contactsrecurringcontributionid
+join srt_temp srt on srt.ngoc_accountid = bu.rc_connect__batch_upload_accou and bu.Giving_Deposit_Date:: date = srt.closedate::date and bu.rc_connect__giving_giving_amou = srt.amount
+join idres_analytics.current_customer_graph ccg on c.vanid = ccg.source_primary_key and ccg.source = 'van'
+where not exists (select 'x' from temp where temp.transaction_id = srt.transaction_id) );
+
+ 
+Commit;
+
+---update ppid based on rc_giving__primary_contact
+Insert into temp (
+select distinct transaction_id, ccg.resolved_id
+from srt_temp srt join rounddata.opportunity o on srt.transaction_id = o.id
+join idres_analytics.current_customer_graph ccg on o.rc_giving__primary_contact = ccg.source_primary_key
+where data_source ilike 'pledge' and  rc_giving__primary_contact is not null 
+and not exists (select 'x' from temp where temp.transaction_id = srt.transaction_id) );
+
+ 
+Commit;
+
+
+Insert into temp (
+select distinct  transaction_id, ccg.resolved_id
+from srt_temp srt join rounddata.opportunity o on srt.parent_transaction_id = o.id
+join idres_analytics.current_customer_graph ccg on o.rc_giving__primary_contact = ccg.source_primary_key
+where lower(data_source) in ('transaction','pledge_payment')  -- Suppress Credits 
+and  rc_giving__primary_contact is not null
+and not exists (select 'x' from temp where temp.transaction_id = srt.transaction_id) ) ;
+
+ 
+Commit;
+
+
+-- Primary Contacts
+Insert into temp (
+select srt.transaction_id, ccg.resolved_id
+from srt_temp srt join rounddata.accountx x on srt.ngoc_accountid = x.id
+join rounddata.contact c on x.rc_bios__preferred_contact = c.id
+join idres_analytics.current_customer_graph ccg on c.id = ccg.source_primary_key
+and not exists (select 'x' from temp where temp.transaction_id = srt.transaction_id) );
+
+ 
+Commit;
+
+update srt_temp
+set ppid = resolved_id
+from (select transaction_id, resolved_id from temp) t 
+where t.transaction_id = srt_temp.transaction_id;
+
+ 
+Commit;
+
+--- Added leftover catcher
+
+update akaplan.golden_opportunities
+set ppid = z.resolved_id
+from
+(select b.transaction_id,
+ccg.resolved_id
+from akaplan.golden_opportunities as b
+inner join vansync.ppfa_contactscontributions_mym as cc 
+on b.contribution_id  = cc.contactscontributionid
+inner join ppfa_golden.current_customer_graph as ccg 
+on cc.vanid = ccg.source_primary_key
+where  ccg.source = 'van'
+)z
+where golden_opportunities.transaction_id = z.transaction_id
+and golden_opportunities.ppid is null
+;
+
+commit;
+
+update  akaplan.golden_opportunities
+set ppid = resolved_id
+from
+(
+ select distinct srt.transaction_id, 
+  first_value(ccg.resolved_id) over (partition by srt.transaction_id order by contact.rc_bios__preferred_contact DESC  rows between unbounded preceding and unbounded following) as resolved_id
+from akaplan.golden_opportunities  as srt
+ inner join rounddata.contact as contact 
+  on srt.ngoc_accountid = contact.accountid
+join ppfa_golden.current_customer_graph ccg on contact.id= ccg.source_primary_key
+where srt.ppid is null and ccg.source = 'round_data'
+)t
+  where t.transaction_id =  akaplan.golden_opportunities.transaction_id
+and  akaplan.golden_opportunities.ppid is null
+;
+
+commit;
+
+-----------------------
+-----ANALYSIS FIELDS
+----- For the First and Last fields I can replace the numbers (1 and/or whatever the last is with something else. Perhaps F/L)
+----- For first and last, those with single gifts will recieve f and not l, should there be something different to indicate single gifts
+-----------------------
+
+----All (non-sustainer specific)
+create temp table rownms as 
+with one as (
+  select
+  transaction_id,
+  PPID,
+  --  row_number () over (partition by a.transaction_id order by a.closedate) as rownm,  
+  row_number () over (partition by ppid order by closedate) as rownm_byPPID,
+  row_number () over (partition by ppid order by closedate desc) as rownm_byPPID_desc, 
+  row_number () over (partition by PPID, channel_group order by closedate asc) as rownm_byPPID_channel_group, --Y (F and L Only)
+  row_number () over (partition by ppid order by amount asc )  as rownm_HPC_byPPID_desc --Y (F Only)
+	---- GET HPC 36 code from Anna
+ -- row_number () over (partition by a.ppid , a.gl_category order by a.closedate) as rownm_byPPID_GL, --X  
+ --  row_number () over (partition by a.ppid, a.gl_category order by a.closedate desc) as rownm_byPPID_GL_desc --X
+  from srt_temp 
+  where ppid is not null --and data_source <> 'CREDIT'
+  ),  ---DO WE WANT TO KEEP CREDIT EXCLUDE HERE and below? No, Credits should be included.
+  two as (
+       select ppid, max(rownm_byPPID_channel_group) as max_channel_group, max(rownm_HPC_byPPID_desc) as max_hpc
+       from one
+       group by 1
+  ),
+  three as (
+select one.*, two.max_channel_group, two.max_hpc
+  from one 
+  join two on one.ppid = two.ppid
+  )
+select * from three
+  ;
+  
+   Commit;
+  lock table rownms;
 
 /*
- -- Creates Backup
- drop table if exists rounddata.supreme_reporting_table_backup;
- create table rounddata.supreme_reporting_table_backup as 
- (select * from rounddata.supreme_reporting_table);*/
+----Set first and or last
+  update rownms as r
+  set
+  rownm_byPPID_channel_group = 
+   Case when  rownm_byPPID_channel_group = 1 
+          then rownm_byPPID_channel_group
+       when  rownm_byPPID_channel_group = (select max(rownm_byPPID_channel_group) from rownms rr where rr.ppid = r.ppid ) 
+          then rownm_byPPID_channel_group
+       else null end,
+  rownm_HPC_byPPID_desc = 
+   Case when rownm_HPC_byPPID_desc = 1 
+          then rownm_HPC_byPPID_desc 
+        else null end;
+
+     Commit;
+  lock table rownms;
+*/
+
+
+update srt_temp
+set 
+--rownm = rownms.rownm,
+rownm_byPPID = rownms.rownm_byPPID,
+rownm_byPPID_desc = rownms.rownm_byPPID_desc,
+f_or_l_channel_group = case  when rownms.rownm_byPPID_channel_group = 1 then 'f' when rownms.rownm_byPPID_channel_group = rownms.max_channel_group then 'l' else null end  ,
+f_or_l_hpc = case  when rownms.rownm_HPC_byPPID_desc = 1 then 'f' when rownms.rownm_HPC_byPPID_desc = rownms.max_hpc then 'l' else null end
+--rownm_byPPID_GL = rownms.rownm_byPPID_GL,
+--rownm_byPPID_GL_desc = rownms.rownm_byPPID_GL_desc
+from rownms 
+where srt_temp.transaction_id = rownms.transaction_id;
+
+----- Sustainer Analytic fields
+create temp table sus_rownm as
+with one as ( 
+  select
+  a.transaction_id,
+  a.PPID,
+    row_number () over (partition by a.PPID order by a.closedate asc) as rownm_byPPID, -- F or L OR All numbers?
+    row_number () over (partition by a.PPID, a.source_code order by a.closedate asc) as rownm_byPPIDandsc --Y F only Flag
+    --row_number () over (partition by a.PPID, a.source_code order by a.closedate DESC) as rownm_byPPIDandsc_desc --Y L Only Flag
+  from srt_temp as a
+  where a.is_sustainer is not null --and data_source  <> 'CREDIT'
+  ),
+  two as(
+       select  ppid, max(rownm_byPPID) as last_rownm_sus, max(rownm_byPPIDandsc) as last_rownm_byPPIDandsc
+       from one 
+       group by 1
+  ), 
+  three as (
+  select one.*, two.last_rownm_sus, two.last_rownm_byPPIDandsc
+  from one 
+  join two on one.ppid = two.ppid)
+  select * from three
+  ;
+
+----- Set first and or last 
+----This may not work, I dont think you can update a rownum field with a char, may have to have another field for each to populate and then use that in case statement.
+/*
+   update sus_rownm as r
+  set
+  rownm_byPPID = 
+   Case when  rownm_byPPID = 1 
+          then 'f'
+      when  rownm_byPPID =  (select rownm_byPPID from rownms rr where rr.ppid = r.ppid order by rownm_byPPID desc limit 1 )         --(select max(rownm_byPPID) from rownms rr where rr.ppid = r.ppid ) 
+          then 'l'
+       else null end,
+  rownm_byPPIDandsc = 
+   Case when  rownm_byPPIDandsc = 1 
+          then 'f'
+         when  rownm_byPPIDandsc = (select rownm_byPPIDandsc from rownms rr where rr.ppid = r.ppid order by rownm_byPPIDandsc desc limit 1 )   -- (select max(rownm_byPPIDandsc) from rownms rr where rr.ppid = r.ppid ) 
+          then 'l'
+       else null end;
+       
+        /*
+  rownm_byPPIDandsc_desc =  
+   Case when rownm_byPPIDandsc_desc = (select max(rownm_byPPID_channel_group) from rownms rr where rr.ppid = r.ppid )
+        then rownm_byPPIDandsc_desc 
+        else null end;*/
+
+     Commit;
+  lock table rownms;
+*/
+
+
+update srt_temp
+set f_or_l_sus = case when sus.rownm_byPPID = 1 then 'f'  when sus.rownm_byPPID = last_rownm_sus then 'l' else null end,
+f_or_l_sc_sus = case when sus.rownm_byPPIDandsc = 1 then 'f'  when sus.rownm_byPPIDandsc = last_rownm_byPPIDandsc then 'l' else null end
+--rownm_byPPIDandsc_sustainer_desc = sus.rownm_byPPIDandsc_desc
+from  sus_rownm as sus
+where srt_temp.transaction_id = sus.transaction_id;
+
+
+drop table if exists akaplan.golden_opportunities;
+create table akaplan.golden_opportunities as (select * from srt_temp);
+create table rounddata_dev.golden_opportunities as (select * from akaplan.golden_opportunities);
