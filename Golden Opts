@@ -44,7 +44,17 @@ with temp as (
   select resolved_id, 'Phone', source_key, phone, null as one, null as two, null as three, null as four, null as five, null as six, null as seven, null as eight, null as nine, null as ten, null as eleven  
   from temp
   where dupe_digit = 1;
-  
+
+
+--TESTING WITH THIS IN
+----
+Insert into ppfa_golden.golden_opts
+select resolved_id, 'Phone', source_primary_key, phone_number, null as one, null as two, null as three, null as four, null as five, null as six, null as seven, null as eight, null as nine, null as ten, null as eleven  
+  from mobile_commons.nt_subscribers s 
+  join idres_analytics.current_customer_graph ccg on ccg.source_primary_key = s.profile_id and ccg.source = 'mobilecommons'
+  where not exists ( select 'x' from ppfa_golden.staging_phones sp where sp.resolved_id = ccg.resolved_id and s.phone_number = sp.phone  );
+  ------
+
 --emails
 insert into ppfa_golden.golden_opts
 with temp as (
@@ -269,12 +279,13 @@ on bbb.vanid = graphe.source_primary_key
  
  -- Mass Text
  create temporary table mc_opt as 
+ /*
 with temp as (
   --My tables
   select ccg.resolved_id as ppid, s.phone_number, activated_at:: date as start_date, run_date:: date as updated_at,
 case when campaign_id = '180941' then 'V' when campaign_id = '193425' then '3' when campaign_id = '154363' then '4' else null end as entity,
 case when opted_out_at is null then 'in' else 'out' end as opt
-from mobile_commons.subscribers s 
+from mobile_commons.nt_subscribers s 
 join idres_analytics.current_customer_graph ccg on s.profile_id = ccg.source_primary_key
 where campaign_id in ('193425','154363','180941')
 UNION
@@ -293,8 +304,22 @@ select *,
 row_number() over(partition by ppid, phone_number, entity order by updated_at desc) as rec_rank
 from temp)
 select * from temptwo
-order by ppid, phone_number, entity, rec_rank asc;
+order by ppid, phone_number, entity, rec_rank asc; */
 
+With temp as (
+select coalesce(ccg.resolved_id, s.profile_id:: varchar) as ppid, s.phone_number, s.activated_at:: date as start_date, run_date:: date as updated_at,
+case when campaign_id = '180941' then 'V' when campaign_id = '193425' then '3' when campaign_id = '154363' then '4' else null end as entity,
+case when opted_out_at is null then 'in' else 'out' end as opt
+from mobile_commons.nt_subscribers s 
+left join idres_analytics.current_customer_graph ccg on s.profile_id = ccg.source_primary_key --profiles not in the the profiles table will nopt be in the ccg and therefore phones and therefore opts
+),
+temptwo as (
+select *,
+row_number() over(partition by ppid, phone_number, entity order by updated_at desc) as rec_rank
+from temp)
+select * from temptwo
+order by ppid, phone_number, entity, rec_rank asc;
+/*
 -- Do Not Contacts
 create temporary table suppress as 
 select distinct ccg.resolved_id, p.rc_bios__start_date:: date, p.lastmodifieddate:: date
@@ -307,13 +332,13 @@ select ccg.resolved_id, datecreated:: date as start_date, datemodified:: date as
 from vansync.ppfa_contactsactivistcodes_mym a
 join idres_analytics.current_customer_graph ccg on a.vanid = ccg.source_primary_key and source ilike '%van%'
  where activistcodeid = '4402974';
- 
+ */-- TESTING TAKING THIS OUT
  --Suppress the more recent opt outs
  create temporary table mc_opt_in as 
 select * from 
 mc_opt o 
-where opt = 'in' and rec_rank = 1
-and not exists ( select 'x' from suppress s where s.resolved_id = o.ppid and s.rc_bios__start_date > o.start_date);
+where opt = 'in' and rec_rank = 1 ;
+--and not exists ( select 'x' from suppress s where s.resolved_id = o.ppid and s.rc_bios__start_date > o.start_date); TESTING TAKING THIS OUT
  
  --Update golden table
 update ppfa_golden.golden_opts set mass_text = opts
@@ -324,7 +349,7 @@ from
 from akaplan.mc_opt_in
    group by ppid, case when length(phone_number) = 11 then right(phone_number, 10) else phone_number:: varchar end
  ) t
-  where t.ppid = golden_opts.ppid and t.phone_number:: varchar = golden_opts.contact_method;
+  where t.ppid = golden_opts.ppid and t.phone_number:: varchar = golden_opts.contact_method; --profiles not in the the profiles table will nopt be in the ccg and therefore phones and therefore opts
  
  
  
