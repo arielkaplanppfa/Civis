@@ -303,7 +303,7 @@ WHERE recordtype.namex in ('Transaction','Pledge Payment')
 AND opportunity.stagename = 'Completed'
 AND parent_opportunity.rc_giving__is_bookable ilike 'false'
 AND ( opportunity.delete_flag <>'Y' OR opportunity.rc_giving__archive_flag ilike 'TRUE')
-AND opportunity.amount>0   -- added 20190520 by cdelja to remove adjustments
+AND opportunity.amount>0 and (opportunity.final_amount > 0 or opportunity.final_amount is null)  -- added 20190520 by cdelja to remove adjustments
 UNION ALL
     -- --------------------------------------------
     --
@@ -792,6 +792,22 @@ gau_credit_code_description = gau.rc_giving__description ,
 gau_credit_code_category = gau.gl_category 
 from rounddata.rc_giving__gau gau 
 where gau.namex = rounddata.supreme_reporting_table.gau_credit_code and gau.delete_flag = 'N';
+
+--Find extra online sustainer --AK 10/3/22
+create temporary table sust as 
+with temp as (
+select distinct transaction_id, parent_transaction_id 
+from rounddata.supreme_reporting_table
+where is_sustainer is null)
+select t.transaction_id, 
+case when stage_rc_preferences_2_code_va in ('SUS NL C3 ONLINE','SUS NL VOTES ONLINE','SUS NL C4 ONLINE') then 'online' else null end as is_sustainer
+from temp t 
+join rounddata.rc_connect__batch_upload bu on t.parent_transaction_id = bu.rc_connect__batch_upload_givin;
+
+update rounddata.supreme_reporting_table set is_sustainer = sust.is_sustainer
+from sust 
+where supreme_reporting_table.transaction_id = sust.transaction_id and supreme_reporting_table.is_sustainer is null and sust.is_sustainer is not null;
+
 
  -- Creates Backup
  drop table if exists rounddata.supreme_reporting_table_backup;
