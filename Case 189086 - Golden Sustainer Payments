@@ -1,0 +1,127 @@
+drop table if exists ppfa_golden.golden_sustainer_payments;
+create table ppfa_golden.golden_sustainer_payments as 
+
+
+select distinct 
+opps.transaction_id,
+opps.parent_transaction_id,
+opps.acquired_batch_seq as contactscontributionid,
+opps.ngoc_accountid,
+opps.closedate,
+opps.amount,
+opps.channel,
+opps.source_code,
+srt.is_sustainer as online_offline,
+opps.is_pass_through,
+opps.cfp_shareable,
+opps.gl_entity,
+opps.gau_credit_code,
+opps.division,
+opps.dept,
+opps.ppid,
+opps.channel_group, ----should be the same as srt.is_sustainer. including just during qc
+case when srt.is_sustainer = 'offline' then opps.parent_transaction_id end as pledgeid,
+srt.pledge_number,
+opps.contactsrecurringcontributionid,
+opps.codename,
+opps.site,
+opps.site_type,
+case when srt.is_sustainer = 'offline' then  par.rc_giving__payment_frequency when srt.is_sustainer = 'online' then vandeets.frequency
+      end as frequency,
+case when srt.is_sustainer = 'offline' then nvl(par.RC_GIVING__ANNIVERSARY_DATE,par.closedate)
+when srt.is_sustainer = 'online' then vandeets.startdate 
+      end as pledge_date,
+case when srt.is_sustainer = 'offline' then srt.payment_method when srt.is_sustainer = 'online' then   vandeets.paymenttypename 
+      end as payment_method,
+case when srt.is_sustainer = 'offline' then pm.RC_GIVING__CARD_NUMBER_LAST_4 when srt.is_sustainer = 'online' then vandeets.creditcardlast4digits
+     end as   "cc_last4",
+case when srt.is_sustainer = 'offline' then TO_Date (pm.rc_giving__card_expiration_yea||'-'||  pm.rc_giving__card_expiration_mon||'-01', 'YY-MM-DD') when srt.is_sustainer = 'online' then  vandeets.creditcardexpirationdate 
+      end::DATE as   "cc_exp_date",
+      
+      case when opps.rownm_byppidandsc_sustainer = 1 then 'Y' else 'N' end as is_first
+      ,case when opps.rownm_byppidandsc_sustainer_desc = 1 then 'Y' else 'N' end as is_last
+,  par.rc_giving__payment_end_date:: date as end_date_sf
+, coalesce(vandeets.enddate, crc.enddate) as end_date_ea
+, par.rc_giving__giving_amount as Giving_amount_sf
+,coalesce(vandeets.recurringamount, crc.recurringamount) as givng_amount_ea
+,par.stagename as parent_stage
+,coalesce(st.recurringcontributionstatusname, vandeets.recurringcontributionstatusname) as recurringContributionStatus
+,c.sourcecode_activity_type_code as activity_type
+,pm.namex as payment_method_name_sf
+,vandeets.paymenttypename as payment_method_name_ea
+
+
+from ea_sourcecodes.opportunities_ppid as opps ---source for this is the srt but has added fields for digital gifts
+inner join rounddata.supreme_reporting_table as srt ---limiting to srt gifts so we only have fully processed gifts
+                         on opps.transaction_id = srt.transaction_id
+inner join rounddata.opportunity as par 
+                         on par.id = opps.parent_transaction_id
+left join vansync.ppfa_contactsrecurringcontributions_mym crc 
+                        on opps.contactsrecurringcontributionid = crc.contactsrecurringcontributionid
+left join  vansync.ppfa_recurringcontributionstatuses st on crc.recurringcontributionstatusid = st.recurringcontributionstatusid
+left join rounddata.rc_giving__payment_method pm 
+                        on par.rc_giving__payment_method_sele = pm.id
+left join rounddata.campaign c on srt.source_Code = c.unique_source_code
+left join 
+(select 
+cc.contactsrecurringcontributionid,
+cc.contactscontributionid,
+pt.paymenttypename,
+cc.creditcardlast4digits,
+cc.creditcardexpirationdate,
+case when crc.recurringcontributionfrequencyid = 1 then 'Annually' ---values match salesforce values
+    when crc.recurringcontributionfrequencyid = 3 then 'Monthly' 
+    when crc.recurringcontributionfrequencyid = 6 then 'Weekly' 
+      when crc.recurringcontributionfrequencyid = 7 then 'Quarterly' 
+      end as frequency,
+      crc.startdate,
+      crc.enddate,
+      crc.recurringamount,
+      st.recurringcontributionstatusname
+from vansync.ppfa_contactscontributions_mym cc
+inner join vansync.ppfa_contactsrecurringcontributions_mym crc 
+               on cc.contactsrecurringcontributionid = crc.contactsrecurringcontributionid
+inner join vansync.ppfa_paymenttypes pt on cc.paymenttypeid = pt.paymenttypeid
+join vansync.ppfa_recurringcontributionstatuses st on crc.recurringcontributionstatusid = st.recurringcontributionstatusid
+)vandeets
+on opps.contactscontributionid = vandeets.contactscontributionid
+where srt.is_sustainer is not null
+and srt.office = 'National'
+and srt.amount >0
+and srt.delete_flag = 'N'
+and srt.reportable_revenue = 1;
+
+
+---AK added 9/28/22- KC needed two new is first fields
+alter table ppfa_golden.golden_sustainer_payments add column is_first_account_id varchar(1);
+
+alter table ppfa_golden.golden_sustainer_payments add column is_first_ppid varchar(1);
+
+
+create temporary table firsts as (
+    select transaction_id,
+    row_number() over(partition by ngoc_accountid order by closedate asc) as is_first_acc,
+    row_number() over(partition by ppid order by closedate asc) as is_first_pp
+    from ppfa_golden.golden_sustainer_payments
+);
+
+Update ppfa_golden.golden_sustainer_payments set is_first_account_id = Case when is_first_acc = 1 then 'Y' else 'N' end
+from firsts f where f.transaction_id = golden_sustainer_payments.transaction_id;
+
+Update ppfa_golden.golden_sustainer_payments set is_first_ppid = Case when is_first_pp = 1 then 'Y' else 'N' end
+from firsts f where f.transaction_id = golden_sustainer_payments.transaction_id;
+
+--AK 10/13/22 Grabs missing recurring Ids   
+Create temporary table recur_ids as 
+select gsp.transaction_id, gsp.contactscontributionid, gsp.contactsrecurringcontributionid, c.contactsrecurringcontributionid as ea_recur
+from ppfa_golden.golden_sustainer_payments gsp
+join vansync.ppfa_contactscontributions_mym c on gsp.contactscontributionid = c.contactscontributionid
+where gsp.contactsrecurringcontributionid is null and c.contactsrecurringcontributionid is not null
+and gsp.closedate between '2019-01-01' and '2022-10-01' and  channel_group = 'online';
+
+update ppfa_golden.golden_sustainer_payments  set contactsrecurringcontributionid = ea_recur
+from recur_ids
+where golden_sustainer_payments.transaction_id = recur_ids.transaction_id and golden_sustainer_payments.contactsrecurringcontributionid is null;
+
+---AK added 9/28/22- KC asked for Pledge number to be populated always
+update ppfa_golden.golden_sustainer_payments set pledge_number = contactsrecurringcontributionid where pledge_number is null;
