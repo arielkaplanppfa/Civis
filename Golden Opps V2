@@ -17,6 +17,7 @@ Differences between opp_ppid and this:
 UPDATES 10/27/22
 1.Renamed Contribution_id and recurringcontribution_id to contactscontributionid and contactsrecurringcontributionid (as per AR)
 2. Changed column order to Transaction_id, Parent id, PPid, NGOC_accounid ( as per AR)
+3. Added Dept and subdept logic
 */
 /*
 CFP sharebale flag edge case  - CFP shareable Pass through 
