@@ -99,14 +99,16 @@ CREATE  temporary TABLE srt_temp (
 ,cc_exp_date              date
 ,rownm_byPPID             bigint   
 ,rownm_byPPID_desc        bigint  
-,f_or_l_channel_group     varchar(1) -- f_or_l_channel_group
+,rownm_channel_group   bigint
+--,f_or_l_channel_group     varchar(1) -- f_or_l_channel_group
 ,f_or_l_hpc               varchar(1) -- f_or_l_hpc
 --,rownm_byPPID_GL          bigint
 --,rownm_byPPID_GL_desc     bigint
 ,f_or_l_sus               varchar(1)  -- f_or_l_sus    --------TESTING WITH THE SUSTAINER FIELDS
 --,rownm_byPPID_sustainerC4 bigint
 --,rownm_byPPID_sustainerC3 bigint
-,f_or_l_sc_sus            varchar(1) -- f_or_l_sc_sus
+,rownm_sc_sus            bigint
+--,f_or_l_sc_sus            varchar(1) -- f_or_l_sc_sus
 --,rownm_byPPIDandsc_sustainer_desc bigint-- l_ppid_sc_sus_desc
 );
 
@@ -378,14 +380,14 @@ end as cfp_shareable
           ,null:: date as cc_exp_date
           ,NULL::bigint as rownm_byPPID
           ,NULL::bigint as rownm_byPPID_desc
-          ,NULL::varchar as f_or_l_channel_group
+          ,NULL::bigint as rownm_channel_group
           ,NULL::varchar as f_or_l_hpc
          -- ,NULL::bigint as rownm_byPPID_GL
          -- ,NULL::bigint as rownm_byPPID_GL_desc
           ,NULL::varchar as f_or_l_sus
          -- ,NULL::bigint as rownm_byPPID_sustainerC4
          -- ,NULL::bigint as rownm_byPPID_sustainerC3
-          ,NULL::varchar as f_or_l_sc_sus
+          ,NULL::bigint as rownm_sc_sus
           --,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
 FROM rounddata.opportunity opportunity
 --JOIN supremeReporting_ID_tracker tracker                         ON opportunity.etl_id = tracker.etl_id
@@ -638,14 +640,14 @@ end as cfp_shareable
           ,null:: date as cc_exp_date
           ,NULL::bigint as rownm_byPPID
           ,NULL::bigint as rownm_byPPID_desc
-          ,NULL::varchar as f_or_l_channel_group
+          ,NULL::bigint as rownm_channel_group
           ,NULL::varchar as f_or_l_hpc
          -- ,NULL::bigint as rownm_byPPID_GL
          -- ,NULL::bigint as rownm_byPPID_GL_desc
           ,NULL::varchar as f_or_l_sus
           --,NULL::bigint as rownm_byPPID_sustainerC4
           --,NULL::bigint as rownm_byPPID_sustainerC3
-          ,NULL::varchar as f_or_l_sc_sus
+          ,NULL::bigint as rownm_sc_sus
           --,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
     FROM rounddata.opportunity
     JOIN rounddata.v_campaign campaign                                         ON opportunity.rc_giving__source_code = campaign.unique_source_code
@@ -659,8 +661,8 @@ end as cfp_shareable
     WHERE recordtype.namex = 'Pledge'
     AND   opportunity.rc_giving__is_bookable ilike 'true'
     AND ( opportunity.delete_flag <>'Y' OR opportunity.rc_giving__archive_flag ilike 'TRUE')
-    AND opportunity.RC_GIVING__CURRENT_GIVING_AMOU > 0   -- added 20190520 by cdelja to remove adjustments
-    -- 20191114 cdelja changed opportunity.amount to opportunity.rc_giving__current_giving_amou per PPFA request
+    AND opportunity.RC_GIVING__CURRENT_GIVING_AMOU > 0   -- added  to remove adjustments
+    -- changed opportunity.amount to opportunity.rc_giving__current_giving_amou per  request
     -- AND opportunity.amount>0
    UNION ALL
     -- --------------------------------------------
@@ -910,14 +912,14 @@ end as cfp_shareable
           ,null:: date as cc_exp_date
           ,NULL::bigint as rownm_byPPID
           ,NULL::bigint as rownm_byPPID_desc
-          ,NULL::varchar as f_or_l_channel_group
+          ,NULL::bigint as rownm_channel_group
           ,NULL::varchar as f_or_l_hpc
          -- ,NULL::bigint as rownm_byPPID_GL
          -- ,NULL::bigint as rownm_byPPID_GL_desc
           ,NULL::varchar as f_or_l_sus
          -- ,NULL::bigint as rownm_byPPID_sustainerC4
          -- ,NULL::bigint as rownm_byPPID_sustainerC3
-          ,NULL::varchar as f_or_l_sc_sus
+          ,NULL::bigint as rownm_sc_sus
          -- ,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
     FROM rounddata.rc_giving__opportunity_credit
     JOIN rounddata.opportunity opportunity                                     ON rc_giving__opportunity = opportunity.id
@@ -1309,7 +1311,8 @@ set
 --rownm = rownms.rownm,
 rownm_byPPID = rownms.rownm_byPPID,
 rownm_byPPID_desc = rownms.rownm_byPPID_desc,
-f_or_l_channel_group = case  when rownms.rownm_byPPID_channel_group = 1 then 'f' when rownms.rownm_byPPID_channel_group = rownms.max_channel_group then 'l' else null end  ,
+rownm_channel_group = rownms.rownm_byPPID_channel_group, 
+--f_or_l_channel_group = case  when rownms.rownm_byPPID_channel_group = 1 then 'f' when rownms.rownm_byPPID_channel_group = rownms.max_channel_group then 'l' else null end  ,
 f_or_l_hpc = case  when rownms.rownm_HPC_byPPID_desc = 1 then 'f' when rownms.rownm_HPC_byPPID_desc = rownms.max_hpc then 'l' else null end
 --rownm_byPPID_GL = rownms.rownm_byPPID_GL,
 --rownm_byPPID_GL_desc = rownms.rownm_byPPID_GL_desc
@@ -1386,7 +1389,8 @@ where srt_temp.transaction_id = sust.transaction_id and srt_temp.is_sustainer is
 ----------
 update srt_temp
 set f_or_l_sus = case when sus.rownm_byPPID = 1 then 'f'  when sus.rownm_byPPID = last_rownm_sus then 'l' else null end,
-f_or_l_sc_sus = case when sus.rownm_byPPIDandsc = 1 then 'f'  when sus.rownm_byPPIDandsc = last_rownm_byPPIDandsc then 'l' else null end
+rownm_sc_sus = rownm_byPPIDandsc
+--f_or_l_sc_sus = case when sus.rownm_byPPIDandsc = 1 then 'f'  when sus.rownm_byPPIDandsc = last_rownm_byPPIDandsc then 'l' else null end
 --rownm_byPPIDandsc_sustainer_desc = sus.rownm_byPPIDandsc_desc
 from  sus_rownm as sus
 where srt_temp.transaction_id = sus.transaction_id;
@@ -1429,6 +1433,16 @@ update srt_temp set contactscontributionid = convio_sus.contactscontributionid, 
 from convio_sus
 where convio_sus.transaction_id = srt_temp.transaction_id and is_sustainer is null;
 
+---Last ditch recurring contribution id -AK 1/24/23
+update ppfa_golden.golden_opportunities set contactsrecurringcontributionid = cc.contactsrecurringcontributionid
+from  vansync.ppfa_contactscontributions_mym as cc
+where golden_opportunities.contactscontributionid = cc.contactscontributionid and 
+golden_opportunities.contactsrecurringcontributionid is null
+and cc.contactsrecurringcontributionid is not null and  channel_group = 'online';
+
 
 drop table if exists akaplan.golden_opportunities_v2;
-create table akaplan.golden_opportunities_v2 as (select * from srt_temp);
+drop table if exists rounddata_dev.golden_opportunities_v2;
+drop table if exists ppfa_golden.golden_opportunities_v2;
+drop table if exists ppfa_golden.golden_opportunities;
+create table ppfa_golden.golden_opportunities as (select * from srt_temp);
