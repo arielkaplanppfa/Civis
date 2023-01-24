@@ -117,11 +117,12 @@ select gsp.transaction_id, gsp.contactscontributionid, gsp.contactsrecurringcont
 from ppfa_golden.golden_sustainer_payments gsp
 join vansync.ppfa_contactscontributions_mym c on gsp.contactscontributionid = c.contactscontributionid
 where gsp.contactsrecurringcontributionid is null and c.contactsrecurringcontributionid is not null
-and gsp.closedate between '2019-01-01' and '2022-10-01' and  channel_group = 'online';
+ and  channel_group = 'online';
 
 update ppfa_golden.golden_sustainer_payments  set contactsrecurringcontributionid = ea_recur
 from recur_ids
 where golden_sustainer_payments.transaction_id = recur_ids.transaction_id and golden_sustainer_payments.contactsrecurringcontributionid is null;
+
 
 ---AK added 9/28/22- KC asked for Pledge number to be populated always
 update ppfa_golden.golden_sustainer_payments set pledge_number = contactsrecurringcontributionid where pledge_number is null;
