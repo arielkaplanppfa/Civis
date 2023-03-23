@@ -66,7 +66,7 @@ left join rounddata.ppfa_natural_accounts na on na.Natural_Account = substring(p
 where not exists (select a.namex from rounddata.v_ppfa_suppress_credit_accounts_for_pledges a where a.namex = p.gau_credit_code)
 and p.rC_Giving__Is_Bookable = 'true'
 and rt.namex = 'Pledge'
-and p.deposit_date >= '2019-07-01'  
+and p.deposit_date >= '2022-07-01'  --Change to FY of the report
 -- and p.deposit_date <= '2017-06-30'
 and p.deposit_date < sysdate
 and substring(coalesce(p.rc_giving__source_code, c.unique_source_code),2,1) in ('N','C')
