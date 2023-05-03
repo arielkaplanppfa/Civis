@@ -109,6 +109,8 @@ from catalist_monthly.current_catalist_return
   where catalist_race is not null and catalist_race <> 'unknown' and catalist_raceconfidence in ('Possibly','Likely','HighlyLikely') ) f 
 where golden_diversity.resolved_id = f.resolved_id and race is null;
 
+/* NEED TO GRAB AGE AS WELL WHEN IT EXISTS, POTENTIAL FOR NO BIRTHDATE BUT AGE -- IS IT STALE? DO WE WANT THIS? IF NO BIRTHDATE THEN WHAT DOES AGE MEAN, Andy G 7/15/22*/
+/* Rounddata - What should happen is, grab birth year and calculate form there*/
 
 --Age - Rounddata
 Update ppfa_golden.golden_diversity  
@@ -121,6 +123,22 @@ from idres_analytics.current_customer_graph idr
   join rounddata.accountx  x on c.accountid = x.id
   where c.birthdate is not null) f
   where golden_diversity.resolved_id = f.resolved_id and row_num = 1;
+
+
+--Age - rounddata - incomplete Year
+
+ Update ppfa_golden.golden_diversity  
+set birth_date = f.birth_date, birth_date_source = 'rounddata - year'
+from(
+ select idr.resolved_id,c.id,
+   (c.rc_bios__birth_year||'-'||coalesce(c.rc_bios__birth_month, '01')||'-'||coalesce(c.rc_bios__birth_day,'01')):: Date as birth_date,
+   coalesce(x.last_gift_date::Date, '1900-01-01'),
+  row_number() over(partition by idr.resolved_id order by coalesce(x.last_gift_date::Date, '1900-01-01') desc) as row_num
+from idres_analytics.current_customer_graph idr 
+  join rounddata.contact c on  idr.source_primary_key = c.id
+  join rounddata.accountx  x on c.accountid = x.id
+  where c.birthdate is null and c.rc_bios__birth_year is not null) f
+  where golden_diversity.resolved_id = f.resolved_id and golden_diversity.birth_date is null and row_num = 1;
   
   
 --Age - Van
@@ -128,7 +146,7 @@ from idres_analytics.current_customer_graph idr
 create temporary table vandob as 
 with temp as (select idr.resolved_id, c.vanid, c.dob, row_number() over(partition by resolved_id) as row_num
              from idres_analytics.current_customer_graph idr 
-             join vansync.ppfa_contacts_mym c on  idr.source_primary_key = c.vanid and idr.source ='van'
+             join vansync.ppfa_contacts_mym_cont c on  idr.source_primary_key = c.vanid and idr.source ='van'
               -- left join vansync.ppfa_con
              where c.dob is not null),
      c as ( select resolved_id, dob, count(*) as count 
@@ -175,7 +193,7 @@ Update ppfa_golden.catalist_source
 set first_name = firstname 
 from (select resolved_id, c.firstname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(firstname) desc) as "name_rank"
 from ppfa_golden.current_customer_graph g 
-join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+join vansync.ppfa_contacts_mym_cont c on g.source_primary_key = c.vanid
 where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and firstname is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
 
@@ -189,7 +207,7 @@ join rounddata.contact c on g.source_primary_key = c.id
 UNION
 select resolved_id, firstname
 from ppfa_golden.current_customer_graph g 
-join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+join vansync.ppfa_contacts_mym_cont c on g.source_primary_key = c.vanid
 )  g 
 where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and firstname is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
@@ -215,7 +233,7 @@ Update ppfa_golden.catalist_source
 set last_name = lastname 
 from (select resolved_id, c.lastname, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(lastname) desc) as "name_rank"
 from ppfa_golden.current_customer_graph g 
-join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+join vansync.ppfa_contacts_mym_cont c on g.source_primary_key = c.vanid
 where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and lastname is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
 
@@ -229,7 +247,7 @@ join rounddata.contact c on g.source_primary_key = c.id
 UNION
 select resolved_id, lastname
 from ppfa_golden.current_customer_graph g 
-join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+join vansync.ppfa_contacts_mym_cont c on g.source_primary_key = c.vanid
 )  g 
 where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and lastname is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
@@ -255,7 +273,7 @@ Update ppfa_golden.catalist_source
 set middle_name = middlename 
 from (select resolved_id, c.middlename, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY length(middlename) desc) as "name_rank"
 from ppfa_golden.current_customer_graph g 
-join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+join vansync.ppfa_contacts_mym_cont c on g.source_primary_key = c.vanid
 where exists (select 'x' from ppfa_golden.catalist_van_only_clusters t where g.resolved_id = t.resolved_id) and middlename is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
 
@@ -269,7 +287,7 @@ join rounddata.contact c on g.source_primary_key = c.id
 UNION
 select resolved_id, middlename 
 from ppfa_golden.current_customer_graph g 
-join vansync.ppfa_contacts_mym c on g.source_primary_key = c.vanid
+join vansync.ppfa_contacts_mym_cont c on g.source_primary_key = c.vanid
 )  g 
 where exists (select 'x' from ppfa_golden.catalist_cross_clusters t where g.resolved_id = t.resolved_id) and middlename is not null) f 
 where catalist_source.resolved_id = f.resolved_id and name_rank = 1 ;
@@ -321,7 +339,7 @@ update ppfa_golden.catalist_source
 set birth_date = b.birthdate
 from (
   select g.resolved_id, left(dob,11)::date as "birthdate",ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "birth_rank"  
-  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym m on g.source_primary_key = m.vanid
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym_cont m on g.source_primary_key = m.vanid
   where dob is not null
   ) b
 where catalist_source.resolved_id = b.resolved_id
@@ -382,7 +400,7 @@ From (
 set email = u.email
 From (
   select g.resolved_id, e.email, ROW_NUMBER () OVER ( PARTITION BY resolved_id ORDER BY datecreated desc) as "email_rank"
-  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym e on g.source_primary_key = e.vanid
+  from ppfa_golden.current_customer_graph g join vansync.ppfa_contacts_mym_cont e on g.source_primary_key = e.vanid
   where email is not null ) u
   where catalist_source.resolved_id = u.resolved_id
   and u.email_rank = 1 and catalist_source.email is null;
