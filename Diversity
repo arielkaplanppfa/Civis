@@ -109,8 +109,6 @@ from catalist_monthly.current_catalist_return
   where catalist_race is not null and catalist_race <> 'unknown' and catalist_raceconfidence in ('Possibly','Likely','HighlyLikely') ) f 
 where golden_diversity.resolved_id = f.resolved_id and race is null;
 
-/* NEED TO GRAB AGE AS WELL WHEN IT EXISTS, POTENTIAL FOR NO BIRTHDATE BUT AGE -- IS IT STALE? DO WE WANT THIS? IF NO BIRTHDATE THEN WHAT DOES AGE MEAN, Andy G 7/15/22*/
-/* Rounddata - What should happen is, grab birth year and calculate form there*/
 
 --Age - Rounddata
 Update ppfa_golden.golden_diversity  
@@ -126,6 +124,7 @@ from idres_analytics.current_customer_graph idr
 
 
 --Age - rounddata - incomplete Year
+--5/23/23 -- AK added step here
 
  Update ppfa_golden.golden_diversity  
 set birth_date = f.birth_date, birth_date_source = 'rounddata - year'
