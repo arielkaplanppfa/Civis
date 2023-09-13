@@ -1,4 +1,4 @@
-/* SCRATCH PAPER - https://platform.civisanalytics.com/spa/#/scripts/sql/226725551 */
+-- Enter your SQL here.
 /*
 Bucket 1) Single positive payment gift -> join to payment and opp amount captures final amount
 Bucket 2) multiple positive payment gifts -> collapse on refunded transaction id to capture refunds, then the payment amount is final amount (Non-bookable) --High Touch Record type?
@@ -22,7 +22,7 @@ with bucket_temp as (
  select opp.id as opp_id, opp.bookable, count(payment.id) as payments
     from  npsp_sfdc.opportunity_v opp
     join  npsp_sfdc.opppayment_v payment  on opp.id =  payment.opportunity
-    where length(payment.originalpayment) = 0 and payment.paid is true and payment.payment_amount > 0
+    where ( length(payment.originalpayment) = 0 or payment.originalpayment is null)  and payment.paid is true and payment.payment_amount > 0
     group by 1,2)
 select opp_id, 
 CASE WHEN bookable is true then 'Bookable Gift'
@@ -36,15 +36,20 @@ Create temporary table refunds as
 (
     select OriginalPayment, sum(payment_amount) as refund_amount, count(id) as refund_number
     from  npsp_sfdc.opppayment_v payment
-    where length(payment.originalpayment) > 0
+    where ( length(payment.originalpayment) > 0 or payment.originalpayment is not null )
     group by 1 
 );
+
+---Table for has_soft_credit field
+  CREATE TEMPORARY TABLE soft_credit_gifts as 
+  SELECT DISTINCT coalesce(opportunity, payment) as record_id
+  FROM npsp_sfdc.credit_v;
 
 
 CREATE TEMPORARY TABLE opps_temp
   (--87 fields
      record_id                        VARCHAR(18) DEFAULT NULL -- NPSP CHANGE
-     ,opportunity_id                  VARCHAR(18) DEFAULT NULL -- NPSP CHANGE
+     ,parent_id                       VARCHAR(18) DEFAULT NULL -- NPSP CHANGE   --ALERT THIS CHANGE
      ,ppid                            VARCHAR(30)
      ,npsp_accountid                  VARCHAR(18) DEFAULT NULL --NPSP CHANGE
      ,npsp_contactid                  VARCHAR(18) DEFAULT NULL --NPSP CHANGE 
@@ -53,10 +58,12 @@ CREATE TEMPORARY TABLE opps_temp
      ,datepulled                      DATE -- AK 6/24/23 What is this?
      ,amount                          DECIMAL(38, 2) DEFAULT NULL
      ,source                          VARCHAR(25) NOT NULL --NPSP CHANGE (Data Source originally)
-     ,opp_affiliate_number            VARCHAR(100) DEFAULT NULL --NPSP CHANGE
+     ,record_affiliate_number            VARCHAR(100) DEFAULT NULL --NPSP CHANGE  --ALERT THIS CHANGE opp to record
      ,channel                         VARCHAR(30) DEFAULT NULL
      ,channel_group                   VARCHAR(10) DEFAULT NULL
      ,payment_method                  VARCHAR(30)--NPSP CHANGE (payment_subtype)
+     ,payment_method_detail           VARCHAR(150) DEFAULT NULL --ALERT THIS CHANGE
+     ,credit_card_issuer              VARCHAR(20)  DEFAULT NULL -- ALERT THIS CHANGE
      ,is_sustainer                    VARCHAR(7) DEFAULT NULL
      ,contactscontributionid          VARCHAR(50) DEFAULT NULL
      ,contactsrecurringcontributionid VARCHAR(50) DEFAULT NULL
@@ -68,7 +75,6 @@ CREATE TEMPORARY TABLE opps_temp
      ,stage                           VARCHAR(150) DEFAULT NULL --NPSP CHANGE 
      ,archive_flag                    BOOLEAN DEFAULT NULL --NPSP CHANGE (Rc_giving__archive_flag varchar)
      ,bookable                        BOOLEAN DEFAULT NULL  --NPSP CHANGE (varchar)
-     ,payment_method_two              VARCHAR(150) DEFAULT NULL
      ,gau_credit_code                 VARCHAR(30) DEFAULT NULL
      ,gau_debit_code                  VARCHAR(50) DEFAULT NULL
      ,gift_type                       VARCHAR(80) DEFAULT NULL  --NPSP CHANGE (recordtype)
@@ -93,7 +99,7 @@ CREATE TEMPORARY TABLE opps_temp
      ,giving_level_pre_gift           VARCHAR(24) DEFAULT NULL
      ,opportunity_number              VARCHAR(20)
      ,reportable_revenue              BOOLEAN --NPSP CHANGE (varchar)
-     ,has_soft_credit                 VARCHAR(27)
+     ,has_soft_credit                 BOOLEAN default false
      ,gau_credit_code_description     VARCHAR(150)
      ,gau_credit_code_category        VARCHAR(25)
      ,gl_entity                       VARCHAR(15)
@@ -130,17 +136,11 @@ CREATE TEMPORARY TABLE opps_temp
      ,sc_channel_desc                 VARCHAR(30)
      ,sc_calender_month               VARCHAR(2)
      ,sc_calendar_year                VARCHAR(4)
+     ,record_last_updated             timestamp
+     ,parent_last_updated             timestamp
   ); 
 
-/*
----Table for has_soft_credit field
-DROP TABLE IF EXISTS akaplan.mv_soft_credit_opportunities ;
-  CREATE TABLE akaplan.mv_soft_credit_opportunities (rC_Giving__Opportunity VARCHAR(18), PRIMARY KEY (rC_Giving__Opportunity) ) ;
-  INSERT INTO akaplan.mv_soft_credit_opportunities   --- CB 9/20/21 added "akaplan."
-  SELECT DISTINCT rC_Giving__Opportunity AS rc_giving__opportunity
-  FROM rounddata.rc_giving__opportunity_credit
-  WHERE delete_flag<>'Y' OR rc_giving__archive_flag ilike 'true'  ;
- 
+/* 
 -- Giving Vehicle Preferences
 drop table if exists akaplan.rc_bios__preference_vehicle;
 create table akaplan.rc_bios__preference_vehicle as 
@@ -169,7 +169,9 @@ INSERT INTO opps_temp (
           WHEN camp.sourcecode_channel_description  
           IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')   THEN 'online' 
           ELSE 'offline' END                                                                                as channel_group
-         ,coalesce(payment.external_processor_name, payment.payment_method)                                 as payment_method  --NPSP CHANGE (payment_subtype)
+,payment.payment_method                                                                             as payment_method
+,payment.external_processor_name                                                                           as  payment_method_detail
+,payment.card_issuer as card_issuer
          ,CASE WHEN rd.id is not null and rd.online_gift is true THEN 'online'                                 --change to rd.online_gift 
                WHEN opp.online_Gift is true and opp.sustaining_gift is true THEN 'online'                                  --confirm this logic
                WHEN position('SUST C3 ONLINE' in opp.description) > 0 THEN 'online'
@@ -179,7 +181,7 @@ INSERT INTO opps_temp (
                THEN 'offline'
                WHEN camp.name like '____W%' THEN 'online'                                                                  -- Change after transformation to Program code
                WHEN opp.online_Gift is false and opp.sustaining_gift is true THEN 'offline'
-               WHEN rd.id is not null and rd.online_gift is false THEN 'Offline'
+               WHEN rd.id is not null and rd.online_gift is false THEN 'offline'
                ELSE NULL END                                                                                as     is_sustainer
          ,Case WHEN opp.originator in ('Convio','EveryAction') THEN opp.Acquired_Batch_Sequence
                ELSE null end                                                                                as     contactscontributionid
@@ -189,12 +191,11 @@ INSERT INTO opps_temp (
          ,payment.lastmodifiedbyid                                                                          as     lastmodifiedbyid
          ,camp.name                                                                                         as     source_code
          ,rdcamp.name                                                                                       as     original_source_code
-         ,CASE WHEN rd.id is not null and rd.online_gift is null THEN '1234'                   --rd.Giving_Number not avail yet
+         ,CASE WHEN rd.id is not null and rd.online_gift is null THEN rd.giving_number                   
                ELSE  opp.Online_Recurring_Gift_ID  END                                                      as     pledge_number
          ,opp.stagename                                                                                     as     stage
          ,opp.archive                                                                                       as     archive_flag
          ,opp.bookable                                                                                      as     bookable
-         ,payment.payment_method                                                                            as     payment_method_two  --do we need this with the subtype field?
          ,payment.GAU_Credit_Code                                                                           as     gau_credit_code
          ,payment.gau_debit_code                                                                            as     gau_debit_code
          ,CASE When rt.developername = 'High Touch' then 'High Touch'
@@ -220,14 +221,12 @@ INSERT INTO opps_temp (
 		 ,null as group_code
 		 ,null as campaign_code
 		 ,null as technique
-         ,CASE-- WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
-               WHEN payment.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(payment.adjusted_deposit_date):: varchar
-                ELSE akaplan.ppfa_fiscal_month(payment.deposit_date):: varchar
-          END                                                                                           AS fiscal_month
+         ,lpad(CASE-- WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
+               WHEN payment.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(payment.adjusted_deposit_date)::varchar
+                ELSE akaplan.ppfa_fiscal_month(payment.deposit_date):: varchar END,2,'0'):: varchar   AS fiscal_month
          ,CASE --WHEN payment.Deposit_Fiscal_Year IS NOT NULL THEN payment.Deposit_Fiscal_Year --formula field?
                WHEN payment.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(payment.adjusted_deposit_date)
-               ELSE akaplan.ppfa_fiscal_year(payment.deposit_date)
-          END                                                                                           AS fiscal_year
+               ELSE akaplan.ppfa_fiscal_year(payment.deposit_date)  END                     AS fiscal_year
          ,CASE WHEN payment.id = (SELECT first_gift_id
                                   FROM npsp_reporting.first_gift_ids x
                                   WHERE x.accountid = opp.accountid and entity = 'C3'
@@ -257,10 +256,8 @@ INSERT INTO opps_temp (
          ,NULL                                           AS Giving_level_pre_gift
          ,opp.Opportunity_Number         AS Opporunity_number
          ,true        AS reportable_revenue
-         /*,CASE WHEN soft_credit.rc_giving__opportunity IS NOT NULL THEN 'TRUE'
-               ELSE NULL
-          END       as has_soft_credit*/ --put in when credits are put in
-		  ,null as has_soft_credit
+         ,CASE WHEN scg.record_id IS NOT NULL THEN true
+               ELSE false END       as has_soft_credit --put in when credits are put in
           ,null as gau_credit_code_description
           ,null as gau_credit_code_category
           ,null as gl_entity
@@ -297,9 +294,11 @@ INSERT INTO opps_temp (
           ,null::varchar as sc_channel_desc
           ,null::varchar as sc_calender_month
           ,null::varchar as sc_calendar_year
+          ,payment.lastmodifieddate as record_last_modified
+          ,opp.lastmodifieddate as parent_last_modified
 from  bucket b
 join      npsp_sfdc.opportunity_v opp  on opp.id = b.opp_id and b.bucket in ('Multi-payment Gifts', 'Single Payment Gifts')
-join      npsp_sfdc.opppayment_v payment on payment.opportunity = opp.id and payment.paid is true and payment.payment_amount > 0 and length(payment.originalpayment)  =  0
+join      npsp_sfdc.opppayment_v payment on payment.opportunity = opp.id and payment.paid is true and payment.payment_amount > 0 and  (length(payment.originalpayment)  =  0 or payment.originalpayment is null)
 left join refunds r on r.OriginalPayment = payment.id 
 left join npsp_sfdc.recordtype rt on opp.recordtypeid = rt.id
 left join npsp_sfdc.campaign_v camp on opp.campaignid = camp.id -- change join to use source_code = unique_source_code when source codes are populated?
@@ -307,6 +306,7 @@ left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.n
 left join npsp_sfdc.recurring_donation_v rd on opp.recurring_donation = rd.id
 left join npsp_sfdc.campaign_v rdcamp on rd.Recurring_Donation_Campaign = rdcamp.id
 left join npsp_sfdc.account_v a on opp.accountid = a.id
+left join soft_credit_gifts scg on  payment.id  = scg.record_id
 where opp.amount > 0 and (payment.payment_amount + coalesce(r.refund_amount,0)) > 0  --Sub in final amount
 and (payment.ngoc_giving_id is not null or  opp.ngoc_giving_id is not null) --non-migrated records? remove for production
 UNION
@@ -332,7 +332,9 @@ SELECT distinct
           IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')  
           THEN 'online' 
           ELSE 'offline' END                                                                            as channel_group
-         ,null --coalesce(payment.external_processor_name, payment.payment_method)                             as payment_method  --NPSP CHANGE (payment_subtype) --How to for Bookable?
+         ,null::varchar  as payment_method --payment.payment_method                                                                             
+         ,null::varchar  as  payment_method_detail --payment.external_processor_name                                                                           
+         ,null::varchar  as card_issuer --payment.card_issuer a
          ,CASE WHEN rd.id is not null and rd.online_gift is true THEN 'online'                                 --change to rd.online_gift 
                WHEN opp.online_Gift is true and opp.sustaining_gift is true THEN 'online'                                  --confirm this logic
                WHEN position('SUST C3 ONLINE' in opp.description) > 0 THEN 'online'
@@ -342,7 +344,7 @@ SELECT distinct
                THEN 'offline'
                WHEN camp.name like '____W%' THEN 'online'                                                                  -- Change after transformation to Program code
                WHEN opp.online_Gift is false and opp.sustaining_gift is true THEN 'offline'
-               WHEN rd.id is not null and rd.online_gift is false THEN 'Offline'
+               WHEN rd.id is not null and rd.online_gift is false THEN 'offline'
                ELSE NULL END                                                                            as     is_sustainer
          ,Case WHEN opp.originator in ('Convio','EveryAction') THEN opp.Acquired_Batch_Sequence
                ELSE null end                                                                            as     contactscontributionid
@@ -352,12 +354,10 @@ SELECT distinct
          ,opp.lastmodifiedbyid                                                                          as     lastmodifiedbyid
          ,camp.name                                                                                     as     source_code
          ,rdcamp.name                                                                                   as     original_source_code
-         ,CASE WHEN rd.id is not null and rd.online_gift is null THEN '1234' --rd.Giving_Number not avail yet
-               ELSE  opp.Online_Recurring_Gift_ID  END                                                  as     pledge_number
+         ,opp.Giving_Number                                                                             as     pledge_number
          ,opp.stagename                                                                                 as     stage
          ,opp.archive                                                                                   as     archive_flag
          ,opp.bookable                                                                                  as     bookable
-         ,null --payment.payment_method                                                                        as     payment_method_two  --do we need this with the subtype field?
          ,opp.GAU_Credit_Code                                                                           as     gau_credit_code
          ,opp.gau_debit_code                                                                            as     gau_debit_code
          ,CASE When rt.developername = 'High Touch' then 'High Touch'
@@ -383,10 +383,9 @@ SELECT distinct
 		 ,null as group_code
 		 ,null as campaign_code
 		 ,null as technique
-         ,CASE WHEN opp.ppfa_fiscal_month IS NOT NULL THEN opp.ppfa_fiscal_month:: varchar
-               WHEN opp.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opp.adjusted_deposit_date):: varchar
-                ELSE akaplan.ppfa_fiscal_year(opp.deposit_date):: varchar
-          END                                                                                           AS fiscal_month
+         ,lpad(CASE WHEN opp.ppfa_fiscal_month IS NOT NULL THEN opp.ppfa_fiscal_month:: varchar
+                    WHEN opp.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opp.adjusted_deposit_date):: varchar
+                    ELSE akaplan.ppfa_fiscal_month(opp.deposit_date):: varchar END,2,'0'):: varchar      AS fiscal_month
          ,CASE WHEN opp.ppfa_fiscal_year IS NOT NULL THEN opp.ppfa_fiscal_year:: varchar
                WHEN opp.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(opp.adjusted_deposit_date)
                ELSE akaplan.ppfa_fiscal_year(opp.adjusted_deposit_date)
@@ -418,10 +417,8 @@ SELECT distinct
          ,NULL                                           AS Giving_level_pre_gift
          ,opp.Opportunity_Number          AS Opportunity_number
          ,true        AS reportable_revenue
-         /*,CASE WHEN soft_credit.rc_giving__opportunity IS NOT NULL THEN 'TRUE'
-               ELSE NULL
-          END       as has_soft_credit*/ --put in when credits are put in
-          ,null as has_soft_credit
+         ,CASE WHEN scg.record_id IS NOT NULL THEN true
+               ELSE false END       as has_soft_credit
           ,null as gau_credit_code_description
           ,null as gau_credit_code_category
           ,null as gl_entity
@@ -458,6 +455,8 @@ SELECT distinct
           ,null::varchar as sc_channel_desc
           ,null::varchar as sc_calender_month
           ,null::varchar as sc_calendar_year
+          ,opp.lastmodifieddate as record_last_modified
+          ,null:: timestamp as  parent_last_modified
 from  bucket b
 join      npsp_sfdc.opportunity_v opp  on opp.id = b.opp_id and b.bucket = 'Bookable Gift'
 left join npsp_sfdc.recordtype rt on opp.recordtypeid = rt.id
@@ -466,9 +465,165 @@ left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.n
 left join npsp_sfdc.recurring_donation_v rd on opp.recurring_donation = rd.id
 left join npsp_sfdc.campaign_v rdcamp on rd.Recurring_Donation_Campaign = rdcamp.id
 left join npsp_sfdc.account_v a on opp.accountid = a.id
+left join soft_credit_gifts scg on  opp.id  = scg.record_id
 where opp.amount > 0 
 and ( opp.ngoc_giving_id is not null) --non-migrated records? remove for production
 and opp.stagename in ('Active', 'Closed Won')
+-----------------------------
+----------CREDITS------------
+-----------------------------
+UNION
+select distinct
+credit.id as record_id
+,coalesce(opportunity.id, payment.id) as parent_id
+,null::varchar as ppid
+,coalesce(credit.account, contact.accountid) as npsp_accountid
+,credit.contact as npsp_contactid
+,credit.credit_close_date as closedate
+,CASE WHEN opportunity.adjusted is true THEN opportunity.adjusted_deposit_date
+      WHEN opportunity.adjusted is false THEN opportunity.deposit_date
+      WHEN payment.Deposit_Date IS NOT NULL THEN payment.Deposit_Date
+      ELSE payment.Adjusted_Deposit_Date  end as deposit_date
+,coalesce(opportunity.sync_date, payment_opp.sync_date) as sync_date
+,credit.amount as amount
+,'Credits' as data_source
+,CASE WHEN credit.affiliate_number is not null then credit.affiliate_number
+      WHEN credit.entity = 'C3' then account.c3_affiliate_number
+      WHEN credit.entity is not null then account.c4_affiliate_number
+      else null end  as affiliate_number 
+,campaign.sourcecode_channel_description as channel
+,CASE 
+     WHEN campaign.sourcecode_channel_description IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')   THEN 'online' 
+     ELSE 'offline' END   as channel_group
+,payment.payment_method                                                                             as payment_method
+,payment.external_processor_name                                                                           as  payment_method_detail
+,payment.card_issuer as card_issuer
+,CASE WHEN rd.id is not null and rd.online_gift is true THEN 'online'                                
+      WHEN payment_opp.online_Gift is true and payment_opp.sustaining_gift is true THEN 'online'      --confirm this logic
+      WHEN position('SUST C3 ONLINE' in payment_opp.description) > 0 THEN 'online'
+      WHEN position('SUST C4 ONLINE' in payment_opp.description) > 0 THEN 'online'
+      WHEN position('SUST  VOTES ONLINE' in payment_opp.description) > 0 then 'online'
+      WHEN payment_opp.gau_credit_code like '1%4013' and length(payment_opp.gau_credit_code) = 17     ---AK 10/20/22 --Legacy GAU coding
+           THEN 'offline'
+      WHEN campaign.name like '____W%' THEN 'online'                                                         -- Change after transformation to Program code
+      WHEN payment_opp.online_Gift is false and payment_opp.sustaining_gift is true THEN 'offline'
+      WHEN rd.id is not null and rd.online_gift is false THEN 'offline'
+      ELSE NULL END as is_sustainer
+,CASE WHEN payment_opp.originator in ('Convio','EveryAction') THEN payment_opp.Acquired_Batch_Sequence
+               ELSE null end                                                                                as     contactscontributionid
+,Case WHEN payment_opp.originator in ('Convio','EveryAction') THEN payment_opp.Online_Recurring_Gift_ID 
+               ELSE null end                                                                                as     contactsrecurringcontributionid
+,credit.createdbyid                                                                               as     createdbyid
+,credit.lastmodifiedbyid                                                                          as     lastmodifiedbyid
+,campaign.name                                                                                     as     source_code
+,null:: varchar                                                                                   as     original_source_code
+,CASE WHEN rd.id is not null and rd.online_gift is null THEN rd.giving_number                   
+      ELSE  payment_opp.Online_Recurring_Gift_ID  END                                                      as     pledge_number
+,coalesce(opportunity.stagename, payment_opp.stagename)                                            as stage
+,credit.archive                                                                                    as archive_flag
+,coalesce(opportunity.bookable,false)                                                              as     bookable
+,credit.gau_credit_code                                                                            as gau_credit_code
+,coalesce(opportunity.gau_debit_code, payment.gau_debit_code)                                      as gau_debit_code
+,Soft_Credit_Type                                                                                  as gift_type
+,CASE WHEN payment.gau_credit_code IN ('C325005','C325015','11000000000002340','11000000000002356','C340100TR422ONL') 
+           THEN 'National' 
+      WHEN payment_opp.Pass_Through_Gift is true THEN 'Affiliate' ELSE null  END                            as     pass_through
+,credit.cfp_shareable as cfp_shareable
+,false                                                                                     AS     is_local    --NPSP CHANGE - need source code transformation          
+/*,campaign.SourceCode_Tax_Status_Description AS entity
+,campaign.sourceCode_Office_description AS office
+,campaign.sourceCode_Business_Unit_Description    AS business_unit
+,campaign.sourceCode_Activity_Group_Description AS group_code
+,campaign.sourceCode_Campaign_Description       AS campaign_code
+,campaign.sourcecode_effort_description as technique --added via case 165733*/
+,null as entity
+,null as office
+,null as business_unit
+,null as group_code
+,null as campaign_code
+,null as technique
+,lpad(Coalesce(opportunity.ppfa_fiscal_month:: varchar, 
+          akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: varchar,
+          akaplan.ppfa_fiscal_month(opportunity.deposit_date):: varchar,  
+          payment_opp.ppfa_fiscal_month:: varchar,
+          akaplan.ppfa_fiscal_month(payment_opp.adjusted_deposit_date):: varchar,
+          akaplan.ppfa_fiscal_month(payment_opp.deposit_date):: varchar,
+          akaplan.ppfa_fiscal_month(credit.credit_close_date):: varchar ),2,'0') as fiscal_month
+,Coalesce(opportunity.ppfa_fiscal_year, 
+          akaplan.ppfa_fiscal_year(opportunity.adjusted_deposit_date):: varchar,
+          akaplan.ppfa_fiscal_year(opportunity.deposit_date):: varchar,  
+          payment_opp.ppfa_fiscal_year,
+          akaplan.ppfa_fiscal_year(payment_opp.adjusted_deposit_date):: varchar,
+          akaplan.ppfa_fiscal_year(payment_opp.deposit_date):: varchar,
+          akaplan.ppfa_fiscal_year(credit.credit_close_date):: varchar ) as fiscal_year
+,CASE WHEN credit.id = (SELECT first_gift_id
+                     FROM npsp_reporting.first_gift_ids x
+                     WHERE x.accountid = coalesce(credit.account, contact.accountid) and entity = 'C3' )
+                     THEN true
+                     ELSE false END                                              AS First_Gift_Natl_c3
+,CASE WHEN credit.id = (SELECT first_gift_id
+                     FROM npsp_reporting.first_gift_ids x
+                     WHERE x.accountid = coalesce(credit.account, contact.accountid) and entity = 'C4')
+                     THEN true
+                     ELSE false END                                              AS First_Gift_Natl_c4
+,account.c3_affiliate_number                                                       AS Donor_c3_affil_number
+,account.c4_affiliate_number                                                      AS Donor_C4_affil_number
+,CASE WHEN coalesce(opportunity.adjusted, payment_opp.adjusted) is true THEN true 
+      ELSE false  END                                                             AS Adjusted
+/*,CASE WHEN vehicle.rc_bios__account IS NOT NULL
+             THEN 'Y' ELSE 'N' END                                           AS IsGivingVehicle  */ --Figure this out
+,false                                           as giving_vehicle
+,'SOFT'  as credit_type
+,NULL                                           AS Giving_level_pre_gift
+,coalesce(opportunity.Opportunity_Number, payment_opp.opportunity_number)          AS Opportunity_number
+,false                                                                             as reportable_revenue
+,false as has_soft_credit
+,null as gau_credit_code_description
+,null as gau_credit_code_category
+,null as gl_entity
+,null as dept
+,null as sub_dept
+,null:: bigint as contacts_onlineform_id
+,null as onlineform_name          
+,null:: bigint code_id  
+,null as code_name        
+,null as code_org                
+,null:: date as code_date   
+,null as marketing_campaign 
+,null as ask_type              
+,null as misc                
+,null as site
+,null as site_type
+,null:: date as cc_exp_date
+,NULL::bigint as rownm_byPPID
+,NULL::bigint as rownm_byPPID_desc
+,NULL::bigint as rownm_channel_group
+,NULL::varchar as f_or_l_hpc
+,NULL::varchar as f_or_l_sus
+,NULL::bigint as rownm_sc_sus
+,null::varchar as sc_source_code
+,null::varchar as sc_tax_status
+,null::varchar as sc_tax_status_desc
+,null::varchar as sc_office
+,null::varchar as sc_office_desc
+,null::varchar as sc_program
+,null::varchar as sc_program_desc
+,null::varchar as sc_restriction
+,null::varchar as sc_restriction_desc
+,null::varchar as sc_channel
+,null::varchar as sc_channel_desc
+,null::varchar as sc_calender_month
+,null::varchar as sc_calendar_year
+,credit.lastmodifieddate as record_last_modified
+,coalesce(opportunity.lastmodifieddate, payment_opp.lastmodifieddate) as  parent_last_modified
+from npsp_sfdc.credit_v credit
+left join npsp_sfdc.opppayment_v payment on credit.payment = payment.id
+left join npsp_sfdc.opportunity_v payment_opp on payment.opportunity = payment_opp.id
+left join npsp_sfdc.recurring_donation_v rd on payment_opp.recurring_donation = rd.id
+left join npsp_sfdc.opportunity_v opportunity on credit.opportunity = opportunity.id
+left join npsp_sfdc.contact_v contact on credit.contact = contact.id
+left join npsp_sfdc.campaign_v campaign on coalesce(opportunity.campaignid, payment_opp.campaignid) = campaign.id
+left join npsp_sfdc.account_v account on coalesce(contact.accountid, credit.account) = account.id
 );
 
 
@@ -489,7 +644,9 @@ set
                           when cm = 'B' then '11':: varchar
                           when cm = 'C' then '12':: varchar else cm::varchar end 
 ,sc_calendar_year = cy_description
-from mss.new_source_code_base_national new_sc
+from mss.master_source_code_translator  new_sc
 where new_sc.current_source_code = opps_temp.source_code;
+
+--mss.new_source_code_base_national
 
 Create table ppfa_golden.golden_opportunities_npsp as (select * from opps_temp);
