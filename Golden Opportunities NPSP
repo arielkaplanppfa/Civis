@@ -13,6 +13,10 @@ Golden Opps uses archive records, not available to NPSP
 Records that have been modified after the data cut
 Updates to Opps on 6/16 changes some amounts to > 0
 Missing Gifts in NPSP, prior to 2020 example Mary E Mower 2019 giving
+
+9/29/23
+Final amount on payments null
+account c3 and c4 affil numbers are null
 */
 
 drop table if exists ppfa_golden.golden_opportunities_npsp cascade;
@@ -57,9 +61,9 @@ CREATE TEMPORARY TABLE opps_temp
      ,deposit_date                    DATE DEFAULT NULL
      ,datepulled                      DATE -- AK 6/24/23 What is this?
      ,amount                          DECIMAL(38, 2) DEFAULT NULL
-     ,source                          VARCHAR(25) NOT NULL --NPSP CHANGE (Data Source originally)
+     ,source                          VARCHAR(45) NOT NULL --NPSP CHANGE (Data Source originally)
      ,record_affiliate_number            VARCHAR(100) DEFAULT NULL --NPSP CHANGE  --ALERT THIS CHANGE opp to record
-     ,channel                         VARCHAR(30) DEFAULT NULL
+     --,channel                         VARCHAR(30) DEFAULT NULL redundant because of SF_Channel
      ,channel_group                   VARCHAR(10) DEFAULT NULL
      ,payment_method                  VARCHAR(30)--NPSP CHANGE (payment_subtype)
      ,payment_method_detail           VARCHAR(150) DEFAULT NULL --ALERT THIS CHANGE
@@ -70,7 +74,7 @@ CREATE TEMPORARY TABLE opps_temp
      ,createdbyid                     VARCHAR(18) DEFAULT NULL
      ,lastmodifiedbyid                VARCHAR(18) DEFAULT NULL
      ,source_code                     VARCHAR(150) DEFAULT NULL
-     ,original_source_code            VARCHAR(25) DEFAULT NULL
+     ,original_source_code            VARCHAR(45) DEFAULT NULL
      ,pledge_number                   VARCHAR(150) DEFAULT NULL
      ,stage                           VARCHAR(150) DEFAULT NULL --NPSP CHANGE 
      ,archive_flag                    BOOLEAN DEFAULT NULL --NPSP CHANGE (Rc_giving__archive_flag varchar)
@@ -81,14 +85,21 @@ CREATE TEMPORARY TABLE opps_temp
      ,pass_through                    VARCHAR(10) DEFAULT NULL  --NPSP CHANGE(is_pass_through INT)
      ,cfp_shareable                   BOOLEAN DEFAULT NULL  --NPSP CHANGE(varchar)
      ,is_local                        BOOLEAN DEFAULT false
-     ,entity                          VARCHAR(3) DEFAULT NULL
-     ,office                          VARCHAR(41) DEFAULT NULL
-     ,business_unit                   VARCHAR(19) DEFAULT NULL
-     ,group_code                      VARCHAR(21) DEFAULT NULL
-     ,campaign_code                   VARCHAR(25) DEFAULT NULL
-     ,technique                       VARCHAR(25) DEFAULT NULL  -- added via case 165733
+     ,sc_tax_status                   VARCHAR(2)  DEFAULT NULL
+     ,sc_tax_status_desc              VARCHAR(10) DEFAULT NULL
+     ,sc_office                       VARCHAR(2)  DEFAULT NULL
+     ,sc_office_desc                  VARCHAR(100) DEFAULT NULL
+     ,sc_program                      VARCHAR(1)  DEFAULT NULL
+     ,sc_program_desc                 VARCHAR(19) DEFAULT NULL
+     ,sc_restriction                  VARCHAR(1)  DEFAULT NULL
+     ,sc_restriction_desc             VARCHAR(20) DEFAULT NULL
+     ,activity_type                   VARCHAR(100) DEFAULT NULL
+     ,sc_channel                      VARCHAR(1) DEFAULT NULL
+     ,sc_channel_desc                 VARCHAR(45) DEFAULT NULL  -- added via case 165733
      ,fiscal_month                    VARCHAR(2) DEFAULT NULL
      ,fiscal_year                     VARCHAR(42) DEFAULT NULL
+     ,sc_calender_month               Varchar(20)
+     ,sc_calender_year                VARCHAR(20)
      ,first_gift_natl_c3              BOOLEAN DEFAULT FALSE  --NPSP CHANGE (varchar)
      ,first_gift_natl_c4              BOOLEAN DEFAULT FALSE  --NPSP CHANGE (varchar)
      ,donor_c3_affil_number           VARCHAR(22) DEFAULT NULL
@@ -102,7 +113,7 @@ CREATE TEMPORARY TABLE opps_temp
      ,has_soft_credit                 BOOLEAN default false
      ,gau_credit_code_description     VARCHAR(150)
      ,gau_credit_code_category        VARCHAR(25)
-     ,gl_entity                       VARCHAR(15)
+     ,gl_entity                       VARCHAR(25)
      ,dept                            VARCHAR(20)
      ,sub_dept                        VARCHAR(20)
      ,contacts_onlineform_id          BIGINT
@@ -124,21 +135,13 @@ CREATE TEMPORARY TABLE opps_temp
      ,f_or_l_sus                      VARCHAR(1)
      ,rownm_sc_sus                    BIGINT
      ,sc_source_code                  VARCHAR(20)
-     ,sc_tax_status                   VARCHAR(2)
-     ,sc_tax_status_desc              VARCHAR(10)
-     ,sc_office                       VARCHAR(2)
-     ,sc_office_desc                  VARCHAR(100)
-     ,sc_program                      VARCHAR(1)
-     ,sc_program_desc                 VARCHAR(50)
-     ,sc_restriction                  VARCHAR(1)
-     ,sc_restriction_desc             VARCHAR(20)
-     ,sc_channel                      VARCHAR(1)
-     ,sc_channel_desc                 VARCHAR(30)
-     ,sc_calender_month               VARCHAR(2)
-     ,sc_calendar_year                VARCHAR(4)
      ,record_last_updated             timestamp
      ,parent_last_updated             timestamp
-  ); 
+     ,max_last_updated                timestamp
+      )
+      distkey(npsp_accountid)
+      ;
+
 
 /* 
 -- Giving Vehicle Preferences
@@ -164,10 +167,10 @@ INSERT INTO opps_temp (
                ELSE (payment.payment_amount + coalesce(r.refund_amount,0)) end                       as amount --sub in final amount
          ,b.bucket                                                                                          as data_source  --Sustainer?
          ,opp.Affiliate_Number                                                                              as opp_affiliate_number
-         ,camp.sourcecode_channel_description                                                               as channel
+         --,camp.sc_channel_description                                                               as channel
          ,CASE 
-          WHEN camp.sourcecode_channel_description  
-          IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')   THEN 'online' 
+          WHEN camp.sc_channel_description  
+          IN ( 'Mobile - Individual (1:1) Text', 'Social Media', 'Mobile - Mass Text', 'P2P', 'Website','Email - Mass','Ads')   THEN 'online' 
           ELSE 'offline' END                                                                                as channel_group
 ,payment.payment_method                                                                             as payment_method
 ,payment.external_processor_name                                                                           as  payment_method_detail
@@ -189,8 +192,8 @@ INSERT INTO opps_temp (
                ELSE null end                                                                                as     contactsrecurringcontributionid
          ,payment.createdbyid                                                                               as     createdbyid
          ,payment.lastmodifiedbyid                                                                          as     lastmodifiedbyid
-         ,camp.name                                                                                         as     source_code
-         ,rdcamp.name                                                                                       as     original_source_code
+         ,coalesce(opp.Source_Code, opp.source_code_formula)                                                as     source_code
+         ,opp.original_source_code                                                                          as     original_source_code
          ,CASE WHEN rd.id is not null and rd.online_gift is null THEN rd.giving_number                   
                ELSE  opp.Online_Recurring_Gift_ID  END                                                      as     pledge_number
          ,opp.stagename                                                                                     as     stage
@@ -206,27 +209,27 @@ INSERT INTO opps_temp (
                THEN 'National' 
                WHEN opp.Pass_Through_Gift is true THEN 'Affiliate' ELSE null  END                           as     pass_through
          ,payment.CFP_Shareable                                                                             as     cfp_shareable
-        ,--CASE WHEN camp.office_code not in (national codes) AND  opp.gau_credit_code NOT LIKE '%CFP%'
-               --THEN 'Y' ELSE 'N' END   
-               false                                                                                         AS     is_local    --NPSP CHANGE - need source code transformation
-       /*,campaign.SourceCode_Tax_Status_Description AS entity
-         ,campaign.sourceCode_Office_description AS office
-         ,campaign.sourceCode_Business_Unit_Description    AS business_unit
-         ,campaign.sourceCode_Activity_Group_Description AS group_code
-         ,campaign.sourceCode_Campaign_Description       AS campaign_code
-         ,campaign.sourcecode_effort_description as technique --added via case 165733 */
-		 ,null as entity
-		 ,null as office
-		 ,null as business_unit
-		 ,null as group_code
-		 ,null as campaign_code
-		 ,null as technique
+        ,CASE WHEN lower(camp.sc_Office_description) not like '%ppfa national%' AND  opp.gau_credit_code NOT LIKE '%CFP%'
+               THEN true ELSE false END                                                                           AS     is_local    --NPSP CHANGE - need source code transformation
+         ,camp.sc_tax_status_code as sc_tax_status
+         ,camp.Sc_Tax_Status_Description AS tax_status_description
+         ,camp.sc_office_code as office_code
+         ,camp.sc_Office_description AS office_descripiton
+         ,camp.sc_program_code as program_code
+         ,camp.sc_program_description    AS program_description
+         ,camp.sc_restriction_code as restriction_code
+         ,camp.sc_restriction_description as restriction_desc
+         ,camp.Activity_type_Description AS activity_type
+         ,camp.sc_channel_code as sf_channel
+         ,camp.sc_channel_description as sf_channel_desc --added via case 165733 
          ,lpad(CASE-- WHEN opportunity.ppfa_fiscal_month IS NOT NULL THEN opportunity.ppfa_fiscal_month
                WHEN payment.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(payment.adjusted_deposit_date)::varchar
                 ELSE akaplan.ppfa_fiscal_month(payment.deposit_date):: varchar END,2,'0'):: varchar   AS fiscal_month
          ,CASE --WHEN payment.Deposit_Fiscal_Year IS NOT NULL THEN payment.Deposit_Fiscal_Year --formula field?
                WHEN payment.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(payment.adjusted_deposit_date)
                ELSE akaplan.ppfa_fiscal_year(payment.deposit_date)  END                     AS fiscal_year
+        ,camp.sc_calendar_month_description
+        ,camp.sc_calendar_year_description
          ,CASE WHEN payment.id = (SELECT first_gift_id
                                   FROM npsp_reporting.first_gift_ids x
                                   WHERE x.accountid = opp.accountid and entity = 'C3'
@@ -258,9 +261,9 @@ INSERT INTO opps_temp (
          ,true        AS reportable_revenue
          ,CASE WHEN scg.record_id IS NOT NULL THEN true
                ELSE false END       as has_soft_credit --put in when credits are put in
-          ,null as gau_credit_code_description
-          ,null as gau_credit_code_category
-          ,null as gl_entity
+          ,gau.description as gau_credit_code_description
+          ,gau.gl_category as gau_credit_code_category
+          ,gau.entity as gl_entity
           ,null as dept
           ,null as sub_dept
           ,null:: bigint as contacts_onlineform_id
@@ -282,29 +285,17 @@ INSERT INTO opps_temp (
           ,NULL::varchar as f_or_l_sus
           ,NULL::bigint as rownm_sc_sus
           ,null::varchar as sc_source_code
-          ,null::varchar as sc_tax_status
-          ,null::varchar as sc_tax_status_desc
-          ,null::varchar as sc_office
-          ,null::varchar as sc_office_desc
-          ,null::varchar as sc_program
-          ,null::varchar as sc_program_desc
-          ,null::varchar as sc_restriction
-          ,null::varchar as sc_restriction_desc
-          ,null::varchar as sc_channel
-          ,null::varchar as sc_channel_desc
-          ,null::varchar as sc_calender_month
-          ,null::varchar as sc_calendar_year
-          ,payment.lastmodifieddate as record_last_modified
-          ,opp.lastmodifieddate as parent_last_modified
+          ,payment.lastmodifieddate as record_last_updated
+          ,opp.lastmodifieddate as parent_last_updated
+          , case when payment.lastmodifieddate >= opp.lastmodifieddate then payment.lastmodifieddate else opp.lastmodifieddate end as max_last_updated
 from  bucket b
 join      npsp_sfdc.opportunity_v opp  on opp.id = b.opp_id and b.bucket in ('Multi-payment Gifts', 'Single Payment Gifts')
 join      npsp_sfdc.opppayment_v payment on payment.opportunity = opp.id and payment.paid is true and payment.payment_amount > 0 and  (length(payment.originalpayment)  =  0 or payment.originalpayment is null)
 left join refunds r on r.OriginalPayment = payment.id 
 left join npsp_sfdc.recordtype rt on opp.recordtypeid = rt.id
-left join npsp_sfdc.campaign_v camp on opp.campaignid = camp.id -- change join to use source_code = unique_source_code when source codes are populated?
+left join npsp_sfdc.campaign_v camp on coalesce(opp.Source_Code, opp.source_code_formula)  = camp.name -- change join to use source_code = unique_source_code when source codes are populated?
 left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.name 
 left join npsp_sfdc.recurring_donation_v rd on opp.recurring_donation = rd.id
-left join npsp_sfdc.campaign_v rdcamp on rd.Recurring_Donation_Campaign = rdcamp.id
 left join npsp_sfdc.account_v a on opp.accountid = a.id
 left join soft_credit_gifts scg on  payment.id  = scg.record_id
 where opp.amount > 0 and (payment.payment_amount + coalesce(r.refund_amount,0)) > 0  --Sub in final amount
@@ -326,9 +317,9 @@ SELECT distinct
          ,opp.amount                                                                                    as amount
          ,b.bucket                                                                                      as data_source  --Sustainer?
          ,opp.Affiliate_Number                                                                          as affiliate_number
-         ,camp.sourcecode_channel_description                                                           as channel
+        -- ,camp.channel_description                                                           as channel
          ,CASE 
-          WHEN camp.sourcecode_channel_description  
+          WHEN camp.channel_description  
           IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')  
           THEN 'online' 
           ELSE 'offline' END                                                                            as channel_group
@@ -353,7 +344,7 @@ SELECT distinct
          ,opp.createdbyid                                                                               as     createdbyid
          ,opp.lastmodifiedbyid                                                                          as     lastmodifiedbyid
          ,camp.name                                                                                     as     source_code
-         ,rdcamp.name                                                                                   as     original_source_code
+         ,opp.original_source_code                                                                      as     original_source_code
          ,opp.Giving_Number                                                                             as     pledge_number
          ,opp.stagename                                                                                 as     stage
          ,opp.archive                                                                                   as     archive_flag
@@ -368,21 +359,19 @@ SELECT distinct
                THEN 'National' 
                WHEN opp.Pass_Through_Gift is true THEN 'Affiliate' ELSE null  END                            as     pass_through
          ,opp.CFP_Shareable                                                                         as     cfp_shareable
-        ,--CASE WHEN camp.office_code not in (national codes) AND  opp.gau_credit_code NOT LIKE '%CFP%'
-               --THEN 'Y' ELSE 'N' END   
-               false                                                                                     AS     is_local    --NPSP CHANGE - need source code transformation
-                  /*,campaign.SourceCode_Tax_Status_Description AS entity
-         ,campaign.sourceCode_Office_description AS office
-         ,campaign.sourceCode_Business_Unit_Description    AS business_unit
-         ,campaign.sourceCode_Activity_Group_Description AS group_code
-         ,campaign.sourceCode_Campaign_Description       AS campaign_code
-         ,campaign.sourcecode_effort_description as technique --added via case 165733*/
-         ,null as entity
-		 ,null as office
-		 ,null as business_unit
-		 ,null as group_code
-		 ,null as campaign_code
-		 ,null as technique
+         ,CASE WHEN lower(camp.sc_Office_description) not like '%ppfa national%' AND  opp.gau_credit_code NOT LIKE '%CFP%'
+               THEN true ELSE false END                                                                  AS     is_local    --NPSP CHANGE - need source code transformation
+         ,camp.sc_tax_status_code as sc_tax_status
+         ,camp.Sc_Tax_Status_Description AS tax_status_description
+         ,camp.sc_office_code as office_code
+         ,camp.sc_Office_description AS office_descripiton
+         ,camp.sc_program_code as program_code
+         ,camp.sc_program_description    AS program_description
+         ,camp.sc_restriction_code as restriction_code
+         ,camp.sc_restriction_description as restriction_desc
+         ,camp.Activity_type_Description AS activity_type
+         ,camp.sc_channel_code as sf_channel
+         ,camp.sc_channel_description as sf_channel --added via case 165733 
          ,lpad(CASE WHEN opp.ppfa_fiscal_month IS NOT NULL THEN opp.ppfa_fiscal_month:: varchar
                     WHEN opp.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_month(opp.adjusted_deposit_date):: varchar
                     ELSE akaplan.ppfa_fiscal_month(opp.deposit_date):: varchar END,2,'0'):: varchar      AS fiscal_month
@@ -390,6 +379,8 @@ SELECT distinct
                WHEN opp.adjusted_deposit_date IS NOT NULL THEN akaplan.ppfa_fiscal_year(opp.adjusted_deposit_date)
                ELSE akaplan.ppfa_fiscal_year(opp.adjusted_deposit_date)
           END                                                                                           AS fiscal_year
+        ,camp.sc_calendar_month_description
+        ,camp.sc_calendar_year_description
          ,CASE WHEN opp.id = (SELECT first_gift_id
                                   FROM npsp_reporting.first_gift_ids x
                                   WHERE x.accountid = opp.accountid and entity = 'C3'
@@ -419,9 +410,9 @@ SELECT distinct
          ,true        AS reportable_revenue
          ,CASE WHEN scg.record_id IS NOT NULL THEN true
                ELSE false END       as has_soft_credit
-          ,null as gau_credit_code_description
-          ,null as gau_credit_code_category
-          ,null as gl_entity
+          ,gau.description as gau_credit_code_description
+          ,gau.gl_category as gau_credit_code_category
+          ,gau.entity as gl_entity
           ,null as dept
           ,null as sub_dept
           ,null:: bigint as contacts_onlineform_id
@@ -443,27 +434,15 @@ SELECT distinct
           ,NULL::varchar as f_or_l_sus
           ,NULL::bigint as rownm_sc_sus
           ,null::varchar as sc_source_code
-          ,null::varchar as sc_tax_status
-          ,null::varchar as sc_tax_status_desc
-          ,null::varchar as sc_office
-          ,null::varchar as sc_office_desc
-          ,null::varchar as sc_program
-          ,null::varchar as sc_program_desc
-          ,null::varchar as sc_restriction
-          ,null::varchar as sc_restriction_desc
-          ,null::varchar as sc_channel
-          ,null::varchar as sc_channel_desc
-          ,null::varchar as sc_calender_month
-          ,null::varchar as sc_calendar_year
           ,opp.lastmodifieddate as record_last_modified
           ,null:: timestamp as  parent_last_modified
+          , opp.lastmodifieddate as max_last_updated
 from  bucket b
 join      npsp_sfdc.opportunity_v opp  on opp.id = b.opp_id and b.bucket = 'Bookable Gift'
 left join npsp_sfdc.recordtype rt on opp.recordtypeid = rt.id
-left join npsp_sfdc.campaign_v camp on opp.campaignid = camp.id -- change join to use source_code = unique_source_code when source codes are populated?
+left join npsp_sfdc.campaign_v camp on opp.source_code = camp.name -- change join to use source_code = unique_source_code when source codes are populated?
 left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.name 
 left join npsp_sfdc.recurring_donation_v rd on opp.recurring_donation = rd.id
-left join npsp_sfdc.campaign_v rdcamp on rd.Recurring_Donation_Campaign = rdcamp.id
 left join npsp_sfdc.account_v a on opp.accountid = a.id
 left join soft_credit_gifts scg on  opp.id  = scg.record_id
 where opp.amount > 0 
@@ -491,9 +470,9 @@ credit.id as record_id
       WHEN credit.entity = 'C3' then account.c3_affiliate_number
       WHEN credit.entity is not null then account.c4_affiliate_number
       else null end  as affiliate_number 
-,campaign.sourcecode_channel_description as channel
+--,campaign.channel_description as channel
 ,CASE 
-     WHEN campaign.sourcecode_channel_description IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')   THEN 'online' 
+     WHEN campaign.channel_description IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')   THEN 'online' 
      ELSE 'offline' END   as channel_group
 ,payment.payment_method                                                                             as payment_method
 ,payment.external_processor_name                                                                           as  payment_method_detail
@@ -515,7 +494,7 @@ credit.id as record_id
                ELSE null end                                                                                as     contactsrecurringcontributionid
 ,credit.createdbyid                                                                               as     createdbyid
 ,credit.lastmodifiedbyid                                                                          as     lastmodifiedbyid
-,campaign.name                                                                                     as     source_code
+,coalesce(payment_opp.source_code, payment_opp.source_Code_formula)                               as     source_code
 ,null:: varchar                                                                                   as     original_source_code
 ,CASE WHEN rd.id is not null and rd.online_gift is null THEN rd.giving_number                   
       ELSE  payment_opp.Online_Recurring_Gift_ID  END                                                      as     pledge_number
@@ -529,19 +508,19 @@ credit.id as record_id
            THEN 'National' 
       WHEN payment_opp.Pass_Through_Gift is true THEN 'Affiliate' ELSE null  END                            as     pass_through
 ,credit.cfp_shareable as cfp_shareable
-,false                                                                                     AS     is_local    --NPSP CHANGE - need source code transformation          
-/*,campaign.SourceCode_Tax_Status_Description AS entity
-,campaign.sourceCode_Office_description AS office
-,campaign.sourceCode_Business_Unit_Description    AS business_unit
-,campaign.sourceCode_Activity_Group_Description AS group_code
-,campaign.sourceCode_Campaign_Description       AS campaign_code
-,campaign.sourcecode_effort_description as technique --added via case 165733*/
-,null as entity
-,null as office
-,null as business_unit
-,null as group_code
-,null as campaign_code
-,null as technique
+,CASE WHEN lower(campaign.sc_Office_description) not like '%ppfa national%' AND  credit.gau_credit_code NOT LIKE '%CFP%'
+               THEN true ELSE false END                                                                                        AS     is_local    --NPSP CHANGE - need source code transformation          
+         ,campaign.sc_tax_status_code as sc_tax_status
+         ,campaign.Sc_Tax_Status_Description AS tax_status_description
+         ,campaign.sc_office_code as office_code
+         ,campaign.sc_Office_description AS office_descripiton
+         ,campaign.sc_program_code as program_code
+         ,campaign.sc_program_description    AS program_description
+         ,campaign.sc_restriction_code as restriction_code
+         ,campaign.sc_restriction_description as restriction_desc
+         ,campaign.Activity_type_Description AS activity_type
+         ,campaign.sc_channel_code as sf_channel
+         ,campaign.sc_channel_description as sf_channel --added via case 165733 
 ,lpad(Coalesce(opportunity.ppfa_fiscal_month:: varchar, 
           akaplan.ppfa_fiscal_month(opportunity.adjusted_deposit_date):: varchar,
           akaplan.ppfa_fiscal_month(opportunity.deposit_date):: varchar,  
@@ -556,6 +535,8 @@ credit.id as record_id
           akaplan.ppfa_fiscal_year(payment_opp.adjusted_deposit_date):: varchar,
           akaplan.ppfa_fiscal_year(payment_opp.deposit_date):: varchar,
           akaplan.ppfa_fiscal_year(credit.credit_close_date):: varchar ) as fiscal_year
+        ,campaign.sc_calendar_month_description
+        ,campaign.sc_calendar_year_description
 ,CASE WHEN credit.id = (SELECT first_gift_id
                      FROM npsp_reporting.first_gift_ids x
                      WHERE x.accountid = coalesce(credit.account, contact.accountid) and entity = 'C3' )
@@ -578,9 +559,9 @@ credit.id as record_id
 ,coalesce(opportunity.Opportunity_Number, payment_opp.opportunity_number)          AS Opportunity_number
 ,false                                                                             as reportable_revenue
 ,false as has_soft_credit
-,null as gau_credit_code_description
-,null as gau_credit_code_category
-,null as gl_entity
+,gau.description as gau_credit_code_description
+,gau.gl_category as gau_credit_code_category
+,gau.entity as gl_entity
 ,null as dept
 ,null as sub_dept
 ,null:: bigint as contacts_onlineform_id
@@ -602,51 +583,20 @@ credit.id as record_id
 ,NULL::varchar as f_or_l_sus
 ,NULL::bigint as rownm_sc_sus
 ,null::varchar as sc_source_code
-,null::varchar as sc_tax_status
-,null::varchar as sc_tax_status_desc
-,null::varchar as sc_office
-,null::varchar as sc_office_desc
-,null::varchar as sc_program
-,null::varchar as sc_program_desc
-,null::varchar as sc_restriction
-,null::varchar as sc_restriction_desc
-,null::varchar as sc_channel
-,null::varchar as sc_channel_desc
-,null::varchar as sc_calender_month
-,null::varchar as sc_calendar_year
 ,credit.lastmodifieddate as record_last_modified
 ,coalesce(opportunity.lastmodifieddate, payment_opp.lastmodifieddate) as  parent_last_modified
+, case when credit.lastmodifieddate >= coalesce(opportunity.lastmodifieddate, payment_opp.lastmodifieddate) then credit.lastmodifieddate 
+        else coalesce(opportunity.lastmodifieddate, payment_opp.lastmodifieddate) end as max_last_updated
 from npsp_sfdc.credit_v credit
 left join npsp_sfdc.opppayment_v payment on credit.payment = payment.id
 left join npsp_sfdc.opportunity_v payment_opp on payment.opportunity = payment_opp.id
 left join npsp_sfdc.recurring_donation_v rd on payment_opp.recurring_donation = rd.id
 left join npsp_sfdc.opportunity_v opportunity on credit.opportunity = opportunity.id
 left join npsp_sfdc.contact_v contact on credit.contact = contact.id
-left join npsp_sfdc.campaign_v campaign on coalesce(opportunity.campaignid, payment_opp.campaignid) = campaign.id
+left join npsp_sfdc.campaign_v campaign on coalesce(opportunity.source_code, payment_opp.source_code, payment_opp.source_code_formula) = campaign.name
 left join npsp_sfdc.account_v account on coalesce(contact.accountid, credit.account) = account.id
+left join npsp_sfdc.general_accounting_unit_v gau on credit.gau_credit_code = gau.name
 );
 
-
-update opps_temp
-set 
- sc_source_code = new_source_code
-,sc_tax_status = new_tax_status
-,sc_tax_status_desc = new_tax_status_description
-,sc_office = new_office
-,sc_office_desc = new_office_description
-,sc_program = new_program
-,sc_program_desc = new_program_description
-,sc_restriction = new_restriction
-,sc_restriction_desc = new_restriction_description
-,sc_channel = new_channel
-,sc_channel_desc = new_channel_description
-,sc_calender_month = case when cm = 'A' then '10':: varchar
-                          when cm = 'B' then '11':: varchar
-                          when cm = 'C' then '12':: varchar else cm::varchar end 
-,sc_calendar_year = cy_description
-from mss.master_source_code_translator  new_sc
-where new_sc.current_source_code = opps_temp.source_code;
-
---mss.new_source_code_base_national
 
 Create table ppfa_golden.golden_opportunities_npsp as (select * from opps_temp);
