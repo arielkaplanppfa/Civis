@@ -1,0 +1,47 @@
+version: '2.0'
+workflow:
+  credential_id: &credential_id 29547
+  remote_host_id: &cluster_id 174
+  default_sql: &default_sql
+    remote_host_id: *cluster_id
+    credential_id: *credential_id
+
+  tasks:
+
+    # Ret
+    load_stg_address_correction:
+      action: civis.scripts.sql
+      input:
+        <<: *default_sql
+        sql: |
+          TRUNCATE  npsp_staging.stg_address_correction;
+          TRUNCATE npsp_staging.stg_cass_addresses;
+          INSERT INTO npsp_staging.stg_address_correction
+          SELECT id, 
+          npsp__household_account__c, 
+          npsp__mailingcity__c, 
+          npsp__mailingpostalcode__c, 
+          npsp__mailingstate__c, 
+          npsp__mailingstreet__c, 
+          npsp__verified__c 
+          FROM npsp_sfdc.npsp__address__c nac 
+          WHERE npsp__verified__c = FALSE;
+      on-success:
+        - run_address_correction_job
+    
+    # Runs the CASS enhancement feature to correct addresses
+    run_address_correction_job:
+      action: civis.run_job
+      input:
+        job_id: 238344840
+      on-success:
+        - v_verified_addresses
+
+    # View holds only records that have been identified by verification status and been corrected
+    v_verified_addresses:
+      action: civis.scripts.sql
+      input:
+        <<: *default_sql
+        sql: |
+          SELECT * FROM npsp_reporting.v_verified_addresses;
+          
