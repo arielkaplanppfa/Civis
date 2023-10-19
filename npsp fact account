@@ -1,0 +1,9 @@
+---
+version: '2.0'
+workflow:
+  type: direct
+  tasks:
+    fact_account_237093189:
+      action: civis.run_job
+      input:
+        job_id: 237093189
