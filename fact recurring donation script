@@ -1,0 +1,74 @@
+/*
+Developer: Colin Prosser
+Date: 10/9/2023
+JIRA URL: https://plannedparenthood.atlassian.net/browse/DS-2616
+Logic: Returns the first and last payment dates by recurring donation
+*/
+
+
+Call npsp_reporting.recurring_donation_datamart();
+-- CREATE OR REPLACE PROCEDURE npsp_reporting.recurring_donation_datamart()
+-- LANGUAGE plpgsql
+-- AS $$
+-- DECLARE
+
+-- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
+--    	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
+--     v_low_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
+    
+--     dropSQL VARCHAR(65535) := '';
+--     stg_table_SQL varchar(65535) :='';
+--    	mergeSQL varchar(65535) :='';
+   
+-- BEGIN
+--     v_inserted_timestamp := CURRENT_TIMESTAMP;
+		
+-- 	--INSERT INTO npsp_integration.job_history (jobid, lastrun, runstatus, notes)
+-- 	--VALUES (13::INTEGER,v_inserted_timestamp,'started','Civis Aggregation Workflow has started.');
+		
+-- 	   -- High watermark is the max last run timestamp of the daily sync mulesoft job.
+-- 	EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark; 
+	
+-- 	-- Low watermark is the max lastmodified date of the source.
+-- 	EXECUTE 'SELECT max(lastmodifieddate) lastmodifieddate FROM npsp_sfdc.opportunity_v' INTO v_low_watermark;
+
+-- 	dropSQL := 'DROP TABLE IF EXISTS npsp_staging.stg_fact_recurring_donation';
+	
+-- 	EXECUTE dropSQL;
+-- 	stg_table_SQL := 'CREATE TABLE npsp_staging.stg_fact_recurring_donation as
+-- 						SELECT recurring_donation AS Id, current_timestamp AS lastmodifieddate,min(closedate) as First_Donation_Date__c, max(closedate) as npe03__Last_Payment_Date__c 
+-- 						FROM npsp_sfdc.opportunity_v o
+-- 						join npsp_sfdc.opppayment_v p on p.opportunity = o.id 
+-- 						WHERE p.paid = true
+-- 						    AND o.recurring_donation != ''''
+-- 						    AND o.lastmodifieddate >'''|| v_low_watermark ||''' AND o.lastmodifieddate <= ''' || v_high_watermark ||'''GROUP BY o.recurring_donation';
+-- 	EXECUTE stg_table_SQL;
+
+
+-- 	mergeSQL := 'MERGE INTO npsp_reporting.fact_recurring_donation
+-- 					USING npsp_staging.stg_fact_recurring_donation
+-- 					ON npsp_reporting.fact_recurring_donation.id = npsp_staging.stg_fact_recurring_donation.id
+					
+-- 					WHEN MATCHED THEN 
+-- 						UPDATE SET 
+-- 							LastModifiedDate = npsp_staging.stg_fact_recurring_donation.LastModifiedDate,
+-- 							First_Donation_Date__c = npsp_staging.stg_fact_recurring_donation.First_Donation_Date__c,
+-- 							npe03__Last_Payment_Date__c = npsp_staging.stg_fact_recurring_donation.npe03__Last_Payment_Date__c
+-- 					WHEN NOT MATCHED THEN
+-- 						INSERT (
+-- 							Id,
+-- 							LastModifiedDate,
+-- 							First_Donation_Date__c,
+-- 							npe03__Last_Payment_Date__c
+-- 						)
+-- 						VALUES (
+-- 							npsp_staging.stg_fact_recurring_donation.Id,
+-- 							npsp_staging.stg_fact_recurring_donation.LastModifiedDate,
+-- 							npsp_staging.stg_fact_recurring_donation.First_Donation_Date__c,
+-- 							npsp_staging.stg_fact_recurring_donation.npe03__Last_Payment_Date__c)';
+	
+-- 	EXECUTE mergeSQL;
+	
+	
+-- END;
+-- $$;
