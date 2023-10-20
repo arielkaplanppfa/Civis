@@ -1,0 +1,9 @@
+---
+version: '2.0'
+workflow:
+  type: direct
+  tasks:
+    fact_recurring_donation_237056580:
+      action: civis.run_job
+      input:
+        job_id: 237056580
