@@ -1,0 +1,124 @@
+-- select * from npsp_reporting.fact_campaign
+Call npsp_reporting.campaign_datamart();
+-- CREATE OR REPLACE PROCEDURE npsp_reporting.campaign_datamart()
+-- LANGUAGE plpgsql
+-- AS $$
+-- DECLARE
+
+-- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
+--    	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
+--     v_low_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
+    
+--     stg_table_SQL varchar(65535) :='';
+--    	mergeSQL varchar(65535) :='';
+    
+-- BEGIN 
+	
+-- 	-- High watermark is the max last run timestamp of the daily sync mulesoft job.
+-- 	EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark;
+	
+
+-- 	-- Low watermark is the max lastmodified date of the source.
+-- 	EXECUTE 'SELECT max(max_last_updated) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_low_watermark;
+	
+-- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_campaign';
+	
+-- 		stg_table_SQL := 'CREATE TABLE npsp_staging.stg_fact_campaign AS
+-- 						(WITH stg_opps_camp
+-- 						AS
+-- 						(
+-- 						select source_code
+-- 						,min(closedate) first_response_date
+-- 						,max(closedate) last_response_date
+-- 						,sum(case when gift_type in (''Donation Payment'',''Pledge Payment'')
+-- 						then 1
+-- 						else 0
+-- 						end)total_number_paid
+-- 						,sum(case when gift_type in (''Donation Payment'',''Pledge Payment'')
+-- 						then amount
+-- 						else 0
+-- 						end)total_amount_paid
+-- 						,sum(case when gift_type in (''Donation Payment'',''Pledge'')
+-- 						then 1
+-- 						else 0
+-- 						end)total_number_pledged
+-- 						,sum(case when gift_type in (''Donation Payment'',''Pledge'')
+-- 						then amount
+-- 						else 0
+-- 						end)total_amount_pledged
+-- 						from ppfa_golden.golden_opportunities_npsp
+-- 						where source_code is not NULL
+-- 						AND max_last_updated > ''1900-01-01 00:00:000'' AND max_last_updated <= current_timestamp::timestamp
+-- 						group by source_code
+-- 						)
+-- 						SELECT a.id 
+-- 						,current_timestamp::timestamp AS lastmodifieddate
+-- 						,(b.total_amount_paid/nullif(b.total_number_paid,0))::decimal(18,2) average_gift_amount__c
+-- 						,((a.actualcost/1000) * a.numbersent / nullif(a.numbersent,0))::decimal(18,2) cost_per_contact__c
+-- 						,b.first_response_date::date first_response_date__c
+-- 						,b.last_response_date::date last_response_date__c
+-- 						,nvl(a.numbersent,0) numberofcontacts_rd__c
+-- 						,((b.total_amount_paid - a.actualcost)/nullif(a.actualcost,0))::decimal(18,2) roi_rd__c
+-- 						,b.total_amount_paid::decimal(18,2) total_amount_paid__c
+-- 						,b.total_amount_pledged::decimal(18,2) total_amount_pledged__c
+-- 						,b.total_number_paid::integer total_number_paid__c
+-- 						,b.total_number_pledged::integer total_number_pledged__c
+-- 						,nvl(a.numbersent,0) total_number_solicited__c
+-- 						FROM stg_opps_camp b
+-- 						LEFT JOIN npsp_sfdc.campaign a
+-- 						ON b.source_code = a.name)';
+-- 	EXECUTE stg_table_SQL;
+		
+-- 		mergeSQL := 'MERGE INTO npsp_reporting.fact_campaign
+-- 		USING npsp_staging.stg_fact_campaign
+-- 		ON npsp_reporting.fact_campaign.id = npsp_staging.stg_fact_campaign.id
+-- 		WHEN MATCHED THEN
+-- 		UPDATE SET
+-- 		lastmodifieddate = npsp_staging.stg_fact_campaign.lastmodifieddate,
+-- 		average_gift_amount__c = npsp_staging.stg_fact_campaign.average_gift_amount__c,
+-- 		cost_per_contact__c = npsp_staging.stg_fact_campaign.cost_per_contact__c,
+-- 		first_response_date__c = npsp_staging.stg_fact_campaign.first_response_date__c,
+-- 		last_response_date__c = npsp_staging.stg_fact_campaign.last_response_date__c,
+-- 		numberofcontacts_rd__c = npsp_staging.stg_fact_campaign.numberofcontacts_rd__c,
+-- 		roi_rd__c = npsp_staging.stg_fact_campaign.roi_rd__c,
+-- 		total_amount_paid__c = npsp_staging.stg_fact_campaign.total_amount_paid__c,
+-- 		total_amount_pledged__c = npsp_staging.stg_fact_campaign.total_amount_pledged__c,
+-- 		total_number_paid__c = npsp_staging.stg_fact_campaign.total_number_paid__c,
+-- 		total_number_pledged__c = npsp_staging.stg_fact_campaign.total_number_pledged__c,
+-- 		total_number_solicited__c = npsp_staging.stg_fact_campaign.total_number_solicited__c
+		
+-- 		WHEN NOT MATCHED THEN 
+-- 			INSERT (
+-- 				Id,
+-- 				LastModifiedDate,
+-- 				Average_Gift_Amount__c,
+-- 				Cost_Per_Contact__c,
+-- 				First_Response_Date__c,
+-- 				Last_Response_Date__c,
+-- 				NumberofContacts_RD__c,
+-- 				ROI_RD__c,
+-- 				Total_Amount_Paid__c,
+-- 				Total_Amount_Pledged__c,
+-- 				Total_Number_Paid__c,
+-- 				Total_Number_Pledged__c,
+-- 				Total_Number_Solicited__c
+			
+-- 				)
+-- 				VALUES (npsp_staging.stg_fact_campaign.Id,
+-- 				npsp_staging.stg_fact_campaign.LastModifiedDate,
+-- 				npsp_staging.stg_fact_campaign.Average_Gift_Amount__c,
+-- 				npsp_staging.stg_fact_campaign.Cost_Per_Contact__c,
+-- 				npsp_staging.stg_fact_campaign.First_Response_Date__c,
+-- 				npsp_staging.stg_fact_campaign.Last_Response_Date__c,
+-- 				npsp_staging.stg_fact_campaign.NumberofContacts_RD__c,
+-- 				npsp_staging.stg_fact_campaign.ROI_RD__c,
+-- 				npsp_staging.stg_fact_campaign.Total_Amount_Paid__c,
+-- 				npsp_staging.stg_fact_campaign.Total_Amount_Pledged__c,
+-- 				npsp_staging.stg_fact_campaign.Total_Number_Paid__c,
+-- 				npsp_staging.stg_fact_campaign.Total_Number_Pledged__c,
+-- 				npsp_staging.stg_fact_campaign.Total_Number_Solicited__c)';
+	
+-- 	EXECUTE mergeSQL;
+			
+-- END;
+-- $$;
