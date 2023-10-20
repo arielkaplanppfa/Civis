@@ -1,0 +1,22 @@
+drop table if exists npsp_reporting.dim_giving_summary_type;
+create table npsp_reporting.dim_giving_summary_type(
+giving_summary_type_id int identity(1, 1),
+giving_summary_type varchar(30) not null,
+affiliate_number varchar(10) null,
+giving_summary_logic varchar(max) not null,
+modified_date timestamp default sysdate,
+primary key(giving_summary_type_id)
+);
+
+
+insert into npsp_reporting.dim_giving_summary_type (giving_summary_type,affiliate_number,giving_summary_logic, modified_date)values
+('National', '', 'where pass_through is NULL AND left(sc_office_desc,4) = ''PPFA'' OR (left(sc_office_desc,4) <> ''PPFA'' AND cfp_shareable = true)', sysdate),
+('PPKEY', '091410', 'where sc_office = ''KE'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''091410'')',sysdate),
+('PPSENFL', '090320', 'where sc_office = ''FL'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''090320'')',sysdate),
+('PPAZ', '090030', 'where sc_office = ''AZ'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''090030'')',sysdate),
+('PPIL', '090430', 'where sc_office = ''IL'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''090430'')',sysdate),
+('PPSP', '091460', 'where sc_office = ''SP'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''091460'')',sysdate),
+('PPSE', '090330', 'where sc_office = ''SE'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''090330'')',sysdate),
+('PPHP', '091220', 'where sc_office = ''HP'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''091220'')',sysdate),
+('PPSNE', '090220', 'where sc_office = ''SN'' OR (left(sc_office_desc,4) = ''PPFA'' and record_affiliate_number = ''090220'')',sysdate),
+('Total', '', 'where pass_through IS NULL or pass_through = ''National''',sysdate);
