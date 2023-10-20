@@ -1,0 +1,9 @@
+---
+version: '2.0'
+workflow:
+  type: direct
+  tasks:
+    fact_campaign_237061374:
+      action: civis.run_job
+      input:
+        job_id: 237061374
