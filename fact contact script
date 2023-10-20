@@ -1,0 +1,102 @@
+-- Select * from npsp_reporting.fact_contact
+Call npsp_reporting.contact_datamart();
+-- CREATE OR REPLACE PROCEDURE npsp_reporting.contact_datamart()
+-- LANGUAGE plpgsql
+-- AS $$
+-- DECLARE 
+
+-- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
+--    	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
+--     v_low_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
+    
+--     dropSQL VARCHAR(65535) := '';
+--     stg_table_SQL varchar(65535) :='';
+--    	mergeSQL varchar(65535) :='';
+
+-- BEGIN 
+-- 		v_inserted_timestamp := CURRENT_TIMESTAMP;
+-- 		v_low_watermark := '2023-09-17 22:19:19.000';
+	
+-- 		-- High watermark is the max last run timestamp of the daily sync mulesoft job.
+-- 		EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark; 
+	
+-- 		-- Low watermark is the max lastmodified date of the source.
+-- 		--EXECUTE 'SELECT max(max_last_updated) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_low_watermark;
+	
+-- 		dropSQL := 'DROP TABLE IF EXISTS npsp_staging.stg_fact_contact';
+		
+-- 		EXECUTE dropSQL;
+
+-- 			stg_table_SQL := 'CREATE TABLE npsp_staging.stg_fact_contact AS 
+-- 					(WITH sustainer AS 
+-- 					(select p.contact 
+-- 					-- prioritze
+-- 					,case when p.failing > 0 and p.active > 0 then ''Failing:Active'' 
+-- 					    when p.failing > 0 then ''Failing''
+-- 					    when p.active > 0 then ''Active''
+-- 					    when p."Inactive--Failed" > 0 then ''Inactive--Failed'' 
+-- 					    when p."Inactive--Cancelled" > 0 then ''Inactive--Cancelled''
+-- 					    when p.Completed > 0 then ''Completed''
+-- 					end sustainer_status         
+-- 					from
+-- 					(select rd.contact
+-- 					,case when rd.status = ''Lapsed'' then ''Failing''
+-- 					    when rd.status = ''Active'' then  ''Active''
+-- 					    when rd.status = ''Closed'' then ''Completed''
+-- 					    when rd.status = ''Uncollectible'' and rd.closedreason = ''National - Lapsed'' then ''Inactive--Failed''
+-- 					    when rd.status = ''Uncollectible''  then ''Inactive--Cancelled''
+-- 					-- map to active
+-- 					    when rd.status = ''Paused'' then ''Active''    
+-- 					end::varchar aligned_status     
+-- 					from npsp_sfdc.recurring_donation_v rd
+-- 					) 
+-- 					pivot(count(aligned_status) for aligned_status in (''Failing'',''Active'',''Completed'',''Inactive--Failed'',''Inactive--Cancelled'' )  ) p
+-- 					),
+										
+-- 					pac_giving AS
+-- 					(select gold.npsp_contactid Contactid,
+-- 					sum(gold.amount) as National_PAC_Giving_for_Current_CY__c,
+-- 					max(max_last_updated) Last_Modified_Date
+-- 					from ppfa_golden.golden_opportunities_npsp gold
+-- 					left join npsp_reporting.v_Summary_Omits om on om.accountid = gold.npsp_accountid
+-- 					WHERE left(gold.source_code, 3) in (''5ND'', ''5NL'', ''5NM'')
+-- 					AND npsp_sfdc.f_pac_giving_calendar_year(gold.closedate) = npsp_sfdc.f_pac_giving_calendar_year(sysdate)
+-- 					AND om.accountid is null
+-- 					group by gold.npsp_contactid)
+					
+-- 					SELECT cv.id
+-- 					,current_timestamp::timestamp AS LastModifiedDate
+-- 					,b.sustainer_status AS npsp__Sustainer__c
+-- 					,c.National_PAC_Giving_for_Current_CY__c
+-- 					FROM npsp_sfdc.contact_v cv 
+-- 					LEFT JOIN sustainer b ON cv.id = b.contact
+-- 					LEFT JOIN pac_giving c ON cv.id = c.contactid)';
+				
+					
+-- 		EXECUTE stg_table_SQL;
+	
+-- 			mergeSQL := 'MERGE INTO npsp_reporting.fact_contact
+-- 							USING npsp_staging.stg_fact_contact
+-- 							ON npsp_reporting.fact_contact.id = npsp_staging.stg_fact_contact.id
+						
+-- 						WHEN MATCHED THEN 
+-- 							UPDATE SET
+-- 								LastModifiedDate = npsp_staging.stg_fact_contact.LastModifiedDate,
+-- 								National_PAC_Giving_for_Current_CY__c = npsp_staging.stg_fact_contact.National_PAC_Giving_for_Current_CY__c,
+-- 								npsp__Sustainer__c = npsp_staging.stg_fact_contact.npsp__Sustainer__c
+-- 						WHEN NOT MATCHED THEN 
+-- 							INSERT (
+-- 								Id,
+-- 								LastModifiedDate,
+-- 								National_PAC_Giving_for_Current_CY__c,
+-- 								npsp__Sustainer__c)
+-- 							VALUES (
+-- 								npsp_staging.stg_fact_contact.Id,
+-- 								npsp_staging.stg_fact_contact.LastModifiedDate,
+-- 								npsp_staging.stg_fact_contact.National_PAC_Giving_for_Current_CY__c,
+-- 								npsp_staging.stg_fact_contact.npsp__Sustainer__c)';
+						
+-- 		EXECUTE mergeSQL;
+	
+-- END;
+-- $$;
