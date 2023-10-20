@@ -7,8 +7,30 @@ workflow:
     credential_id: *credential_id
 
   tasks:
+    generate_timestamp:
+      action: civis.scripts.sql
+      input:
+        <<: *default_sql
+        sql: |
+          DROP TABLE IF EXISTS npsp_staging.stg_insert_timestamp;
+          CREATE TABLE npsp_staging.stg_insert_timestamp
+          AS SELECT CURRENT_TIMESTAMP::timestamp as v_insert_timestamp;
+      on-success:
+        - insert_into_job_history
 
-    # Ret
+    insert_into_job_history:
+      action: civis.scripts.sql
+      input:
+        <<: *default_sql
+        sql: |
+          INSERT INTO npsp_integration.job_history_test (jobid, lastrun, runstatus, notes)
+          VALUES (14::INTEGER,(SELECT v_insert_timestamp FROM npsp_staging.stg_insert_timestamp),'started','Civis Aggregation Workflow has started');
+      on-success:
+        - load_stg_address_correction
+    
+    
+    
+    # Return rows where npsp__verified__c is FALSE.
     load_stg_address_correction:
       action: civis.scripts.sql
       input:
@@ -25,9 +47,12 @@ workflow:
           npsp__mailingstreet__c, 
           npsp__verified__c 
           FROM npsp_sfdc.npsp__address__c nac 
-          WHERE npsp__verified__c = FALSE;
+          WHERE npsp__verified__c = FALSE
+          LIMIT 100000;
       on-success:
         - run_address_correction_job
+      on-error:
+        - handle_errors
     
     # Runs the CASS enhancement feature to correct addresses
     run_address_correction_job:
@@ -35,13 +60,35 @@ workflow:
       input:
         job_id: 238344840
       on-success:
-        - v_verified_addresses
+        - update_job_history
+      on-error:
+        - handle_errors
+        
 
-    # View holds only records that have been identified by verification status and been corrected
-    v_verified_addresses:
+    # # View holds only records that have been identified by verification status and been corrected
+    # v_verified_addresses:
+    #   action: civis.scripts.sql
+    #   input:
+    #     <<: *default_sql
+    #     sql: |
+    #       SELECT * FROM npsp_reporting.v_verified_addresses;
+
+    update_job_history:
       action: civis.scripts.sql
       input:
         <<: *default_sql
         sql: |
-          SELECT * FROM npsp_reporting.v_verified_addresses;
+          update npsp_integration.job_history_test
+          set runstatus = 'complete', lastrun = current_timestamp, notes = 'Civis Aggregation Workflow has completed successfully'
+          where jobid = 14 and runstatus = 'started' and lastrun = (SELECT v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
+      
+
+    handle_errors:
+      action: civis.scripts.sql
+      input:
+        <<: *default_sql
+        sql: |
+          update npsp_integration.job_history_test
+          set runstatus = 'failed', lastrun = current_timestamp, notes = 'Civis Aggregation Workflow has failed'
+          where jobid = 14 and runstatus = 'started' and lastrun = (SELECT v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
           
