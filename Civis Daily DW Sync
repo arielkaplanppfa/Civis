@@ -17,7 +17,6 @@ workflow:
           AS SELECT CURRENT_TIMESTAMP::timestamp as v_insert_timestamp;
       on-success:
         - insert_into_job_history
-    
     insert_into_job_history:
       action: civis.scripts.sql
       input:
@@ -32,9 +31,6 @@ workflow:
           Workflow has started');
       on-success:
         - get_last_modified_date
-    
-    
-    
     get_last_modified_date:
       action: civis.scripts.sql
       input:
@@ -51,9 +47,6 @@ workflow:
         - run_golden_opps
       on-error:
         - handle_errors
-    
-    
-    
     run_golden_opps:
       action: civis.run_job
       input:
@@ -62,9 +55,6 @@ workflow:
         - run_giving_summary
       on-error:
         - handle_errors
-    
-    
-    
     run_giving_summary:
       action: civis.run_job
       input:
@@ -77,9 +67,6 @@ workflow:
         - run_attributes
       on-error:
         - handle_errors
-    
-    
-    
     run_account:
       action: civis.run_job
       input:
@@ -88,9 +75,6 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
-    
-    
-    
     run_contact:
       action: civis.run_job
       input:
@@ -99,9 +83,6 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
-    
-    
-    
     run_campaign:
       action: civis.run_job
       input:
@@ -110,9 +91,6 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
-    
-    
-    
     run_recurring_donations:
       action: civis.run_job
       input:
@@ -121,9 +99,6 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
-    
-    
-    
     run_attributes:
       action: civis.run_job
       input:
@@ -132,9 +107,6 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
-    
-    
-    
     update_job_history:
       action: civis.scripts.sql
       input:
@@ -150,15 +122,7 @@ workflow:
           v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
       join: all
       on-complete:
-        - run_email_output
-    
-    run_email_output:
-      action: civis.run_job
-      input:
-        job_id: 239083880
-      join: all
-    
-    
+        - Data_Mart_RowCount
     handle_errors:
       action: civis.scripts.sql
       input:
@@ -172,5 +136,8 @@ workflow:
 
           where jobid = 13 and runstatus = 'started' and lastrun = (SELECT
           v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
-
-
+    Data_Mart_RowCount:
+      action: civis.run_job
+      join: all
+      input:
+        job_id: 239083880
