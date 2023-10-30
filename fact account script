@@ -54,7 +54,7 @@ CALL npsp_reporting.account_datamart();
 -- 					,max(case when g.amount >= 25000 then ''Y'' else ''N'' end) X25k_gift_in_CY__c
 -- 					,max(g.max_last_updated) Last_Modified_Date
 -- 					from ppfa_golden.golden_opportunities_npsp g
--- 					left join npsp_reporting.Summary_Omits_v om on om.accountid = g.npsp_accountid -- exclusion list
+-- 					left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
 -- 					where g.closedate >= mss.f_current_cy_start_date_static() 
 -- 					and g.closedate <= mss.f_current_cy_end_date_static() 
 -- 					and (g.sc_office not in (''NP'',''NF'') 
