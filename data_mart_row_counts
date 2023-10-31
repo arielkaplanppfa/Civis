@@ -17,7 +17,7 @@ DATABASE = 'redshift-ppfa'
 
 def main():
     # Value example (swap query for your own):
-    number = query_to_variable('SELECT count(*) FROM ppfa_golden.golden_opportunities_npsp')
+    #number = query_to_variable('SELECT count(*) FROM ppfa_golden.golden_opportunities_npsp')
 
     # Table example (swap query for your own; result is limited to 100 rows):
     md_table = query_to_markdown_table("""
@@ -39,7 +39,6 @@ def main():
     # Upload the value and table as a run output JSONValue
     # named "email_outputs":
     json_value_dict = {
-        'number': number,
         'md_table': md_table
     }
     post_json_run_output(json_value_dict)
