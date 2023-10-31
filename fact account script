@@ -1,144 +1,184 @@
-CALL npsp_reporting.account_datamart();
--- CREATE OR REPLACE PROCEDURE npsp_reporting.account_datamart()
--- LANGUAGE plpgsql
--- AS $$
--- DECLARE 
+/*
+Developer: Colin Prosser
+Date: 10/30/2023
 
--- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
---    	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
---     --v_low_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
+
+*/
+
+
+
+--CALL npsp_reporting.account_datamart();
+CREATE OR REPLACE PROCEDURE npsp_reporting.account_datamart()
+LANGUAGE plpgsql
+AS $$
+DECLARE 
+
+	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
+   	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
+    --v_low_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
     
---     dropSQL VARCHAR(65535) := '';
---     stg_table_SQL varchar(65535) :='';
---    	mergeSQL varchar(65535) :='';
+    dropSQL VARCHAR(65535) := '';
+    stg_table_SQL varchar(65535) :='';
+   	mergeSQL varchar(65535) :='';
 
--- BEGIN 
+BEGIN 
 
--- 	-- Inserts a row into the job history table with the status = started
+	-- Inserts a row into the job history table with the status = started
 
--- --	v_inserted_timestamp := CURRENT_TIMESTAMP;
--- --			
--- --	INSERT INTO npsp_integration.job_history_test (jobid, lastrun, runstatus, notes)
--- --	VALUES (13::INTEGER,v_inserted_timestamp,'started','Civis Aggregation Workflow has started.');
+--	v_inserted_timestamp := CURRENT_TIMESTAMP;
+--			
+--	INSERT INTO npsp_integration.job_history_test (jobid, lastrun, runstatus, notes)
+--	VALUES (13::INTEGER,v_inserted_timestamp,'started','Civis Aggregation Workflow has started.');
 		
--- 	   -- High watermark is the max last run timestamp of the daily sync mulesoft job.
--- 	EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark; 
+	   -- High watermark is the max last run timestamp of the daily sync mulesoft job.
+	EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark; 
 	
 		
--- 	    -- Drop the fact giving summary staging table
--- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_account cascade';
+	    -- Drop the fact giving summary staging table
+	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_account cascade';
 
 	
--- 		stg_table_SQL := 'CREATE TABLE npsp_staging.stg_fact_account AS 
--- 					(WITH 
--- 					wealth_screening_account_adj AS 
--- 					(SELECT accountid 
--- 					,current_timestamp::timestamp AS lastModifiedDate
--- 					,lifetime_giving_amount::numeric(38,2) AS Lifetime_Total_Number_of_Gifts__c
--- 					,lifetime_giving_count AS Lifetime_Total_Value_of_Gifts__c 
--- 					,last_gift_date AS npo02__LastCloseDate__c
--- 					,last_gift_amount::numeric(38,2) AS Last_Gift_Amount__c 
--- 					,first_gift_date AS First_Gift_Date__c 
--- 					,first_gift_amount::numeric(38,2) AS First_Gift_Amount__c 
--- 					,largest_gift_date AS Largest_Gift_Date__c 
--- 					,largest_gift_amount::numeric(38,2) AS Largest_Gift_Amount__c
--- 					FROM npsp_reporting.fact_giving_summary fgs 
--- 					WHERE giving_summary_type = ''Total''
--- 					AND last_modified_date >=''' || v_high_watermark ||'''
--- 					AND accountid IS NOT NULL ),
-					
--- 					giving_level_def AS 
--- 					(select g.npsp_accountid
--- 					,sum(g.amount) CY_Giving_for_Giving_Level__c
--- 					,max(case when g.amount >= 10000 then ''Y'' else ''N'' end) X10k_gift_in_CY__c
--- 					,max(case when g.amount >= 25000 then ''Y'' else ''N'' end) X25k_gift_in_CY__c
--- 					,max(g.max_last_updated) Last_Modified_Date
--- 					from ppfa_golden.golden_opportunities_npsp g
--- 					left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
--- 					where g.closedate >= mss.f_current_cy_start_date_static() 
--- 					and g.closedate <= mss.f_current_cy_end_date_static() 
--- 					and (g.sc_office not in (''NP'',''NF'') 
--- 					or (g.sc_office = ''NP'' 
--- 					and right(g.source_code,2) = ''38'')) 
--- 					and g.gau_credit_code not in (''C325015'', ''C325005'', ''11000000000002340'',''11000000000002356'',''C340100TR422ONL'')
--- 					and (left(g.sc_office,1) = ''N'' 
--- 					or (left(g.sc_office,1) <> ''N'' 
--- 					and g.gau_credit_code like ''%CFP%'')) 
--- 					and om.accountid is null
--- 					group by g.npsp_accountid)
-					
-					
--- 					SELECT a.ID ,
--- 					current_timestamp::timestamp AS lastModifiedDate
--- 					,b.Lifetime_Total_Number_of_Gifts__c
--- 					,b.Lifetime_Total_Value_of_Gifts__c 
--- 					,b.npo02__LastCloseDate__c
--- 					,b.Last_Gift_Amount__c 
--- 					,b.First_Gift_Date__c 
--- 					,b.First_Gift_Amount__c 
--- 					,b.Largest_Gift_Date__c 
--- 					,b.Largest_Gift_Amount__c
--- 					,c.CY_Giving_for_Giving_Level__c
--- 					,c.X10k_gift_in_CY__c
--- 					,c.X25k_gift_in_CY__c
--- 					FROM npsp_sfdc.account_v a
--- 					LEFT JOIN wealth_screening_account_adj b
--- 					ON a.id = b.accountid
--- 					LEFT JOIN giving_level_def c
--- 					ON b.accountid = c.npsp_accountid		
--- 					)';
+		stg_table_SQL := 'CREATE TABLE npsp_staging.stg_fact_account AS 
+					(WITH 
+					wealth_screening_account_adj AS 
+					(SELECT accountid 
+					,current_timestamp::timestamp AS lastModifiedDate
+					,lifetime_giving_amount::numeric(38,2) AS Lifetime_Total_Number_of_Gifts__c
+					,lifetime_giving_count AS Lifetime_Total_Value_of_Gifts__c 
+					,last_gift_date AS npo02__LastCloseDate__c
+					,last_gift_amount::numeric(38,2) AS Last_Gift_Amount__c 
+					,first_gift_date AS First_Gift_Date__c 
+					,first_gift_amount::numeric(38,2) AS First_Gift_Amount__c 
+					,largest_gift_date AS Largest_Gift_Date__c 
+					,largest_gift_amount::numeric(38,2) AS Largest_Gift_Amount__c
+					FROM npsp_reporting.fact_giving_summary fgs 
+					WHERE giving_summary_type = ''Total''
+					AND last_modified_date >=''' || v_high_watermark ||'''
+					AND accountid IS NOT NULL ),
 
--- 	EXECUTE stg_table_SQL;
+					sustainer AS (
+					select p.organization accountid
+					-- prioritze
+					,case when p.failing > 0 and p.active > 0 then ''Failing:Active''
+					when p.failing > 0 then ''Failing''
+					when p.active > 0 then ''Active''
+					when p."Inactive--Failed" > 0 then ''Inactive--Failed''
+					when p."Inactive--Cancelled" > 0 then ''Inactive--Cancelled''
+					when p.Completed > 0 then ''Completed''
+					end sustainer_status
+					from
+					(select rd.organization
+					,case when rd.status = ''Lapsed'' then ''Failing''
+					when rd.status = ''Active'' then  ''Active''
+					when rd.status = ''Closed'' then ''Completed''
+					when rd.status = ''Uncollectible'' and rd.closedreason = ''National - Lapsed'' then ''Inactive--Failed''
+					when rd.status = ''Uncollectible''  then ''Inactive--Cancelled''
+					-- map to active
+					when rd.status = ''Paused'' then ''Active''
+					END ::varchar aligned_status
+					from npsp_sfdc.recurring_donation_v rd
+					
+					)
+					pivot(count(aligned_status) for aligned_status in (''Failing'',''Active'',''Completed'',''Inactive--Failed'',''Inactive--Cancelled'' )  ) p),
+					
+					giving_level_def AS 
+					(select g.npsp_accountid
+					,sum(g.amount) CY_Giving_for_Giving_Level__c
+					,max(case when g.amount >= 10000 then ''Y'' else ''N'' end) X10k_gift_in_CY__c
+					,max(case when g.amount >= 25000 then ''Y'' else ''N'' end) X25k_gift_in_CY__c
+					,max(g.max_last_updated) Last_Modified_Date
+					from ppfa_golden.golden_opportunities_npsp g
+					left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
+					where g.closedate >= mss.f_current_cy_start_date_static() 
+					and g.closedate <= mss.f_current_cy_end_date_static() 
+					and (g.sc_office not in (''NP'',''NF'') 
+					or (g.sc_office = ''NP'' 
+					and right(g.source_code,2) = ''38'')) 
+					and g.gau_credit_code not in (''C325015'', ''C325005'', ''11000000000002340'',''11000000000002356'',''C340100TR422ONL'')
+					and (left(g.sc_office,1) = ''N'' 
+					or (left(g.sc_office,1) <> ''N'' 
+					and g.gau_credit_code like ''%CFP%'')) 
+					and om.accountid is null
+					group by g.npsp_accountid)
+					
+					
+					SELECT a.ID ,
+					current_timestamp::timestamp AS lastModifiedDate
+					,b.Lifetime_Total_Number_of_Gifts__c
+					,b.Lifetime_Total_Value_of_Gifts__c 
+					,b.npo02__LastCloseDate__c
+					,b.Last_Gift_Amount__c 
+					,b.First_Gift_Date__c 
+					,b.First_Gift_Amount__c 
+					,b.Largest_Gift_Date__c 
+					,b.Largest_Gift_Amount__c
+					,c.CY_Giving_for_Giving_Level__c
+					,c.X10k_gift_in_CY__c
+					,c.X25k_gift_in_CY__c
+					,s.sustainer_status Sustainer__c
+					FROM npsp_sfdc.account_v a
+					LEFT JOIN wealth_screening_account_adj b
+					ON a.id = b.accountid
+					LEFT JOIN giving_level_def c
+					ON b.accountid = c.npsp_accountid
+					LEFT JOIN sustainer s
+					ON a.id = s.accountid		
+					)';
+
+	EXECUTE stg_table_SQL;
 
 
--- 			mergeSQL := 'MERGE INTO npsp_reporting.fact_account
--- 						USING npsp_staging.stg_fact_account
--- 						ON npsp_reporting.fact_account.id = npsp_staging.stg_fact_account.id
+			mergeSQL := 'MERGE INTO npsp_reporting.fact_account
+						USING npsp_staging.stg_fact_account
+						ON npsp_reporting.fact_account.id = npsp_staging.stg_fact_account.id
 						
--- 						WHEN MATCHED THEN
--- 							UPDATE SET 
--- 								lastModifiedDate = npsp_staging.stg_fact_account.lastModifiedDate,
--- 								Lifetime_Total_Number_of_Gifts__c = npsp_staging.stg_fact_account.Lifetime_Total_Number_of_Gifts__c,
--- 								Lifetime_Total_Value_of_Gifts__c = npsp_staging.stg_fact_account.Lifetime_Total_Value_of_Gifts__c,
--- 								npo02__LastCloseDate__c = npsp_staging.stg_fact_account.npo02__LastCloseDate__c,
--- 								Last_Gift_Amount__c  = npsp_staging.stg_fact_account.Last_Gift_Amount__c,
--- 								First_Gift_Date__c  = npsp_staging.stg_fact_account.First_Gift_Date__c,
--- 								First_Gift_Amount__c  = npsp_staging.stg_fact_account.First_Gift_Amount__c,
--- 								Largest_Gift_Date__c = npsp_staging.stg_fact_account.Largest_Gift_Date__c,
--- 								Largest_Gift_Amount__c = npsp_staging.stg_fact_account.Largest_Gift_Amount__c,
--- 								CY_Giving_for_Giving_Level__c = npsp_staging.stg_fact_account.CY_Giving_for_Giving_Level__c,
--- 								X10k_gift_in_CY__c = npsp_staging.stg_fact_account.X10k_gift_in_CY__c,
--- 								X25k_gift_in_CY__c = npsp_staging.stg_fact_account.X25k_gift_in_CY__c
--- 						WHEN NOT MATCHED THEN
--- 							INSERT (Id,
--- 									lastModifiedDate,
--- 									Lifetime_Total_Number_of_Gifts__c,
--- 									Lifetime_Total_Value_of_Gifts__c, 
--- 									npo02__LastCloseDate__c,
--- 									Last_Gift_Amount__c, 
--- 									First_Gift_Date__c, 
--- 									First_Gift_Amount__c, 
--- 									Largest_Gift_Date__c, 
--- 									Largest_Gift_Amount__c,
--- 									CY_Giving_for_Giving_Level__c,
--- 									X10k_gift_in_CY__c,
--- 									X25k_gift_in_CY__c)
--- 							VALUES (
--- 									npsp_staging.stg_fact_account.Id,
--- 									npsp_staging.stg_fact_account.lastModifiedDate,
--- 									npsp_staging.stg_fact_account.Lifetime_Total_Number_of_Gifts__c,
--- 									npsp_staging.stg_fact_account.Lifetime_Total_Value_of_Gifts__c ,
--- 									npsp_staging.stg_fact_account.npo02__LastCloseDate__c,
--- 									npsp_staging.stg_fact_account.Last_Gift_Amount__c ,
--- 									npsp_staging.stg_fact_account.First_Gift_Date__c ,
--- 									npsp_staging.stg_fact_account.First_Gift_Amount__c ,
--- 									npsp_staging.stg_fact_account.Largest_Gift_Date__c ,
--- 									npsp_staging.stg_fact_account.Largest_Gift_Amount__c,
--- 									npsp_staging.stg_fact_account.CY_Giving_for_Giving_Level__c,
--- 									npsp_staging.stg_fact_account.X10k_gift_in_CY__c,
--- 									npsp_staging.stg_fact_account.X25k_gift_in_CY__c)';
+						WHEN MATCHED THEN
+							UPDATE SET 
+								lastModifiedDate = npsp_staging.stg_fact_account.lastModifiedDate,
+								Lifetime_Total_Number_of_Gifts__c = npsp_staging.stg_fact_account.Lifetime_Total_Number_of_Gifts__c,
+								Lifetime_Total_Value_of_Gifts__c = npsp_staging.stg_fact_account.Lifetime_Total_Value_of_Gifts__c,
+								npo02__LastCloseDate__c = npsp_staging.stg_fact_account.npo02__LastCloseDate__c,
+								Last_Gift_Amount__c  = npsp_staging.stg_fact_account.Last_Gift_Amount__c,
+								First_Gift_Date__c  = npsp_staging.stg_fact_account.First_Gift_Date__c,
+								First_Gift_Amount__c  = npsp_staging.stg_fact_account.First_Gift_Amount__c,
+								Largest_Gift_Date__c = npsp_staging.stg_fact_account.Largest_Gift_Date__c,
+								Largest_Gift_Amount__c = npsp_staging.stg_fact_account.Largest_Gift_Amount__c,
+								CY_Giving_for_Giving_Level__c = npsp_staging.stg_fact_account.CY_Giving_for_Giving_Level__c,
+								X10k_gift_in_CY__c = npsp_staging.stg_fact_account.X10k_gift_in_CY__c,
+								X25k_gift_in_CY__c = npsp_staging.stg_fact_account.X25k_gift_in_CY__c,
+								Sustainer__c = npsp_staging.stg_fact_account.Sustainer__c
+						WHEN NOT MATCHED THEN
+							INSERT (Id,
+									lastModifiedDate,
+									Lifetime_Total_Number_of_Gifts__c,
+									Lifetime_Total_Value_of_Gifts__c, 
+									npo02__LastCloseDate__c,
+									Last_Gift_Amount__c, 
+									First_Gift_Date__c, 
+									First_Gift_Amount__c, 
+									Largest_Gift_Date__c, 
+									Largest_Gift_Amount__c,
+									CY_Giving_for_Giving_Level__c,
+									X10k_gift_in_CY__c,
+									X25k_gift_in_CY__c,
+									Sustainer__c)
+							VALUES (
+									npsp_staging.stg_fact_account.Id,
+									npsp_staging.stg_fact_account.lastModifiedDate,
+									npsp_staging.stg_fact_account.Lifetime_Total_Number_of_Gifts__c,
+									npsp_staging.stg_fact_account.Lifetime_Total_Value_of_Gifts__c ,
+									npsp_staging.stg_fact_account.npo02__LastCloseDate__c,
+									npsp_staging.stg_fact_account.Last_Gift_Amount__c ,
+									npsp_staging.stg_fact_account.First_Gift_Date__c ,
+									npsp_staging.stg_fact_account.First_Gift_Amount__c ,
+									npsp_staging.stg_fact_account.Largest_Gift_Date__c ,
+									npsp_staging.stg_fact_account.Largest_Gift_Amount__c,
+									npsp_staging.stg_fact_account.CY_Giving_for_Giving_Level__c,
+									npsp_staging.stg_fact_account.X10k_gift_in_CY__c,
+									npsp_staging.stg_fact_account.X25k_gift_in_CY__c,
+									npsp_staging.stg_fact_account.Sustainer__c)';
 									
--- 		EXECUTE mergeSQL;
+		EXECUTE mergeSQL;
 
--- END;
--- $$;
+END;
+$$;
