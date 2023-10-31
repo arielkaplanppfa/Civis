@@ -22,7 +22,7 @@ workflow:
       input:
         remote_host_id: 174
         credential_id: 29547
-        sql: >
+        sql: |
           INSERT INTO npsp_integration.job_history_test (jobid, lastrun,
           runstatus, notes)
 
@@ -141,3 +141,5 @@ workflow:
       join: all
       input:
         job_id: 239083880
+  input:
+    - load_data: incremental
