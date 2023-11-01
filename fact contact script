@@ -66,7 +66,7 @@ Call npsp_reporting.contact_datamart();
 					
 -- 					SELECT cv.id
 -- 					,current_timestamp::timestamp AS LastModifiedDate
--- 					,b.sustainer_status AS npsp__Sustainer__c
+-- 					,b.sustainer_status AS Sustainer__c
 -- 					,c.National_PAC_Giving_for_Current_CY__c
 -- 					FROM npsp_sfdc.contact_v cv 
 -- 					LEFT JOIN sustainer b ON cv.id = b.contact
@@ -83,18 +83,18 @@ Call npsp_reporting.contact_datamart();
 -- 							UPDATE SET
 -- 								LastModifiedDate = npsp_staging.stg_fact_contact.LastModifiedDate,
 -- 								National_PAC_Giving_for_Current_CY__c = npsp_staging.stg_fact_contact.National_PAC_Giving_for_Current_CY__c,
--- 								npsp__Sustainer__c = npsp_staging.stg_fact_contact.npsp__Sustainer__c
+-- 								Sustainer__c = npsp_staging.stg_fact_contact.Sustainer__c
 -- 						WHEN NOT MATCHED THEN 
 -- 							INSERT (
 -- 								Id,
 -- 								LastModifiedDate,
 -- 								National_PAC_Giving_for_Current_CY__c,
--- 								npsp__Sustainer__c)
+-- 								Sustainer__c)
 -- 							VALUES (
 -- 								npsp_staging.stg_fact_contact.Id,
 -- 								npsp_staging.stg_fact_contact.LastModifiedDate,
 -- 								npsp_staging.stg_fact_contact.National_PAC_Giving_for_Current_CY__c,
--- 								npsp_staging.stg_fact_contact.npsp__Sustainer__c)';
+-- 								npsp_staging.stg_fact_contact.Sustainer__c)';
 						
 -- 		EXECUTE mergeSQL;
 	
