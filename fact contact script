@@ -6,8 +6,7 @@ Call npsp_reporting.contact_datamart();
 -- DECLARE 
 
 -- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
---    	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
---     v_low_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
+--     v_watermark TIMESTAMP;
     
 --     dropSQL VARCHAR(65535) := '';
 --     stg_table_SQL varchar(65535) :='';
@@ -15,13 +14,10 @@ Call npsp_reporting.contact_datamart();
 
 -- BEGIN 
 -- 		v_inserted_timestamp := CURRENT_TIMESTAMP;
--- 		v_low_watermark := '2023-09-17 22:19:19.000';
+-- 		v_watermark := '1900-01-01 00:00:00.000';
 	
--- 		-- High watermark is the max last run timestamp of the daily sync mulesoft job.
--- 		EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark; 
-	
--- 		-- Low watermark is the max lastmodified date of the source.
--- 		--EXECUTE 'SELECT max(max_last_updated) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_low_watermark;
+-- 		-- watermark is the max lastmodified date of the source.
+-- 		--EXECUTE 'SELECT max(lastmodifieddate) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_watermark;
 	
 -- 		dropSQL := 'DROP TABLE IF EXISTS npsp_staging.stg_fact_contact';
 		
@@ -49,6 +45,7 @@ Call npsp_reporting.contact_datamart();
 -- 					    when rd.status = ''Paused'' then ''Active''    
 -- 					end::varchar aligned_status     
 -- 					from npsp_sfdc.recurring_donation_v rd
+-- 					where lastmodifieddate >=''' || v_watermark ||''' 
 -- 					) 
 -- 					pivot(count(aligned_status) for aligned_status in (''Failing'',''Active'',''Completed'',''Inactive--Failed'',''Inactive--Cancelled'' )  ) p
 -- 					),
@@ -62,6 +59,7 @@ Call npsp_reporting.contact_datamart();
 -- 					WHERE left(gold.source_code, 3) in (''5ND'', ''5NL'', ''5NM'')
 -- 					AND npsp_sfdc.f_pac_giving_calendar_year(gold.closedate) = npsp_sfdc.f_pac_giving_calendar_year(sysdate)
 -- 					AND om.accountid is null
+-- 					AND gold.max_last_updated >='''|| v_watermark ||'''
 -- 					group by gold.npsp_contactid)
 					
 -- 					SELECT cv.id
