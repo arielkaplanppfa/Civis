@@ -1,228 +1,229 @@
 --DROP  TABLE npsp_reporting.fact_attributes 
 --SELECT * FROM npsp_reporting.fact_attributes
 Call npsp_reporting.attribute_datamart();
--- CREATE OR REPLACE PROCEDURE npsp_reporting.attribute_datamart()
--- LANGUAGE plpgsql
--- AS $$
--- DECLARE 
--- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
---     v_watermark TIMESTAMP;
-    
---     dropSQL VARCHAR(65535) := '';
---     stg_action_fund varchar (65535) :='';
---    	stg_action_fund2 varchar (65535) :='';
---     stg_table_SQL varchar(65535) :='';
---    	mergeSQL varchar(65535) :='';
---    	stg_donor_event varchar(65535):='';
---    	stg_donor_event_drop varchar (65535) :='';
---    	stg_attribute varchar(65535):='';
---    	stg_attribute_drop varchar (65535) :='';
---    	stg_fact_attribute varchar(65535):='';
---    	stg_fact_attribute_drop varchar (65535) :='';
-
-
-
-
--- BEGIN 
--- 		-- Inserts a row into the job history table with the status = started
-
--- 		v_inserted_timestamp := CURRENT_TIMESTAMP;
--- 		v_watermark := '1900-01-01 22:19:19.000';
-				
--- --		INSERT INTO npsp_integration.job_history (jobid, lastrun, runstatus, notes)
--- --		VALUES (13::INTEGER,v_inserted_timestamp,'started','Civis Aggregation Workflow has started.');
-			
--- 		   -- High watermark is the max last run timestamp of the daily sync mulesoft job.
--- 		--EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark; 
-		
--- 		-- Low watermark is the max lastmodified date of the source.
--- 		--EXECUTE 'SELECT max(max_last_updated)max_last_updated from ppfa_golden.golden_opportunities_npsp' INTO v_watermark;
-	
-	
--- 		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_action_fund';
-		
--- 		stg_action_fund := 'CREATE TABLE npsp_staging.stg_action_fund
--- 							AS
--- 							(WITH date_ranks_national AS(
--- 							-- returns National Members	
--- 							SELECT 
--- 									*,
--- 									ROW_NUMBER () OVER (
--- 										PARTITION BY npsp_contactid
--- 										ORDER BY closedate DESC
--- 									) AS rn
--- 								FROM 
--- 									ppfa_golden.golden_opportunities_npsp gon
--- 									JOIN npsp_reporting.fact_giving_summary fgs 
--- 									ON gon.npsp_accountid = fgs.accountid
--- 									JOIN npsp_sfdc.account_v av ON gon.npsp_accountid = av.id
--- 									JOIN npsp_sfdc.recordtype_v rv ON av.recordtypeid = rv.id
--- 								WHERE 
--- 									(closedate BETWEEN (CURRENT_DATE - INTERVAL ''13 MONTH'') AND CURRENT_DATE) 
--- 									AND (giving_summary_type IN (''National''))
--- 									AND npsp_contactid IS NOT NULL 
--- 									AND closedate > ''2016-05-01''
--- 									AND av.TYPE != ''Estate''
--- 									AND rv.name != ''Estate''
--- 									AND (sc_program != ''Z'' AND left(gon.source_code, 2) = ''4N'')
--- 									AND gon.SOURCE != ''Bookable Gift''
--- 									AND gon.max_last_updated >=''' || v_watermark ||'''
--- 									)
-							 
--- 							rolling_12_month_national AS (
--- 								SELECT 
--- 									giving_summary_type,
--- 									npsp_contactid,
--- 									closedate,
--- 									sum(amount::numeric(38,2)) OVER (
--- 										PARTITION BY giving_summary_type,npsp_contactid
--- 										ORDER BY closedate ASC 
--- 										ROWS BETWEEN 11 PRECEDING AND CURRENT ROW 
--- 									) AS rolling_12_month_sum
--- 								FROM date_ranks_national
--- 								WHERE rn <= 12
--- 								GROUP BY giving_summary_type, npsp_contactid, closedate,amount
--- 							)
-						
-							
--- 							, date_ranks_ppaz AS(
--- 								SELECT 
--- 									*,
--- 									ROW_NUMBER () OVER (
--- 										PARTITION BY npsp_contactid
--- 										ORDER BY closedate DESC
--- 									) AS rn
--- 								FROM 
--- 									ppfa_golden.golden_opportunities_npsp gon
--- 									JOIN npsp_reporting.fact_giving_summary fgs 
--- 									ON gon.npsp_accountid = fgs.accountid
--- 									JOIN npsp_sfdc.account_v av ON gon.npsp_accountid = av.id
--- 									JOIN npsp_sfdc.recordtype_v rv ON av.recordtypeid = rv.id
--- 								WHERE 
--- 									(closedate BETWEEN (CURRENT_DATE - INTERVAL ''13 MONTH'') AND CURRENT_DATE) 
--- 									AND (giving_summary_type IN (''PPAZ''))
--- 									AND npsp_contactid IS NOT NULL 
--- 									AND closedate > ''2016-05-01''
--- 									AND av.TYPE != ''Estate''
--- 									AND rv.name != ''Estate''
--- 									AND left(gon.source_code, 3) IN (''4AZ'',''5AZ'')
-									
--- 									AND gon.SOURCE != ''Bookable Gift''
--- 							)
--- 							, rolling_12_month_ppaz AS (
--- 								SELECT 
--- 									giving_summary_type,
--- 									npsp_contactid,
--- 									closedate,
--- 									sum(amount::numeric(38,2)) OVER (
--- 										PARTITION BY giving_summary_type,npsp_contactid
--- 										ORDER BY closedate ASC 
--- 										ROWS BETWEEN 11 PRECEDING AND CURRENT ROW 
--- 									) AS rolling_12_month_sum
--- 								FROM date_ranks_ppaz
--- 								WHERE rn <= 12
--- 								GROUP BY giving_summary_type, npsp_contactid, closedate,amount
--- 							)
-						
--- 							SELECT * FROM rolling_12_month_national
--- 							UNION ALL 
--- 							SELECT * FROM rolling_12_month_ppaz)';
-		
--- 	EXECUTE stg_action_fund;			
-		
--- --		stg_action_fund2 := 'SELECT * FROM rolling_12_month_national
--- --							UNION ALL 
--- --							SELECT * FROM rolling_12_month_ppaz';
--- --						
--- --		EXECUTE stg_action_fund2;
-	
-	
--- 			stg_donor_event_drop :=			'DROP TABLE IF EXISTS npsp_staging.stg_donor_event';
--- 				EXECUTE stg_donor_event_drop;
-		
--- 			stg_donor_event :=				'CREATE TABLE npsp_staging.stg_donor_event AS
--- 							SELECT * FROM npsp_staging.stg_action_fund
--- 							UNION ALL
--- 							-- Adding event data
--- 							SELECT ''PPAA'' giving_summary_type
--- 							,emv.contact
--- 							,ev.start_date_time::date event_start_date
--- 							,0 AS rolling_12_month_sum
--- 							FROM npsp_sfdc.event_v ev 
--- 							JOIN npsp_sfdc.event_member_v emv
--- 							ON ev.id = emv.event 
--- 							WHERE  ev.affiliate = ''PPAA''
--- 							AND emv.status IN (''Registered'',''Attended'', ''Ad hoc attendee'')
--- 							AND ev.start_date_time IS NOT NULL 
--- 							AND (ev.start_date_time BETWEEN (CURRENT_DATE - INTERVAL ''13 MONTH'') AND dateadd(DAY,1,CURRENT_DATE))';
-						
--- 		EXECUTE stg_donor_event;
-		
--- 			stg_attribute_drop :=	'DROP TABLE IF EXISTS npsp_staging.stg_attribute';
-		
--- 		EXECUTE stg_attribute_drop;
-		
--- 		stg_attribute :=		'CREATE TABLE npsp_staging.stg_attribute AS 
--- 								SELECT a.giving_summary_type
--- 								--,npsp_accountid
--- 								,npsp_contactid
--- 								,max(closedate::date) start_date
--- 								--,sum(rolling_12_month_sum) rolling_12_month_sum
--- 								,CASE
--- 									WHEN sum(rolling_12_month_sum) >= 300 AND a.giving_summary_type =''National'' THEN ''National Contributing Lifetime Member''
--- 									WHEN sum(rolling_12_month_sum) <= 10 AND sum(rolling_12_month_sum) < 300 AND a.giving_summary_type =''National'' THEN ''National Contributing Annual Member''
--- 									WHEN a.giving_summary_type =''PPAZ'' OR a.giving_summary_type = ''PPAA'' THEN ''PPAZ Annual Member'' 
--- 								END Attribute_Type
--- 								FROM npsp_staging.stg_donor_event a
--- 								--WHERE npsp_contactid IN (''0031700001TpypXAAR'',''0031700001S81g0AAB'')
--- 								GROUP BY a.giving_summary_type
--- 								,npsp_contactid';
--- 		EXECUTE stg_attribute;
-						
--- 		stg_fact_attribute_drop :=			'DROP TABLE IF EXISTS npsp_staging.stg_fact_attribute';
--- 		EXECUTE stg_fact_attribute_drop;
--- 			stg_fact_attribute :=	'CREATE TABLE npsp_staging.stg_fact_attribute as
--- 								SELECT npsp_contactid id
--- 								,current_timestamp::timestamp lastmodifieddate
--- 								,attribute_type type__c
--- 								,start_date start_date__c
--- 								,CASE 
--- 									WHEN attribute_type = ''PPAZ Annual Member'' THEN trunc(add_months(start_date::date,12))
--- 									WHEN attribute_type = ''National Contributing Annual Member'' THEN trunc(add_months(start_date::date,12))
--- 									WHEN attribute_type = ''National Contributing Lifetime Member'' THEN NULL
--- 								END end_date__c
--- 								FROM npsp_staging.stg_attribute
--- 								--WHERE attribute_type IS NOT NULL AND npsp_contactid IN (''0031700001TpypXAAR'',''0031700001S81g0AAB'')';
-							
--- 		EXECUTE stg_fact_attribute;
-	
-	
--- 				mergeSQL := 'MERGE INTO npsp_reporting.fact_attributes 
--- 							USING npsp_staging.stg_fact_attribute
--- 							ON npsp_reporting.fact_attributes.id = npsp_staging.stg_fact_attribute.id 
--- 							and npsp_reporting.fact_attributes.Type__c = npsp_staging.stg_fact_attribute.Type__c
-							
--- 							WHEN MATCHED THEN
--- 								UPDATE SET
--- 									LastModifiedDate = npsp_staging.stg_fact_attribute.LastModifiedDate,
--- 									Type__c = npsp_staging.stg_fact_attribute.Type__c,
--- 									Start_Date__c = npsp_staging.stg_fact_attribute.Start_Date__c,
--- 									End_Date__c = npsp_staging.stg_fact_attribute.End_Date__c
-							
--- 							WHEN NOT MATCHED THEN
--- 								INSERT (
--- 									Id,
--- 									LastModifiedDate,
--- 									Type__c,
--- 									Start_Date__c,
--- 									End_Date__c	)
--- 								VALUES (npsp_staging.stg_fact_attribute.Id,
--- 										npsp_staging.stg_fact_attribute.LastModifiedDate,
--- 										npsp_staging.stg_fact_attribute.Type__c,
--- 										npsp_staging.stg_fact_attribute.Start_Date__c,
--- 										npsp_staging.stg_fact_attribute.End_Date__c)';		
-									
--- 		EXECUTE mergeSQL;
-			
--- END;
--- $$;
+--CREATE OR REPLACE PROCEDURE npsp_reporting.attribute_datamart()
+--LANGUAGE plpgsql
+--AS $$
+--DECLARE 
+--	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
+--   	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
+--    v_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
+--    
+--    dropSQL VARCHAR(65535) := '';
+--    stg_action_fund varchar (65535) :='';
+--   	stg_action_fund2 varchar (65535) :='';
+--    stg_table_SQL varchar(65535) :='';
+--   	mergeSQL varchar(65535) :='';
+--   	stg_donor_event varchar(65535):='';
+--   	stg_donor_event_drop varchar (65535) :='';
+--   	stg_attribute varchar(65535):='';
+--   	stg_attribute_drop varchar (65535) :='';
+--   	stg_fact_attribute varchar(65535):='';
+--   	stg_fact_attribute_drop varchar (65535) :='';
+--
+--
+--
+--
+--BEGIN 
+--		-- Inserts a row into the job history table with the status = started
+--
+--		v_inserted_timestamp := CURRENT_TIMESTAMP;
+--		v_watermark := '1900-01-01 22:19:19.000';
+--				
+--		INSERT INTO npsp_integration.job_history (jobid, lastrun, runstatus, notes)
+--		VALUES (13::INTEGER,v_inserted_timestamp,'started','Civis Aggregation Workflow has started.');
+--			
+--		   -- High watermark is the max last run timestamp of the daily sync mulesoft job.
+--		--EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark; 
+--		
+--		-- Low watermark is the max lastmodified date of the source.
+--		--EXECUTE 'SELECT max(max_last_updated)max_last_updated from ppfa_golden.golden_opportunities_npsp' INTO v_low_watermark;
+--	
+--	
+--		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_action_fund';
+--		
+--		stg_action_fund := 'CREATE TABLE npsp_staging.stg_action_fund
+--							AS
+--							(WITH date_ranks_national AS(
+--							-- returns National Members	
+--							SELECT 
+--									*,
+--									ROW_NUMBER () OVER (
+--										PARTITION BY npsp_contactid
+--										ORDER BY closedate DESC
+--									) AS rn
+--								FROM 
+--									ppfa_golden.golden_opportunities_npsp gon
+--									JOIN npsp_reporting.fact_giving_summary fgs 
+--									ON gon.npsp_accountid = fgs.accountid
+--									JOIN npsp_sfdc.account_v av ON gon.npsp_accountid = av.id
+--									JOIN npsp_sfdc.recordtype_v rv ON av.recordtypeid = rv.id
+--								WHERE 
+--									(closedate BETWEEN (CURRENT_DATE - INTERVAL ''13 MONTH'') AND CURRENT_DATE) 
+--									AND (giving_summary_type IN (''National''))
+--									AND npsp_contactid IS NOT NULL 
+--									AND closedate > ''2016-05-01''
+--									AND av.TYPE != ''Estate''
+--									AND rv.name != ''Estate''
+--									AND (sc_program != ''Z'' AND left(gon.source_code, 2) = ''4N'')
+--									AND gon.SOURCE != ''Bookable Gift''
+--									AND gon.max_last_updated >= '''||v_watermark ||'''
+--									)
+--							, 
+--							rolling_12_month_national AS (
+--								SELECT 
+--									giving_summary_type,
+--									npsp_contactid,
+--									closedate,
+--									sum(amount::numeric(38,2)) OVER (
+--										PARTITION BY giving_summary_type,npsp_contactid
+--										ORDER BY closedate ASC 
+--										ROWS BETWEEN 11 PRECEDING AND CURRENT ROW 
+--									) AS rolling_12_month_sum
+--								FROM date_ranks_national
+--								WHERE rn <= 12
+--								GROUP BY giving_summary_type, npsp_contactid, closedate,amount
+--							)
+--						
+--							
+--							, date_ranks_ppaz AS(
+--								SELECT 
+--									*,
+--									ROW_NUMBER () OVER (
+--										PARTITION BY npsp_contactid
+--										ORDER BY closedate DESC
+--									) AS rn
+--								FROM 
+--									ppfa_golden.golden_opportunities_npsp gon
+--									JOIN npsp_reporting.fact_giving_summary fgs 
+--									ON gon.npsp_accountid = fgs.accountid
+--									JOIN npsp_sfdc.account_v av ON gon.npsp_accountid = av.id
+--									JOIN npsp_sfdc.recordtype_v rv ON av.recordtypeid = rv.id
+--								WHERE 
+--									(closedate BETWEEN (CURRENT_DATE - INTERVAL ''13 MONTH'') AND CURRENT_DATE) 
+--									AND (giving_summary_type IN (''PPAZ''))
+--									AND npsp_contactid IS NOT NULL 
+--									AND closedate > ''2016-05-01''
+--									AND av.TYPE != ''Estate''
+--									AND rv.name != ''Estate''
+--									AND left(gon.source_code, 3) IN (''4AZ'',''5AZ'')
+--									
+--									AND gon.SOURCE != ''Bookable Gift''
+--							)
+--							, rolling_12_month_ppaz AS (
+--								SELECT 
+--									giving_summary_type,
+--									npsp_contactid,
+--									closedate,
+--									sum(amount::numeric(38,2)) OVER (
+--										PARTITION BY giving_summary_type,npsp_contactid
+--										ORDER BY closedate ASC 
+--										ROWS BETWEEN 11 PRECEDING AND CURRENT ROW 
+--									) AS rolling_12_month_sum
+--								FROM date_ranks_ppaz
+--								WHERE rn <= 12
+--								GROUP BY giving_summary_type, npsp_contactid, closedate,amount
+--							)
+--						
+--							SELECT * FROM rolling_12_month_national
+--							UNION ALL 
+--							SELECT * FROM rolling_12_month_ppaz)';
+--		
+--	EXECUTE stg_action_fund;			
+--		
+----		stg_action_fund2 := 'SELECT * FROM rolling_12_month_national
+----							UNION ALL 
+----							SELECT * FROM rolling_12_month_ppaz';
+----						
+----		EXECUTE stg_action_fund2;
+--	
+--	
+--			stg_donor_event_drop :=			'DROP TABLE IF EXISTS npsp_staging.stg_donor_event';
+--				EXECUTE stg_donor_event_drop;
+--		
+--			stg_donor_event :=				'CREATE TABLE npsp_staging.stg_donor_event AS
+--							SELECT * FROM npsp_staging.stg_action_fund
+--							UNION ALL
+--							-- Adding event data
+--							SELECT ''PPAA'' giving_summary_type
+--							,emv.contact
+--							,ev.start_date_time::date event_start_date
+--							,0 AS rolling_12_month_sum
+--							FROM npsp_sfdc.event_v ev 
+--							JOIN npsp_sfdc.event_member_v emv
+--							ON ev.id = emv.event 
+--							WHERE  ev.affiliate = ''PPAA''
+--							AND emv.status IN (''Registered'',''Attended'', ''Ad hoc attendee'')
+--							AND ev.start_date_time IS NOT NULL 
+--							AND (ev.start_date_time BETWEEN (CURRENT_DATE - INTERVAL ''13 MONTH'') AND dateadd(DAY,1,CURRENT_DATE))';
+--						
+--		EXECUTE stg_donor_event;
+--		
+--			stg_attribute_drop :=	'DROP TABLE IF EXISTS npsp_staging.stg_attribute';
+--		
+--		EXECUTE stg_attribute_drop;
+--		
+--		stg_attribute :=		'CREATE TABLE npsp_staging.stg_attribute AS 
+--								SELECT a.giving_summary_type
+--								--,npsp_accountid
+--								,npsp_contactid
+--								,max(closedate::date) start_date
+--								--,sum(rolling_12_month_sum) rolling_12_month_sum
+--								,CASE
+--									WHEN sum(rolling_12_month_sum) >= 300 AND a.giving_summary_type =''National'' THEN ''National Contributing Lifetime Member''
+--									WHEN sum(rolling_12_month_sum) <= 10 AND sum(rolling_12_month_sum) < 300 AND a.giving_summary_type =''National'' THEN ''National Contributing Annual Member''
+--									WHEN a.giving_summary_type =''PPAZ'' OR a.giving_summary_type = ''PPAA'' THEN ''PPAZ Annual Member'' 
+--								END Attribute_Type
+--								FROM npsp_staging.stg_donor_event a
+--								--WHERE npsp_contactid IN (''0031700001TpypXAAR'',''0031700001S81g0AAB'')
+--								GROUP BY a.giving_summary_type
+--								,npsp_contactid';
+--		EXECUTE stg_attribute;
+--						
+--		stg_fact_attribute_drop :=			'DROP TABLE IF EXISTS npsp_staging.stg_fact_attribute';
+--		EXECUTE stg_fact_attribute_drop;
+--			stg_fact_attribute :=	'CREATE TABLE npsp_staging.stg_fact_attribute as
+--								SELECT npsp_contactid id
+--								,current_timestamp::timestamp lastmodifieddate
+--								,attribute_type type__c
+--								,start_date start_date__c
+--								,CASE 
+--									WHEN attribute_type = ''PPAZ Annual Member'' THEN trunc(add_months(start_date::date,12))
+--									WHEN attribute_type = ''National Contributing Annual Member'' THEN trunc(add_months(start_date::date,12))
+--									WHEN attribute_type = ''National Contributing Lifetime Member'' THEN NULL
+--								END end_date__c
+--								FROM npsp_staging.stg_attribute
+--								--WHERE attribute_type IS NOT NULL AND npsp_contactid IN (''0031700001TpypXAAR'',''0031700001S81g0AAB'')';
+--							
+--		EXECUTE stg_fact_attribute;
+--	
+--	
+--				mergeSQL := 'MERGE INTO npsp_reporting.fact_attributes 
+--							USING npsp_staging.stg_fact_attribute
+--							ON npsp_reporting.fact_attributes.id = npsp_staging.stg_fact_attribute.id 
+--							and npsp_reporting.fact_attributes.Type__c = npsp_staging.stg_fact_attribute.Type__c
+--							
+--							WHEN MATCHED THEN
+--								UPDATE SET
+--									LastModifiedDate = npsp_staging.stg_fact_attribute.LastModifiedDate,
+--									Type__c = npsp_staging.stg_fact_attribute.Type__c,
+--									Start_Date__c = npsp_staging.stg_fact_attribute.Start_Date__c,
+--									End_Date__c = npsp_staging.stg_fact_attribute.End_Date__c
+--							
+--							WHEN NOT MATCHED THEN
+--								INSERT (
+--									Id,
+--									LastModifiedDate,
+--									Type__c,
+--									Start_Date__c,
+--									End_Date__c	)
+--								VALUES (npsp_staging.stg_fact_attribute.Id,
+--										npsp_staging.stg_fact_attribute.LastModifiedDate,
+--										npsp_staging.stg_fact_attribute.Type__c,
+--										npsp_staging.stg_fact_attribute.Start_Date__c,
+--										npsp_staging.stg_fact_attribute.End_Date__c)';		
+--									
+--		EXECUTE mergeSQL;
+--			
+--END;
+--$$;
