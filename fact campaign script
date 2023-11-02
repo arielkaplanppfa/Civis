@@ -6,20 +6,17 @@ Call npsp_reporting.campaign_datamart();
 -- DECLARE
 
 -- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
---    	v_high_watermark TIMESTAMP; -- MAX(lastrun) date FROM the job_history TABLE.
---     v_low_watermark TIMESTAMP; -- Low watermark FROM the npsp_integration.civis_etl_metadata TABLE.
+--     v_watermark TIMESTAMP;
     
 --     stg_table_SQL varchar(65535) :='';
 --    	mergeSQL varchar(65535) :='';
     
 -- BEGIN 
 	
--- 	-- High watermark is the max last run timestamp of the daily sync mulesoft job.
--- 	EXECUTE 'SELECT max_date FROM npsp_staging.stg_max_lastrun' INTO v_high_watermark;
-	
+-- 	v_watermark := '1900-01-01 00:00:00.000';
 
 -- 	-- Low watermark is the max lastmodified date of the source.
--- 	EXECUTE 'SELECT max(max_last_updated) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_low_watermark;
+-- 	--EXECUTE 'SELECT max(max_last_updated) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_watermark;
 	
 -- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_campaign';
 	
@@ -48,10 +45,10 @@ Call npsp_reporting.campaign_datamart();
 -- 						end)total_amount_pledged
 -- 						from ppfa_golden.golden_opportunities_npsp
 -- 						where source_code is not NULL
--- 						AND max_last_updated > ''1900-01-01 00:00:000'' AND max_last_updated <= current_timestamp::timestamp
+-- 						max_last_updated >=''' ||v_watermark||'''
 -- 						group by source_code
 -- 						)
--- 						SELECT a.id 
+-- 						SELECT a.id
 -- 						,current_timestamp::timestamp AS lastmodifieddate
 -- 						,(b.total_amount_paid/nullif(b.total_number_paid,0))::decimal(18,2) average_gift_amount__c
 -- 						,((a.actualcost/1000) * a.numbersent / nullif(a.numbersent,0))::decimal(18,2) cost_per_contact__c
@@ -66,7 +63,8 @@ Call npsp_reporting.campaign_datamart();
 -- 						,nvl(a.numbersent,0) total_number_solicited__c
 -- 						FROM stg_opps_camp b
 -- 						LEFT JOIN npsp_sfdc.campaign a
--- 						ON b.source_code = a.name)';
+-- 						ON b.source_code = a.name
+-- 						WHERE a.id IS NOT null)';
 -- 	EXECUTE stg_table_SQL;
 		
 -- 		mergeSQL := 'MERGE INTO npsp_reporting.fact_campaign
