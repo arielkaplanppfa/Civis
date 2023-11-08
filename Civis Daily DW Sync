@@ -23,7 +23,7 @@ workflow:
         remote_host_id: 174
         credential_id: 29547
         sql: |
-          INSERT INTO npsp_integration.job_history_test (jobid, lastrun,
+          INSERT INTO npsp_integration.job_history (jobid, lastrun,
           runstatus, notes)
 
           VALUES (13::INTEGER,(SELECT v_insert_timestamp FROM
@@ -47,6 +47,7 @@ workflow:
         - run_golden_opps
       on-error:
         - handle_errors
+    
     run_golden_opps:
       action: civis.run_job
       input:
@@ -55,6 +56,8 @@ workflow:
         - run_giving_summary
       on-error:
         - handle_errors
+    
+    
     run_giving_summary:
       action: civis.run_job
       input:
@@ -65,8 +68,12 @@ workflow:
         - run_campaign
         - run_recurring_donations
         - run_attributes
+        - populate_subledger
       on-error:
         - handle_errors
+    
+    
+    
     run_account:
       action: civis.run_job
       input:
@@ -75,6 +82,8 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
+    
+    
     run_contact:
       action: civis.run_job
       input:
@@ -83,6 +92,8 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
+    
+    
     run_campaign:
       action: civis.run_job
       input:
@@ -91,6 +102,8 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
+    
+    
     run_recurring_donations:
       action: civis.run_job
       input:
@@ -99,6 +112,8 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
+    
+    
     run_attributes:
       action: civis.run_job
       input:
@@ -107,13 +122,41 @@ workflow:
         - update_job_history
       on-error:
         - handle_errors
+    
+    populate_subledger:
+      action: civis.run_job
+      input:
+        job_id: 237486402
+      on-success:
+        - nightly_subledger
+      on-error:
+        - handle_errors
+    
+    
+    nightly_subledger:
+      action: civis.run_job
+      input:
+        job_id: 237486273
+      on-success:
+        - update_job_history
+        - sanity_check
+      on-error:
+        - handle_errors
+
+    sanity_check:
+      action: civis.run_job
+      input:
+        jobid: 241530877
+    
+
+
     update_job_history:
       action: civis.scripts.sql
       input:
         remote_host_id: 174
         credential_id: 29547
         sql: >
-          update npsp_integration.job_history_test
+          update npsp_integration.job_history
 
           set runstatus = 'complete', lastrun = current_timestamp, notes =
           'Civis Aggregation Workflow has completed successfully'
@@ -121,25 +164,36 @@ workflow:
           where jobid = 13 and runstatus = 'started' and lastrun = (SELECT
           v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
       join: all
-      on-complete:
+      on-success:
         - Data_Mart_RowCount
+    
     handle_errors:
       action: civis.scripts.sql
       input:
         remote_host_id: 174
         credential_id: 29547
         sql: >
-          update npsp_integration.job_history_test
+          update npsp_integration.job_history
 
           set runstatus = 'failed', lastrun = current_timestamp, notes = 'Civis
           Aggregation Workflow has failed'
 
           where jobid = 13 and runstatus = 'started' and lastrun = (SELECT
           v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
+      on-success:
+        - fail_workflow
+    
+    
     Data_Mart_RowCount:
       action: civis.run_job
       join: all
       input:
         job_id: 239083880
-  input:
-    - load_data: incremental
+
+
+
+    fail_workflow:
+        action: std.fail
+        input:
+            message: "The main task failed. Check the job step history for more details."
+
