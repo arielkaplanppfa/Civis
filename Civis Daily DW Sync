@@ -5,6 +5,15 @@ workflow:
   default_sql:
     remote_host_id: 174
     credential_id: 29547
+  
+  # # Default values can be overridden in individual tasks.
+  # task-defaults:
+  # # Timeout between tasks (successful or not) in seconds
+  #   timeout: 5
+  #   retry:
+  #     count: 3
+  #     # Delay between retries in seconds
+  #     delay: 60
   tasks:
     generate_timestamp:
       action: civis.scripts.sql
@@ -64,11 +73,12 @@ workflow:
         job_id: 237083252
       on-success:
         - run_account
-        - run_contact
-        - run_campaign
-        - run_recurring_donations
-        - run_attributes
-        - populate_subledger
+        # - run_contact
+        # - run_campaign
+        # - run_recurring_donations
+        # - run_attributes
+        # - populate_subledger
+      
       on-error:
         - handle_errors
     
@@ -79,7 +89,7 @@ workflow:
       input:
         job_id: 237093189
       on-success:
-        - update_job_history
+        - run_contact
       on-error:
         - handle_errors
     
@@ -89,7 +99,7 @@ workflow:
       input:
         job_id: 237082876
       on-success:
-        - update_job_history
+        - run_campaign
       on-error:
         - handle_errors
     
@@ -99,7 +109,7 @@ workflow:
       input:
         job_id: 237061374
       on-success:
-        - update_job_history
+        - run_recurring_donations
       on-error:
         - handle_errors
     
@@ -109,7 +119,7 @@ workflow:
       input:
         job_id: 237056580
       on-success:
-        - update_job_history
+        - run_attributes
       on-error:
         - handle_errors
     
@@ -119,7 +129,7 @@ workflow:
       input:
         job_id: 237277355
       on-success:
-        - update_job_history
+        - populate_subledger
       on-error:
         - handle_errors
     
@@ -139,15 +149,16 @@ workflow:
         job_id: 237486273
       on-success:
         - update_job_history
-        - sanity_check
+        
       on-error:
         - handle_errors
 
-    sanity_check:
-      action: civis.run_job
-      input:
-        jobid: 241530877
-    
+    # sanity_check:
+    #   action: civis.run_job
+    #   input:
+    #     jobid: 241530877
+    #   on-error:
+    #     - handle_errors
 
 
     update_job_history:
@@ -155,7 +166,7 @@ workflow:
       input:
         remote_host_id: 174
         credential_id: 29547
-        sql: >
+        sql: |
           update npsp_integration.job_history
 
           set runstatus = 'complete', lastrun = current_timestamp, notes =
@@ -172,7 +183,7 @@ workflow:
       input:
         remote_host_id: 174
         credential_id: 29547
-        sql: >
+        sql: |
           update npsp_integration.job_history
 
           set runstatus = 'failed', lastrun = current_timestamp, notes = 'Civis
@@ -189,7 +200,6 @@ workflow:
       join: all
       input:
         job_id: 239083880
-
 
 
     fail_workflow:
