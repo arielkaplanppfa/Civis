@@ -7,16 +7,20 @@ Call npsp_reporting.campaign_datamart();
 
 -- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
 --     v_watermark TIMESTAMP;
-    
+--     v_action_count INT;
 --     stg_table_SQL varchar(65535) :='';
 --    	mergeSQL varchar(65535) :='';
     
 -- BEGIN 
 	
--- 	v_watermark := '1900-01-01 00:00:00.000';
+-- 	--v_watermark := '1900-01-01 00:00:00.000';
+	
+	
+-- 	INSERT INTO npsp_integration.job_step_history (jobstep, lastrun, runstatus, notes, results, transactionid, recordcount)
+--  	VALUES (147::integer,v_inserted_timestamp,'started','Campaign Datamart job has started.',NULL, NULL, NULL);
 
--- 	-- Low watermark is the max lastmodified date of the source.
--- 	--EXECUTE 'SELECT max(max_last_updated) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_watermark;
+-- 	-- watermark is the max lastmodified date of the source.
+-- 	EXECUTE 'SELECT to_char(MAX(max_last_updated) - INTERVAL ''1 day'',''YYYY-MM-DD HH24:MI:SS'') max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_watermark;
 	
 -- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_campaign';
 	
@@ -45,8 +49,7 @@ Call npsp_reporting.campaign_datamart();
 -- 						end)total_amount_pledged
 -- 						from ppfa_golden.golden_opportunities_npsp
 -- 						where source_code is not NULL
--- 						max_last_updated >=''' ||v_watermark||'''
--- 						group by source_code
+-- 						and max_last_updated >='''||v_watermark||''' group by source_code
 -- 						)
 -- 						SELECT a.id
 -- 						,current_timestamp::timestamp AS lastmodifieddate
@@ -65,6 +68,7 @@ Call npsp_reporting.campaign_datamart();
 -- 						LEFT JOIN npsp_sfdc.campaign a
 -- 						ON b.source_code = a.name
 -- 						WHERE a.id IS NOT null)';
+					
 -- 	EXECUTE stg_table_SQL;
 		
 -- 		mergeSQL := 'MERGE INTO npsp_reporting.fact_campaign
@@ -72,19 +76,19 @@ Call npsp_reporting.campaign_datamart();
 -- 		ON npsp_reporting.fact_campaign.id = npsp_staging.stg_fact_campaign.id
 -- 		WHEN MATCHED THEN
 -- 		UPDATE SET
--- 		lastmodifieddate = npsp_staging.stg_fact_campaign.lastmodifieddate,
--- 		average_gift_amount__c = npsp_staging.stg_fact_campaign.average_gift_amount__c,
--- 		cost_per_contact__c = npsp_staging.stg_fact_campaign.cost_per_contact__c,
--- 		first_response_date__c = npsp_staging.stg_fact_campaign.first_response_date__c,
--- 		last_response_date__c = npsp_staging.stg_fact_campaign.last_response_date__c,
--- 		numberofcontacts_rd__c = npsp_staging.stg_fact_campaign.numberofcontacts_rd__c,
--- 		roi_rd__c = npsp_staging.stg_fact_campaign.roi_rd__c,
--- 		total_amount_paid__c = npsp_staging.stg_fact_campaign.total_amount_paid__c,
--- 		total_amount_pledged__c = npsp_staging.stg_fact_campaign.total_amount_pledged__c,
--- 		total_number_paid__c = npsp_staging.stg_fact_campaign.total_number_paid__c,
--- 		total_number_pledged__c = npsp_staging.stg_fact_campaign.total_number_pledged__c,
--- 		total_number_solicited__c = npsp_staging.stg_fact_campaign.total_number_solicited__c
-		
+-- 				lastmodifieddate = npsp_staging.stg_fact_campaign.lastmodifieddate,
+-- 				average_gift_amount__c = npsp_staging.stg_fact_campaign.average_gift_amount__c,
+-- 				cost_per_contact__c = npsp_staging.stg_fact_campaign.cost_per_contact__c,
+-- 				first_response_date__c = npsp_staging.stg_fact_campaign.first_response_date__c,
+-- 				last_response_date__c = npsp_staging.stg_fact_campaign.last_response_date__c,
+-- 				numberofcontacts_rd__c = npsp_staging.stg_fact_campaign.numberofcontacts_rd__c,
+-- 				roi_rd__c = npsp_staging.stg_fact_campaign.roi_rd__c,
+-- 				total_amount_paid__c = npsp_staging.stg_fact_campaign.total_amount_paid__c,
+-- 				total_amount_pledged__c = npsp_staging.stg_fact_campaign.total_amount_pledged__c,
+-- 				total_number_paid__c = npsp_staging.stg_fact_campaign.total_number_paid__c,
+-- 				total_number_pledged__c = npsp_staging.stg_fact_campaign.total_number_pledged__c,
+-- 				total_number_solicited__c = npsp_staging.stg_fact_campaign.total_number_solicited__c
+				
 -- 		WHEN NOT MATCHED THEN 
 -- 			INSERT (
 -- 				Id,
@@ -117,6 +121,23 @@ Call npsp_reporting.campaign_datamart();
 -- 				npsp_staging.stg_fact_campaign.Total_Number_Solicited__c)';
 	
 -- 	EXECUTE mergeSQL;
-			
+-- 	GET DIAGNOSTICS v_action_count = ROW_COUNT; 
+		
+--  	UPDATE npsp_integration.job_step_history 
+--  	SET runstatus = 'complete',
+--  		lastrun = CURRENT_TIMESTAMP,
+--  		results  = 'Updated ROWCOUNT: '|| v_action_count::INT,
+--  		recordcount = v_action_count::INT
+--  	WHERE lastrun = v_inserted_timestamp AND jobstep = 147::integer;
+ 
+ 
+-- EXCEPTION WHEN OTHERS THEN 
+--  	-- Log the error
+--  	RAISE INFO 'An exception occurred.';
+--  	UPDATE npsp_integration.job_step_history
+--  	SET runstatus = 'failed',
+--  		lastrun = CURRENT_TIMESTAMP,
+--  		notes = 'Error message: '|| SQLERRM 
+--  	WHERE lastrun = v_inserted_timestamp AND jobstep = 147::integer;		
 -- END;
 -- $$;
