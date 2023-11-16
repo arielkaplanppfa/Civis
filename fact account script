@@ -1,10 +1,3 @@
-/*
-Developer: Colin Prosser
-Date: 10/30/2023
-
-
-*/
-
 CALL npsp_reporting.account_datamart();
 -- CREATE OR REPLACE PROCEDURE npsp_reporting.account_datamart()
 -- LANGUAGE plpgsql
@@ -12,47 +5,71 @@ CALL npsp_reporting.account_datamart();
 -- DECLARE 
 
 -- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_step_history TABLE.
---    	v_watermark TIMESTAMP;
-    
+--    	v_fg_watermark TIMESTAMP;
+--     v_sus_watermark TIMESTAMP;
+--     v_gl_watermark TIMESTAMP;
+--     v_action_count INT;
 --     dropSQL VARCHAR(65535) := '';
 --     stg_table_SQL varchar(65535) :='';
+--    stg_fact_account2 varchar(65535) :='';
 --    	mergeSQL varchar(65535) :='';
+--    src_table_SQL varchar(65535) := '';
+--     v_watermark TIMESTAMP;
 
 -- BEGIN 
 
 -- 	-- Inserts a row into the job history table with the status = started
 
 -- 	v_inserted_timestamp := CURRENT_TIMESTAMP;
--- 	v_watermark := '1900-01-01 00:00:00';
+-- 	--v_watermark := '1900-01-01 00:00:00';
 			
--- --	INSERT INTO npsp_integration.job_history_test (jobid, lastrun, runstatus, notes)
--- --	VALUES (13::INTEGER,v_inserted_timestamp,'started','Civis Aggregation Workflow has started.');
+-- 	INSERT INTO npsp_integration.job_step_history (jobstep, lastrun, runstatus, notes, results, transactionid, recordcount)
+--  	VALUES (144::integer,v_inserted_timestamp,'started','Account Datamart job has started.',NULL, NULL, NULL);
 		
 -- 	   -- watermark is the max last run timestamp of the daily sync mulesoft job.
--- 	--EXECUTE 'SELECT max(last_modified_date) FROM npsp_reporting.fact_giving_summary' INTO v_watermark; 
+-- 	EXECUTE 'SELECT to_char(max(last_modified_date)- INTERVAL ''1 day'',''YYYY-MM-DD HH24:MI:SS'') FROM npsp_reporting.fact_giving_summary' INTO v_watermark; 
+	
 	
 		
 -- 	    -- Drop the fact giving summary staging table
+-- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_src_hash_table CASCADE';
+-- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_account cascade';
 -- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_account cascade';
+-- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_src_hash_table2 CASCADE';
 
+-- --	EXECUTE 'CREATE TABLE IF NOT EXISTS npsp_staging.stg_src_hash_table(
+-- --						src_hash bigint,
+-- --						accountid varchar(18)
+-- --					)';
 	
--- 		stg_table_SQL := 'CREATE TABLE npsp_staging.stg_fact_account AS 
+		
+	
+-- 		src_table_SQL:= 'CREATE TABLE npsp_staging.stg_src_hash_table2 AS 
+-- 						(SELECT fnv_hash(id||Lifetime_Total_Number_of_Gifts__c||Lifetime_Total_Value_of_Gifts__c||COALESCE(to_char(npo02__LastCloseDate__c, ''YYYY-MM-DD''), ''default_string'')||
+-- 						Last_Gift_Amount__c||COALESCE(to_char(First_Gift_Date__c, ''YYYY-MM-DD''), ''default_string'')||First_Gift_Amount__c||COALESCE(to_char(Largest_Gift_Date__c, ''YYYY-MM-DD''), ''default_string'')||COALESCE(cast(CY_Giving_for_Giving_Level__c AS varchar), ''default_string'')||
+-- 						CASE WHEN X10k_gift_in_CY__c THEN ''true'' ELSE ''false'' END ||
+-- 						CASE WHEN X25k_gift_in_CY__c THEN ''true'' ELSE ''false'' END ||COALESCE(cast(npsp__sustainer__c AS varchar), ''default_string'')) AS src_hash,
+-- 						id,lifetime_total_number_of_gifts__c,lifetime_total_value_of_gifts__c,npo02__lastclosedate__c,last_gift_amount__c,first_gift_date__c,first_gift_amount__c,largest_gift_date__c,largest_gift_amount__c,cy_giving_for_giving_level__c,x10k_gift_in_cy__c,x25k_gift_in_cy__c
+-- 						,npsp__sustainer__c
+-- 						FROM npsp_sfdc.account a)';			
+			
+			
+-- 	EXECUTE src_table_SQL;
+		
+-- 		stg_table_SQL := 'CREATE TABLE npsp_staging.stg_account AS 
 -- 					(WITH 
 -- 					wealth_screening_account_adj AS 
 -- 					(SELECT accountid 
--- 					,current_timestamp::timestamp AS lastModifiedDate
--- 					,lifetime_giving_amount::numeric(38,2) AS Lifetime_Total_Number_of_Gifts__c
--- 					,lifetime_giving_count AS Lifetime_Total_Value_of_Gifts__c 
--- 					,last_gift_date AS npo02__LastCloseDate__c
--- 					,last_gift_amount::numeric(38,2) AS Last_Gift_Amount__c 
--- 					,first_gift_date AS First_Gift_Date__c 
--- 					,first_gift_amount::numeric(38,2) AS First_Gift_Amount__c 
--- 					,largest_gift_date AS Largest_Gift_Date__c 
--- 					,largest_gift_amount::numeric(38,2) AS Largest_Gift_Amount__c
+-- 					,lifetime_giving_count__c AS Lifetime_Total_Number_of_Gifts__c
+-- 					,lifetime_giving_amount__c::numeric(38,2) AS Lifetime_Total_Value_of_Gifts__c 
+-- 					,last_gift_date__c AS npo02__LastCloseDate__c
+-- 					,last_gift_amount__c::numeric(38,2) AS Last_Gift_Amount__c 
+-- 					,first_gift_date__c AS First_Gift_Date__c 
+-- 					,first_gift_amount__c::numeric(38,2) AS First_Gift_Amount__c 
+-- 					,largest_gift_date__c AS Largest_Gift_Date__c 
+-- 					,largest_gift_amount__c::numeric(38,2) AS Largest_Gift_Amount__c
 -- 					FROM npsp_reporting.fact_giving_summary fgs 
--- 					WHERE giving_summary_type = ''Total''
--- 					AND last_modified_date >=''' || v_watermark ||'''
--- 					AND accountid IS NOT NULL ),
+-- 					WHERE giving_summary_type = ''Total'' AND accountid IS NOT NULL ),
 
 -- 					sustainer AS (
 -- 					select p.organization accountid
@@ -75,15 +92,15 @@ CALL npsp_reporting.account_datamart();
 -- 					when rd.status = ''Paused'' then ''Active''
 -- 					END ::varchar aligned_status
 -- 					from npsp_sfdc.recurring_donation_v rd
--- 					where lastmodifieddate >=''' || v_watermark|| '''
+					
 -- 					)
 -- 					pivot(count(aligned_status) for aligned_status in (''Failing'',''Active'',''Completed'',''Inactive--Failed'',''Inactive--Cancelled'' )  ) p),
 					
 -- 					giving_level_def AS 
 -- 					(select g.npsp_accountid
 -- 					,sum(g.amount) CY_Giving_for_Giving_Level__c
--- 					,max(case when g.amount >= 10000 then ''Y'' else ''N'' end) X10k_gift_in_CY__c
--- 					,max(case when g.amount >= 25000 then ''Y'' else ''N'' end) X25k_gift_in_CY__c
+-- 					,max(case when g.amount >= 10000 then 1 else 0 end) X10k_gift_in_CY__c
+-- 					,max(case when g.amount >= 25000 then 1 else 0 end) X25k_gift_in_CY__c
 -- 					,max(g.max_last_updated) Last_Modified_Date
 -- 					from ppfa_golden.golden_opportunities_npsp g
 -- 					left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
@@ -97,12 +114,16 @@ CALL npsp_reporting.account_datamart();
 -- 					or (left(g.sc_office,1) <> ''N'' 
 -- 					and g.gau_credit_code like ''%CFP%'')) 
 -- 					and om.accountid is null
--- 					and g.max_last_updated >= ''' || v_watermark || '''
+					
 -- 					group by g.npsp_accountid)
 					
 					
--- 					SELECT a.ID ,
--- 					current_timestamp::timestamp AS lastModifiedDate
+-- 					SELECT 
+-- 					fnv_hash(a.ID||b.Lifetime_Total_Number_of_Gifts__c||b.Lifetime_Total_Value_of_Gifts__c||COALESCE(to_char(b.npo02__LastCloseDate__c, ''YYYY-MM-DD''), ''default_string'')||
+-- 					b.Last_Gift_Amount__c||COALESCE(to_char(b.First_Gift_Date__c, ''YYYY-MM-DD''), ''default_string'')||b.First_Gift_Amount__c||COALESCE(to_char(b.Largest_Gift_Date__c, ''YYYY-MM-DD''), ''default_string'')||COALESCE(cast(c.CY_Giving_for_Giving_Level__c AS varchar), ''default_string'')||
+-- 					CASE WHEN c.X10k_gift_in_CY__c THEN ''true'' ELSE ''false'' END ||
+-- 					CASE WHEN c.X25k_gift_in_CY__c THEN ''true'' ELSE ''false'' END ||COALESCE(cast(s.sustainer_status AS varchar), ''default_string'')) stg_hash
+-- 					,a.ID 
 -- 					,b.Lifetime_Total_Number_of_Gifts__c
 -- 					,b.Lifetime_Total_Value_of_Gifts__c 
 -- 					,b.npo02__LastCloseDate__c
@@ -112,8 +133,8 @@ CALL npsp_reporting.account_datamart();
 -- 					,b.Largest_Gift_Date__c 
 -- 					,b.Largest_Gift_Amount__c
 -- 					,c.CY_Giving_for_Giving_Level__c
--- 					,c.X10k_gift_in_CY__c
--- 					,c.X25k_gift_in_CY__c
+-- 					,c.X10k_gift_in_CY__c::boolean
+-- 					,c.X25k_gift_in_CY__c::boolean
 -- 					,s.sustainer_status Sustainer__c
 -- 					FROM npsp_sfdc.account_v a
 -- 					LEFT JOIN wealth_screening_account_adj b
@@ -121,11 +142,39 @@ CALL npsp_reporting.account_datamart();
 -- 					LEFT JOIN giving_level_def c
 -- 					ON b.accountid = c.npsp_accountid
 -- 					LEFT JOIN sustainer s
--- 					ON a.id = s.accountid		
+-- 					ON a.id = s.accountid
+							
 -- 					)';
 
 -- 	EXECUTE stg_table_SQL;
 
+
+
+-- 	stg_fact_account2 :=  'CREATE TABLE npsp_staging.stg_fact_account AS 
+-- 							(SELECT current_timestamp::timestamp as lastModifiedDate
+-- 							, a.id 
+-- 							,a.lifetime_total_number_of_gifts__c
+-- 							,a.lifetime_total_value_of_gifts__c
+-- 							, a.npo02__lastclosedate__c			
+-- 							, a.last_gift_amount__c			
+-- 							, a.first_gift_date__c			
+-- 							, a.first_gift_amount__c			
+-- 							, a.largest_gift_date__c			
+-- 							, a.largest_gift_amount__c			
+-- 							, a.cy_giving_for_giving_level__c			
+-- 							, a.x10k_gift_in_cy__c			
+-- 							, a.x25k_gift_in_cy__c			
+-- 							, a.sustainer__c 
+-- 							FROM npsp_staging.stg_account a
+-- 							JOIN npsp_staging.stg_src_hash_table2 b 
+-- 							ON a.id = b.id AND a.stg_hash <> b.src_hash
+-- 							)';
+-- 	EXECUTE stg_fact_account2;
+			
+
+-- 			--6,189,666 4,543,401
+-- --		 ;
+-- --
 
 -- 			mergeSQL := 'MERGE INTO npsp_reporting.fact_account
 -- 						USING npsp_staging.stg_fact_account
@@ -178,6 +227,27 @@ CALL npsp_reporting.account_datamart();
 -- 									npsp_staging.stg_fact_account.Sustainer__c)';
 									
 -- 		EXECUTE mergeSQL;
+	
+	
+-- 	GET DIAGNOSTICS v_action_count = ROW_COUNT; 
+		
+--  	UPDATE npsp_integration.job_step_history 
+--  	SET runstatus = 'complete',
+--  		lastrun = CURRENT_TIMESTAMP,
+--  		results  = 'Updated ROWCOUNT: '|| v_action_count::INT,
+--  		recordcount = v_action_count::INT
+--  	WHERE lastrun = v_inserted_timestamp AND jobstep = 144::integer;
+ 
+ 
+-- EXCEPTION WHEN OTHERS THEN 
+--  	-- Log the error
+--  	RAISE INFO 'An exception occurred.';
+--  	UPDATE npsp_integration.job_step_history
+--  	SET runstatus = 'failed',
+--  		lastrun = CURRENT_TIMESTAMP,
+--  		notes = 'Error message: '|| SQLERRM 
+--  	WHERE lastrun = v_inserted_timestamp AND jobstep = 144::integer; 
+	
 
 -- END;
 -- $$;
