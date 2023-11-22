@@ -1,86 +1,82 @@
 version: '2.0'
 workflow:
-  credential_id: 29547
-  remote_host_id: 174
-  default_sql:
-    remote_host_id: 174
-    credential_id: 29547
+  credential_id: &credential_id 29547
+  remote_host_id: &remote_host_id 174
+  default_sql: &default_sql
+    remote_host_id: *remote_host_id
+    credential_id: *credential_id
   
-  # # Default values can be overridden in individual tasks.
-  # task-defaults:
-  # # Timeout between tasks (successful or not) in seconds
-  #   timeout: 5
-  #   retry:
-  #     count: 3
-  #     # Delay between retries in seconds
-  #     delay: 60
+ 
+  
   tasks:
-    generate_timestamp:
-      action: civis.scripts.sql
-      input:
-        remote_host_id: 174
-        credential_id: 29547
-        sql: |
-          DROP TABLE IF EXISTS npsp_staging.stg_insert_timestamp;
-          CREATE TABLE npsp_staging.stg_insert_timestamp
-          AS SELECT CURRENT_TIMESTAMP::timestamp as v_insert_timestamp;
-      on-success:
-        - insert_into_job_history
-    insert_into_job_history:
-      action: civis.scripts.sql
-      input:
-        remote_host_id: 174
-        credential_id: 29547
-        sql: |
-          INSERT INTO npsp_integration.job_history (jobid, lastrun,
-          runstatus, notes)
+    # generate_timestamp:
+    #   action: civis.scripts.sql
+    #   input:
+    #     <<: *default_sql
+    #     sql: |
+    #       DROP TABLE IF EXISTS npsp_staging.stg_insert_timestamp;
+    #       CREATE TABLE npsp_staging.stg_insert_timestamp
+    #       AS SELECT CURRENT_TIMESTAMP::timestamp as v_insert_timestamp;
+    #   on-success:
+    #     - run_golden_opps
+    
+    
+    # insert_into_job_history:
+    #   action: civis.scripts.sql
+    #   input:
+    #     <<: *default_sql
+    #     sql: |
+    #       INSERT INTO npsp_integration.job_history (jobid, lastrun,
+    #       runstatus, notes)
 
-          VALUES (13::INTEGER,(SELECT v_insert_timestamp FROM
-          npsp_staging.stg_insert_timestamp),'started','Civis Aggregation
-          Workflow has started');
-      on-success:
-        - get_last_modified_date
-    get_last_modified_date:
-      action: civis.scripts.sql
-      input:
-        remote_host_id: 174
-        credential_id: 29547
-        sql: |
-          DROP TABLE IF EXISTS npsp_staging.stg_max_lastrun; 
-          create table npsp_staging.stg_max_lastrun
-          as
-          select max(lastrun) max_date
-          from npsp_integration.job_history
-          where jobid = 10 and runstatus = 'complete'
-      on-success:
-        - run_golden_opps
-      on-error:
-        - handle_errors
+    #       VALUES (13::INTEGER,(SELECT v_insert_timestamp FROM
+    #       npsp_staging.stg_insert_timestamp),'started','Civis Aggregation
+    #       Workflow has started');
+    #   on-success:
+    #     - run_golden_opps
+    
+    
+    # get_last_modified_date:
+    #   action: civis.scripts.sql
+    #   input:
+    #     <<: *default_sql
+    #     sql: |
+    #       DROP TABLE IF EXISTS npsp_staging.stg_max_lastrun; 
+    #       create table npsp_staging.stg_max_lastrun
+    #       as
+    #       select max(lastrun) max_date
+    #       from npsp_integration.job_history
+    #       where jobid = 10 and runstatus = 'complete'
+    #   on-success:
+    #     - run_golden_opps
+    #   on-error:
+    #     - handle_errors
     
     run_golden_opps:
       action: civis.run_job
+
       input:
         job_id: 219977409
       on-success:
-        - run_giving_summary
-      on-error:
-        - handle_errors
-    
-    
-    run_giving_summary:
-      action: civis.run_job
-      input:
-        job_id: 237083252
-      on-success:
         - run_account
-        # - run_contact
-        # - run_campaign
-        # - run_recurring_donations
-        # - run_attributes
-        # - populate_subledger
-      
       on-error:
         - handle_errors
+    
+    
+    # run_giving_summary:
+    #   action: civis.run_job
+    #   input:
+    #     job_id: 237083252
+    #   on-success:
+    #     - run_account
+    #     # - run_contact
+    #     # - run_campaign
+    #     # - run_recurring_donations
+    #     # - run_attributes
+    #     # - populate_subledger
+      
+    #   on-error:
+    #     - handle_errors
     
     
     
@@ -129,29 +125,29 @@ workflow:
       input:
         job_id: 237277355
       on-success:
-        - update_job_history
+        - populate_subledger
       on-error:
         - handle_errors
     
-    # populate_subledger:
-    #   action: civis.run_job
-    #   input:
-    #     job_id: 237486402
-    #   on-success:
-    #     - nightly_subledger
-    #   on-error:
-    #     - handle_errors
+    populate_subledger:
+      action: civis.run_job
+      input:
+        job_id: 237486402
+      on-success:
+        - nightly_subledger
+      on-error:
+        - handle_errors
     
     
-    # nightly_subledger:
-    #   action: civis.run_job
-    #   input:
-    #     job_id: 237486273
-    #   on-success:
-    #     - update_job_history
+    nightly_subledger:
+      action: civis.run_job
+      input:
+        job_id: 237486273
+      on-success:
+        - Data_Mart_RowCount
         
-    #   on-error:
-    #     - handle_errors
+      on-error:
+        - handle_errors
 
     # sanity_check:
     #   action: civis.run_job
@@ -161,28 +157,26 @@ workflow:
     #     - handle_errors
 
 
-    update_job_history:
-      action: civis.scripts.sql
-      input:
-        remote_host_id: 174
-        credential_id: 29547
-        sql: |
-          update npsp_integration.job_history
+    # update_job_history:
+    #   action: civis.scripts.sql
+    #   input:
+    #     <<: *default_sql
+    #     sql: |
+    #       update npsp_integration.job_history
 
-          set runstatus = 'complete', lastrun = current_timestamp, notes =
-          'Civis Aggregation Workflow has completed successfully'
+    #       set runstatus = 'complete', lastrun = current_timestamp, notes =
+    #       'Civis Aggregation Workflow has completed successfully'
 
-          where jobid = 13 and runstatus = 'started' and lastrun = (SELECT
-          v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
-      join: all
-      on-success:
-        - Data_Mart_RowCount
+    #       where jobid = 13 and runstatus = 'started' and lastrun = (SELECT
+    #       v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
+    #   join: all
+    #   on-success:
+    #     - Data_Mart_RowCount
     
     handle_errors:
       action: civis.scripts.sql
       input:
-        remote_host_id: 174
-        credential_id: 29547
+        <<: *default_sql
         sql: |
           update npsp_integration.job_history
 
