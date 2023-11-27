@@ -7,23 +7,44 @@ Call npsp_reporting.contact_datamart();
 
 -- 	v_inserted_timestamp TIMESTAMP; -- Timestamp used TO INSERT INTO the job_history TABLE.
 --     v_watermark TIMESTAMP;
-    
+--     v_action_count INT;
 --     dropSQL VARCHAR(65535) := '';
 --     stg_table_SQL varchar(65535) :='';
 --    	mergeSQL varchar(65535) :='';
+--    	stg_table_SQL2 varchar(65535) :='';
+--   	src_hash_table varchar (65535) :='';
 
 -- BEGIN 
 -- 		v_inserted_timestamp := CURRENT_TIMESTAMP;
--- 		v_watermark := '1900-01-01 00:00:00.000';
+-- 		--v_watermark := '1900-01-01 00:00:00.000';
 	
 -- 		-- watermark is the max lastmodified date of the source.
--- 		--EXECUTE 'SELECT max(lastmodifieddate) max_last_updated FROM ppfa_golden.golden_opportunities_npsp gon' INTO v_watermark;
+-- 		EXECUTE 'SELECT to_char(max(lastmodifieddate)- INTERVAL ''1 day'',''YYYY-MM-DD HH24:MI:SS'') FROM npsp_sfdc.contact c ' INTO v_watermark;
 	
--- 		dropSQL := 'DROP TABLE IF EXISTS npsp_staging.stg_fact_contact';
+-- 		-- INSERT INTO npsp_integration.job_step_history (jobstep, lastrun, runstatus, notes, results, transactionid, recordcount)
+--  		-- VALUES (148::integer, v_inserted_timestamp,'started','Contact Datamart job has started.',NULL, NULL, NULL);
 		
--- 		EXECUTE dropSQL;
 
--- 			stg_table_SQL := 'CREATE TABLE npsp_staging.stg_fact_contact AS 
+		
+
+-- 		EXECUTE  'DROP TABLE IF EXISTS npsp_staging.stg_fact_contact';
+		
+-- 		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_contact';
+	
+-- 		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.src_contact_hash_table';
+		
+	
+-- 		src_hash_table := 'CREATE TABLE npsp_staging.src_contact_hash_table AS
+-- 							SELECT id 
+-- 							,npsp__sustainer__c 
+-- 							,national_pac_giving_for_current_cy__c 
+-- 							,fnv_hash(id||COALESCE(CAST(npsp__sustainer__c AS varchar),''default_string'')||COALESCE (CAST(national_pac_giving_for_current_cy__c AS varchar),''default_string'')) src_hash
+-- 							FROM npsp_sfdc.contact c';
+						
+						
+-- 		EXECUTE src_hash_table;
+
+-- 			stg_table_SQL := 'CREATE TABLE npsp_staging.stg_contact AS 
 -- 					(WITH sustainer AS 
 -- 					(select p.contact 
 -- 					-- prioritze
@@ -45,7 +66,7 @@ Call npsp_reporting.contact_datamart();
 -- 					    when rd.status = ''Paused'' then ''Active''    
 -- 					end::varchar aligned_status     
 -- 					from npsp_sfdc.recurring_donation_v rd
--- 					where lastmodifieddate >=''' || v_watermark ||''' 
+					
 -- 					) 
 -- 					pivot(count(aligned_status) for aligned_status in (''Failing'',''Active'',''Completed'',''Inactive--Failed'',''Inactive--Cancelled'' )  ) p
 -- 					),
@@ -59,19 +80,31 @@ Call npsp_reporting.contact_datamart();
 -- 					WHERE left(gold.source_code, 3) in (''5ND'', ''5NL'', ''5NM'')
 -- 					AND npsp_sfdc.f_pac_giving_calendar_year(gold.closedate) = npsp_sfdc.f_pac_giving_calendar_year(sysdate)
 -- 					AND om.accountid is null
--- 					AND gold.max_last_updated >='''|| v_watermark ||'''
--- 					group by gold.npsp_contactid)
+-- 										group by gold.npsp_contactid)
 					
 -- 					SELECT cv.id
 -- 					,current_timestamp::timestamp AS LastModifiedDate
 -- 					,b.sustainer_status AS Sustainer__c
 -- 					,c.National_PAC_Giving_for_Current_CY__c
+-- 					,fnv_hash(cv.id||COALESCE(CAST(b.sustainer_status AS varchar),''default_string'')||COALESCE (CAST(national_pac_giving_for_current_cy__c AS varchar),''default_string'')) stg_hash
 -- 					FROM npsp_sfdc.contact_v cv 
 -- 					LEFT JOIN sustainer b ON cv.id = b.contact
 -- 					LEFT JOIN pac_giving c ON cv.id = c.contactid)';
 				
 					
--- 		EXECUTE stg_table_SQL;
+-- 		EXECUTE stg_table_SQL; 
+	
+-- 		stg_table_SQL2 := 'CREATE TABLE  npsp_staging.stg_fact_contact AS 
+-- 							SELECT a.id
+-- 							,current_timestamp::timestamp AS LastModifiedDate
+-- 							,a.Sustainer__c
+-- 							,a.National_PAC_Giving_for_Current_CY__c
+-- 							FROM npsp_staging.stg_contact a
+-- 							JOIN npsp_staging.src_contact_hash_table b ON a.id = b.id AND a.stg_hash <> b.src_hash
+-- 							';
+				
+				
+-- 		EXECUTE stg_table_SQL2;
 	
 -- 			mergeSQL := 'MERGE INTO npsp_reporting.fact_contact
 -- 							USING npsp_staging.stg_fact_contact
@@ -95,6 +128,24 @@ Call npsp_reporting.contact_datamart();
 -- 								npsp_staging.stg_fact_contact.Sustainer__c)';
 						
 -- 		EXECUTE mergeSQL;
+-- 		GET DIAGNOSTICS v_action_count = ROW_COUNT; 
 	
+
+-- -- 	 	UPDATE npsp_integration.job_step_history 
+-- -- 	 	SET runstatus = 'complete',
+-- -- 	 		lastrun = CURRENT_TIMESTAMP,
+-- -- 	 		results  = 'Updated ROWCOUNT: '|| v_action_count::INT,
+-- -- 	 		recordcount = v_action_count::INT
+-- -- 	 	WHERE lastrun = v_inserted_timestamp AND jobstep = 148::integer;
+ 
+ 
+-- -- EXCEPTION WHEN OTHERS THEN 
+-- --  	-- Log the error
+-- --  	RAISE INFO 'An exception occurred.';
+-- --  	UPDATE npsp_integration.job_step_history
+-- --  	SET runstatus = 'failed',
+-- --  		lastrun = CURRENT_TIMESTAMP,
+-- --  		notes = 'Error message: '|| SQLERRM 
+-- --  	WHERE lastrun = v_inserted_timestamp AND jobstep = 148::integer; 
 -- END;
 -- $$;
