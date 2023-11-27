@@ -58,25 +58,25 @@ workflow:
       input:
         job_id: 219977409
       on-success:
-        - run_account
+        -  run_giving_summary
       on-error:
         - handle_errors
     
     
-    # run_giving_summary:
-    #   action: civis.run_job
-    #   input:
-    #     job_id: 237083252
-    #   on-success:
-    #     - run_account
-    #     # - run_contact
-    #     # - run_campaign
-    #     # - run_recurring_donations
-    #     # - run_attributes
-    #     # - populate_subledger
+    run_giving_summary:
+      action: civis.run_job
+      input:
+        job_id: 237083252
+      on-success:
+        - run_account
+        # - run_contact
+        # - run_campaign
+        # - run_recurring_donations
+        # - run_attributes
+        # - populate_subledger
       
-    #   on-error:
-    #     - handle_errors
+      on-error:
+        - handle_errors
     
     
     
@@ -194,14 +194,13 @@ workflow:
       join: all
       input:
         job_id: 239083880
-      on-success: 
-        - Stage_Table_Rowcount
+ 
       
 
-    Stage_Table_Rowcount:
-      action: civis.run_job
-      input:
-        job_id: 242706830
+    # Stage_Table_Rowcount:
+    #   action: civis.run_job
+    #   input:
+    #     job_id: 242706830
 
 
 
