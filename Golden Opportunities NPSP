@@ -17,16 +17,21 @@ Missing Gifts in NPSP, prior to 2020 example Mary E Mower 2019 giving
 9/29/23
 Final amount on payments null
 account c3 and c4 affil numbers are null
+
+10/13/23
+GAU join criteria added to remove GAUs from testing. Remove for go live.
 */
 
-drop table if exists ppfa_golden.golden_opportunities_npsp cascade;
+--drop table if exists ppfa_golden.golden_opportunities_npsp cascade;
 
 Create temporary table bucket as 
 with bucket_temp as ( 
  select opp.id as opp_id, opp.bookable, count(payment.id) as payments
     from  npsp_sfdc.opportunity_v opp
     join  npsp_sfdc.opppayment_v payment  on opp.id =  payment.opportunity
-    where ( length(payment.originalpayment) = 0 or payment.originalpayment is null)  and payment.paid is true and payment.payment_amount > 0
+    --where ( length(payment.originalpayment) = 0 or payment.originalpayment is null)  and payment.paid is true and payment.payment_amount > 0  --pre final amount logic
+    where payment.originalpayment is null and ( (payment.final_amount > 0) or (payment.paid is true and payment.payment_amount > 0 ) )
+    and ( (opp.bookable is true) or (opp.bookable is false and payment.paid is true ) )
     group by 1,2)
 select opp_id, 
 CASE WHEN bookable is true then 'Bookable Gift'
@@ -79,7 +84,7 @@ CREATE TEMPORARY TABLE opps_temp
      ,stage                           VARCHAR(150) DEFAULT NULL --NPSP CHANGE 
      ,archive_flag                    BOOLEAN DEFAULT NULL --NPSP CHANGE (Rc_giving__archive_flag varchar)
      ,bookable                        BOOLEAN DEFAULT NULL  --NPSP CHANGE (varchar)
-     ,gau_credit_code                 VARCHAR(30) DEFAULT NULL
+     ,gau_credit_code                 VARCHAR(50) DEFAULT NULL
      ,gau_debit_code                  VARCHAR(50) DEFAULT NULL
      ,gift_type                       VARCHAR(80) DEFAULT NULL  --NPSP CHANGE (recordtype)
      ,pass_through                    VARCHAR(10) DEFAULT NULL  --NPSP CHANGE(is_pass_through INT)
@@ -116,6 +121,7 @@ CREATE TEMPORARY TABLE opps_temp
      ,gl_entity                       VARCHAR(25)
      ,dept                            VARCHAR(20)
      ,sub_dept                        VARCHAR(20)
+     /* --AK Removed 11/29/23-- to be added to analytics table
      ,contacts_onlineform_id          BIGINT
      ,onlineform_name                 VARCHAR(200)
      ,code_id                         BIGINT
@@ -135,6 +141,7 @@ CREATE TEMPORARY TABLE opps_temp
      ,f_or_l_sus                      VARCHAR(1)
      ,rownm_sc_sus                    BIGINT
      ,sc_source_code                  VARCHAR(20)
+     */
      ,record_last_updated             timestamp
      ,parent_last_updated             timestamp
      ,max_last_updated                timestamp
@@ -163,8 +170,9 @@ INSERT INTO opps_temp (
                WHEN payment.Deposit_Date IS NOT NULL THEN payment.Deposit_Date
                ELSE payment.Adjusted_Deposit_Date END                                                       as deposit_date
          ,payment.Sync_Date                                                                                 as datepulled -- is this the right date?
-         ,Case WHEN (payment.payment_amount + coalesce(r.refund_amount,0)) < 0 THEN 0 
-               ELSE (payment.payment_amount + coalesce(r.refund_amount,0)) end                       as amount --sub in final amount
+         ,Case WHEN final_amount is not null then final_amount::decimal(38,2)
+               WHEN (payment.payment_amount + coalesce(r.refund_amount,0)) < 0 THEN 0 
+               ELSE (payment.payment_amount + coalesce(r.refund_amount,0)) end                             as amount --AK 11/4/23 - Remove this logic when no null final amounts
          ,b.bucket                                                                                          as data_source  --Sustainer?
          ,opp.Affiliate_Number                                                                              as opp_affiliate_number
          --,camp.sc_channel_description                                                               as channel
@@ -256,7 +264,7 @@ INSERT INTO opps_temp (
            END                                           AS IsGivingVehicle*/
 		 ,false                                           as giving_vehicle
          ,'HARD'                                         AS Credit_Type
-         ,NULL                                           AS Giving_level_pre_gift
+         ,opp.giving_level                                          AS Giving_level_pre_gift   --AK 11/15/23
          ,opp.Opportunity_Number         AS Opporunity_number
          ,true        AS reportable_revenue
          ,CASE WHEN scg.record_id IS NOT NULL THEN true
@@ -266,6 +274,7 @@ INSERT INTO opps_temp (
           ,gau.entity as gl_entity
           ,null as dept
           ,null as sub_dept
+          /*--AK Removed 11/29/23-- to be added to analytics table
           ,null:: bigint as contacts_onlineform_id
           ,null as onlineform_name          
           ,null:: bigint code_id  
@@ -285,6 +294,7 @@ INSERT INTO opps_temp (
           ,NULL::varchar as f_or_l_sus
           ,NULL::bigint as rownm_sc_sus
           ,null::varchar as sc_source_code
+          */
           ,payment.lastmodifieddate as record_last_updated
           ,opp.lastmodifieddate as parent_last_updated
           , case when payment.lastmodifieddate >= opp.lastmodifieddate then payment.lastmodifieddate else opp.lastmodifieddate end as max_last_updated
@@ -294,12 +304,12 @@ join      npsp_sfdc.opppayment_v payment on payment.opportunity = opp.id and pay
 left join refunds r on r.OriginalPayment = payment.id 
 left join npsp_sfdc.recordtype rt on opp.recordtypeid = rt.id
 left join npsp_sfdc.campaign_v camp on coalesce(opp.Source_Code, opp.source_code_formula)  = camp.name -- change join to use source_code = unique_source_code when source codes are populated?
-left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.name 
+left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.name and gau.NGOC_General_Acctg_Unit_ID is not null --remove after go-live
 left join npsp_sfdc.recurring_donation_v rd on opp.recurring_donation = rd.id
 left join npsp_sfdc.account_v a on opp.accountid = a.id
 left join soft_credit_gifts scg on  payment.id  = scg.record_id
-where opp.amount > 0 and (payment.payment_amount + coalesce(r.refund_amount,0)) > 0  --Sub in final amount
-and (payment.ngoc_giving_id is not null or  opp.ngoc_giving_id is not null) --non-migrated records? remove for production
+where ( final_amount > 0 or (payment.payment_amount + coalesce(r.refund_amount,0)) > 0 )   --AK 11/4/23 Remove payment amoutn criteria after no null final amounts  --AK 11/3/23 removed opp.amount > 0 
+--and (payment.ngoc_giving_id is not null or  opp.ngoc_giving_id is not null) --non-migrated records? remove for production
 UNION
 -------------------------------
 --BOOKABLE
@@ -319,7 +329,7 @@ SELECT distinct
          ,opp.Affiliate_Number                                                                          as affiliate_number
         -- ,camp.channel_description                                                           as channel
          ,CASE 
-          WHEN camp.channel_description  
+          WHEN camp.sc_channel_description  
           IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')  
           THEN 'online' 
           ELSE 'offline' END                                                                            as channel_group
@@ -405,7 +415,7 @@ SELECT distinct
            END                                           AS IsGivingVehicle*/ --Figure this out
 		 ,false                                           as giving_vehicle
          ,'HARD'                                         AS Credit_Type
-         ,NULL                                           AS Giving_level_pre_gift
+         ,opp.giving_level                                           AS Giving_level_pre_gift  --AK 11/15/23
          ,opp.Opportunity_Number          AS Opportunity_number
          ,true        AS reportable_revenue
          ,CASE WHEN scg.record_id IS NOT NULL THEN true
@@ -415,6 +425,7 @@ SELECT distinct
           ,gau.entity as gl_entity
           ,null as dept
           ,null as sub_dept
+          /* --AK Removed 11/29/23-- to be added to analytics table
           ,null:: bigint as contacts_onlineform_id
           ,null as onlineform_name          
           ,null:: bigint code_id  
@@ -434,6 +445,7 @@ SELECT distinct
           ,NULL::varchar as f_or_l_sus
           ,NULL::bigint as rownm_sc_sus
           ,null::varchar as sc_source_code
+          */
           ,opp.lastmodifieddate as record_last_modified
           ,null:: timestamp as  parent_last_modified
           , opp.lastmodifieddate as max_last_updated
@@ -441,13 +453,13 @@ from  bucket b
 join      npsp_sfdc.opportunity_v opp  on opp.id = b.opp_id and b.bucket = 'Bookable Gift'
 left join npsp_sfdc.recordtype rt on opp.recordtypeid = rt.id
 left join npsp_sfdc.campaign_v camp on opp.source_code = camp.name -- change join to use source_code = unique_source_code when source codes are populated?
-left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.name 
+left join npsp_sfdc.general_accounting_unit_v gau on opp.gau_credit_code = gau.name  and gau.NGOC_General_Acctg_Unit_ID is not null --remove after go-live
 left join npsp_sfdc.recurring_donation_v rd on opp.recurring_donation = rd.id
 left join npsp_sfdc.account_v a on opp.accountid = a.id
 left join soft_credit_gifts scg on  opp.id  = scg.record_id
 where opp.amount > 0 
-and ( opp.ngoc_giving_id is not null) --non-migrated records? remove for production
-and opp.stagename in ('Active', 'Closed Won')
+--and ( opp.ngoc_giving_id is not null) --non-migrated records? remove for production
+and opp.stagename in ('Active', 'Closed Won')  --Confirm 'Pledged' status is not included?
 -----------------------------
 ----------CREDITS------------
 -----------------------------
@@ -472,7 +484,7 @@ credit.id as record_id
       else null end  as affiliate_number 
 --,campaign.channel_description as channel
 ,CASE 
-     WHEN campaign.channel_description IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')   THEN 'online' 
+     WHEN campaign.sc_channel_description IN ( 'Broadcast Email', 'Social Media', 'Mobile', 'Peer to Peer', 'Web','Email')   THEN 'online' 
      ELSE 'offline' END   as channel_group
 ,payment.payment_method                                                                             as payment_method
 ,payment.external_processor_name                                                                           as  payment_method_detail
@@ -555,7 +567,7 @@ credit.id as record_id
              THEN 'Y' ELSE 'N' END                                           AS IsGivingVehicle  */ --Figure this out
 ,false                                           as giving_vehicle
 ,'SOFT'  as credit_type
-,NULL                                           AS Giving_level_pre_gift
+,credit.giving_level_at_time_of_credit                                           AS Giving_level_pre_gift  --AK 11/15/23
 ,coalesce(opportunity.Opportunity_Number, payment_opp.opportunity_number)          AS Opportunity_number
 ,false                                                                             as reportable_revenue
 ,false as has_soft_credit
@@ -564,6 +576,7 @@ credit.id as record_id
 ,gau.entity as gl_entity
 ,null as dept
 ,null as sub_dept
+/* --AK Removed 11/29/23-- to be added to analytics table
 ,null:: bigint as contacts_onlineform_id
 ,null as onlineform_name          
 ,null:: bigint code_id  
@@ -583,6 +596,7 @@ credit.id as record_id
 ,NULL::varchar as f_or_l_sus
 ,NULL::bigint as rownm_sc_sus
 ,null::varchar as sc_source_code
+*/
 ,credit.lastmodifieddate as record_last_modified
 ,coalesce(opportunity.lastmodifieddate, payment_opp.lastmodifieddate) as  parent_last_modified
 , case when credit.lastmodifieddate >= coalesce(opportunity.lastmodifieddate, payment_opp.lastmodifieddate) then credit.lastmodifieddate 
@@ -595,8 +609,13 @@ left join npsp_sfdc.opportunity_v opportunity on credit.opportunity = opportunit
 left join npsp_sfdc.contact_v contact on credit.contact = contact.id
 left join npsp_sfdc.campaign_v campaign on coalesce(opportunity.source_code, payment_opp.source_code, payment_opp.source_code_formula) = campaign.name
 left join npsp_sfdc.account_v account on coalesce(contact.accountid, credit.account) = account.id
-left join npsp_sfdc.general_accounting_unit_v gau on credit.gau_credit_code = gau.name
+left join npsp_sfdc.general_accounting_unit_v gau on credit.gau_credit_code = gau.name and gau.NGOC_General_Acctg_Unit_ID is not null --remove after go-live
 );
 
+drop table if exists ppfa_golden.golden_opportunities_npsp cascade;
 
 Create table ppfa_golden.golden_opportunities_npsp as (select * from opps_temp);
+
+analyze ppfa_golden.golden_opportunities_npsp(npsp_accountid, closedate, max_last_update); --Test Added 11/29/23
+
+alter table ppfa_golden.golden_opportunities_npsp owner to cprosser;
