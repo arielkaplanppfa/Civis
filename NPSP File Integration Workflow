@@ -1,0 +1,40 @@
+version: '2.0'
+workflow:
+  tasks:
+    Address_Standardization_process:
+      action: civis.run_job
+      input:
+        job_id: 245809860
+      on-success: Update_file_details_table_and_advance_records
+    Giving_number_lookup_and_update:
+      action: civis.run_job
+      input:
+        job_id: 245980844
+      on-success: deposit_location_set_and_set_status_to_Ready_for_MuleSoft
+    Update_file_details_table_and_advance_records:
+      action: civis.run_job
+      input:
+        job_id: 245816360
+      on-success: Alt_id_lookup_update_and_set_for_Giving_number
+    Alt_id_lookup_update_and_set_for_Giving_number:
+      action: civis.run_job
+      input:
+        job_id: 245830242
+      on-success: Giving_number_lookup_and_update
+      join: 1
+    Standardizable_Addresses_table_create:
+      action: civis.run_job
+      input:
+        job_id: 245808887
+      on-success:
+        - Address_Standardization_process
+      on-error: Address_Standardization_Fail
+    deposit_location_set_and_set_status_to_Ready_for_MuleSoft:
+      action: civis.run_job
+      input:
+        job_id: 246564235
+    Address_Standardization_Fail:
+      action: civis.run_job
+      input:
+        job_id: 247029070
+      on-success: Alt_id_lookup_update_and_set_for_Giving_number
