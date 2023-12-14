@@ -5,7 +5,10 @@ workflow:
       action: civis.run_job
       input:
         job_id: 245809860
-      on-success: Update_file_details_table_and_advance_records
+      on-success:
+        - Update_file_details_table_and_advance_records
+      on-error:
+        - Address_Standardization_Fail
     Giving_number_lookup_and_update:
       action: civis.run_job
       input:
@@ -26,9 +29,7 @@ workflow:
       action: civis.run_job
       input:
         job_id: 245808887
-      on-success:
-        - Address_Standardization_process
-      on-error: Address_Standardization_Fail
+      on-success: Address_Standardization_process
     deposit_location_set_and_set_status_to_Ready_for_MuleSoft:
       action: civis.run_job
       input:
