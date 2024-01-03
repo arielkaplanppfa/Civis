@@ -1,0 +1,130 @@
+---- Get cutoff timestamp
+DROP TABLE IF EXISTS max_timestamp;
+CREATE TEMP TABLE max_timestamp AS 
+(SELECT 
+	CASE WHEN to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD HH24:MM:SS') IS NULL THEN '2023-01-01 00:00:00'
+ELSE to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD HH24:MM:SS')
+END max_timestamp 
+FROM npsp_reporting.fact_contact);
+
+--2023-01-01 00:00:00
+
+-- Find New Records
+DROP TABLE IF EXISTS npsp_staging.stg_fact_contact;
+CREATE TABLE npsp_staging.stg_fact_contact AS 
+(SELECT c.id, c.lastmodifieddate, c.national_pac_giving_for_current_cy__c , c.sustainer__c 
+FROM npsp_sfdc.contact c 
+LEFT JOIN npsp_reporting.fact_contact fc ON c.id = fc.id 
+WHERE fc.id IS NULL 
+AND to_char(c.lastmodifieddate ::timestamp,'YYYY-MM-DD HH24:MM:SS')> (SELECT max_timestamp FROM max_timestamp)
+UNION ALL
+-- 
+SELECT c2.id, c2.lastmodifieddate,c2.national_pac_giving_for_current_cy__c, c2.sustainer__c
+FROM npsp_sfdc.contact c2 
+JOIN npsp_reporting.fact_contact fc2 ON c2.id = fc2.id
+WHERE (c2.national_pac_giving_for_current_cy__c != fc2.national_pac_giving_for_current_cy__c
+OR c2.sustainer__c != fc2.sustainer__c)
+AND to_char(c2.lastmodifieddate ::timestamp,'YYYY-MM-DD HH24:MM:SS') > (SELECT max_timestamp FROM max_timestamp));
+
+--SELECT count(*) FROM npsp_staging.stg_fact_contact;
+--0
+
+-- Contact Sustainer Calculation
+DROP TABLE IF EXISTS npsp_staging.stg_contact_sustainer;
+CREATE TABLE npsp_staging.stg_contact_sustainer AS 
+select p.contact 
+,case when p.failing > 0 and p.active > 0 then 'Failing:Active' 
+when p.failing > 0 then 'Failing'
+when p.active > 0 then 'Active'
+when p."Inactive--Failed" > 0 then 'Inactive--Failed' 
+when p."Inactive--Cancelled" > 0 then 'Inactive--Cancelled'
+when p.Completed > 0 then 'Completed'
+end sustainer__c         
+from
+(select rd.contact
+,case when rd.status = 'Lapsed' then 'Failing'
+when rd.status = 'Active' then  'Active'
+when rd.status = 'Closed' then 'Completed'
+when rd.status = 'Uncollectible' and rd.closedreason = 'National - Lapsed' then 'Inactive--Failed'
+when rd.status = 'Uncollectible'  then 'Inactive--Cancelled'
+when rd.status = 'Paused' then 'Active'    
+end::varchar aligned_status     
+from npsp_sfdc.recurring_donation_v rd
+JOIN npsp_staging.stg_fact_contact2 stf ON rd.contact = stf.id) 
+pivot(count(aligned_status) for aligned_status in ('Failing','Active','Completed','Inactive--Failed','Inactive--Cancelled' )  ) p;
+
+--SELECT count(*) FROM npsp_staging.stg_contact_sustainer;
+--499680
+-- Remove any existing records 
+DELETE FROM npsp_staging.stg_contact_sustainer
+WHERE contact IN (
+SELECT c.id
+FROM npsp_sfdc.contact c
+JOIN npsp_staging.stg_contact_sustainer c2 ON c.id = c2.contact
+WHERE (c.sustainer__c = c2.sustainer__c)
+);
+
+-- PAC Giving Calculation
+DROP TABLE IF EXISTS npsp_staging.stg_pac_giving;
+CREATE TABLE npsp_staging.stg_pac_giving AS 
+select gold.npsp_contactid contactid,
+sum(gold.amount) as national_pac_giving_for_current_cy__c,
+max(max_last_updated) Last_Modified_Date
+from ppfa_golden.golden_opportunities_npsp gold
+left join npsp_reporting.v_Summary_Omits om on om.accountid = gold.npsp_accountid
+JOIN npsp_staging.stg_fact_contact2 stf ON gold.npsp_contactid = stf.id
+WHERE left(gold.source_code, 3) in ('5ND', '5NL', '5NM')
+AND npsp_sfdc.f_pac_giving_calendar_year(gold.closedate) = npsp_sfdc.f_pac_giving_calendar_year(sysdate)
+AND om.accountid is null
+group by gold.npsp_contactid;
+
+--SELECT count(*) FROM npsp_staging.stg_pac_giving
+--17
+-- Remove any existing records
+DELETE FROM npsp_staging.stg_pac_giving
+WHERE contactid IN (
+SELECT c.id
+FROM npsp_sfdc.contact c
+JOIN npsp_staging.stg_pac_giving pg ON c.id = pg.contactid
+WHERE c.national_pac_giving_for_current_cy__c = pg.national_pac_giving_for_current_cy__c
+);
+
+
+DROP TABLE IF EXISTS npsp_staging.stg_contacts;
+CREATE TABLE npsp_staging.stg_contacts AS 
+(SELECT contact id FROM npsp_staging.stg_contact_sustainer
+UNION 
+SELECT contactid FROM npsp_staging.stg_pac_giving);
+
+INSERT INTO npsp_staging.stg_fact_contact 
+SELECT fa.id, fa.lastmodifieddate::timestamp, fa.national_pac_giving_for_current_cy__c,fa.sustainer__c
+FROM npsp_reporting.fact_contact fa
+WHERE fa.id IN (SELECT id FROM npsp_staging.stg_contacts);
+
+
+UPDATE npsp_staging.stg_fact_contact 
+SET national_pac_giving_for_current_cy__c = npsp_staging.stg_pac_giving.national_pac_giving_for_current_cy__c,
+lastmodifieddate = current_timestamp::timestamp
+FROM npsp_staging.stg_pac_giving 
+WHERE npsp_staging.stg_fact_contact.id = npsp_staging.stg_pac_giving.contactid;
+
+UPDATE npsp_staging.stg_fact_contact
+SET sustainer__c = npsp_staging.stg_contact_sustainer.sustainer__c,
+lastmodifieddate = current_timestamp::timestamp
+FROM npsp_staging.stg_contact_sustainer
+WHERE npsp_staging.stg_fact_contact.id = npsp_staging.stg_contact_sustainer.contact;
+
+
+DELETE FROM npsp_reporting.fact_contact 
+WHERE id IN (SELECT id FROM npsp_staging.stg_fact_contact);
+
+INSERT INTO npsp_reporting.fact_contact
+SELECT id,lastmodifieddate ,national_pac_giving_for_current_cy__c::decimal(16,2),sustainer__c
+FROM npsp_staging.stg_fact_contact;
+
+DELETE FROM npsp_staging.stg_fact_contact 
+WHERE id IN (SELECT sfc.id FROM npsp_staging.stg_fact_contact sfc JOIN npsp_sfdc.contact c ON sfc.id = c.id 
+WHERE (sfc.sustainer__c = c.sustainer__c OR sfc.national_pac_giving_for_current_cy__c = c.national_pac_giving_for_current_cy__c));
+
+
+--SELECT count(*) FROM npsp_staging.stg_fact_contact sfc
