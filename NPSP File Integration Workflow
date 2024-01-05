@@ -11,6 +11,12 @@ workflow:
         - Address_Standardization_Fail
     Giving_number_lookup_and_update:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 1 means there are 2 attempts.
+        count: 1
+        # Delay between attempts in seconds
+        delay: 10
       input:
         job_id: 245980844
       on-success: deposit_location_set_and_set_status_to_Ready_for_MuleSoft
@@ -21,6 +27,12 @@ workflow:
       on-success: Alt_id_lookup_update_and_set_for_Giving_number
     Alt_id_lookup_update_and_set_for_Giving_number:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 1 means there are 2 attempts.
+        count: 1
+        # Delay between attempts in seconds
+        delay: 10
       input:
         job_id: 245830242
       on-success: Giving_number_lookup_and_update
@@ -32,6 +44,12 @@ workflow:
       on-success: Address_Standardization_process
     deposit_location_set_and_set_status_to_Ready_for_MuleSoft:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 1 means there are 2 attempts.
+        count: 1
+        # Delay between attempts in seconds
+        delay: 10
       input:
         job_id: 246564235
     Address_Standardization_Fail:
