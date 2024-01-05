@@ -1,26 +1,28 @@
 version: '2.0'
 workflow:
   tasks:
-    uat_delete:
-      action: civis.run_job
-      input:
-        job_id: 74359478
-      on-success:
-        - uat_insert
     Case_43068___Salesforce_Diversity_Table_Builds_WIP_70221455:
       action: civis.run_job
       input:
         job_id: 70221455
       on-success:
-        - uat_delete
-    uat_insert:
-      action: civis.run_job
-      input:
-        job_id: 74360078
-        delay: '01:00'
+        - Delete_Step
     Case_43068___Workflow_Step_1_77806964:
       action: civis.run_job
       input:
         job_id: 77806964
       on-success:
         - Case_43068___Salesforce_Diversity_Table_Builds_WIP_70221455
+    Delete_Step:
+      action: civis.run_job
+      on-success:
+        - Insert_step
+      on-error: 
+        - Insert_step
+      input:
+        job_id: 207956880
+    Insert_step:
+      action: civis.run_job
+      input:
+        delay: '01:00'
+        job_id: 208173523
