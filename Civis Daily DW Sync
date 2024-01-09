@@ -5,22 +5,10 @@ workflow:
   default_sql: &default_sql
     remote_host_id: *remote_host_id
     credential_id: *credential_id
-  
- 
+
   
   tasks:
-    # generate_timestamp:
-    #   action: civis.scripts.sql
-    #   input:
-    #     <<: *default_sql
-    #     sql: |
-    #       DROP TABLE IF EXISTS npsp_staging.stg_insert_timestamp;
-    #       CREATE TABLE npsp_staging.stg_insert_timestamp
-    #       AS SELECT CURRENT_TIMESTAMP::timestamp as v_insert_timestamp;
-    #   on-success:
-    #     - run_golden_opps
-    
-    
+
     # insert_into_job_history:
     #   action: civis.scripts.sql
     #   input:
@@ -33,28 +21,33 @@ workflow:
     #       npsp_staging.stg_insert_timestamp),'started','Civis Aggregation
     #       Workflow has started');
     #   on-success:
-    #     - run_golden_opps
+    #     - npsp_first_gift_id
     
     
-    # get_last_modified_date:
-    #   action: civis.scripts.sql
-    #   input:
-    #     <<: *default_sql
-    #     sql: |
-    #       DROP TABLE IF EXISTS npsp_staging.stg_max_lastrun; 
-    #       create table npsp_staging.stg_max_lastrun
-    #       as
-    #       select max(lastrun) max_date
-    #       from npsp_integration.job_history
-    #       where jobid = 10 and runstatus = 'complete'
-    #   on-success:
-    #     - run_golden_opps
-    #   on-error:
-    #     - handle_errors
-    
+    npsp_first_gift_id:
+      action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
+      input:
+        job_id: 223962064
+      on-success:
+        - run_golden_opps
+      on-error:
+        - handle_errors
+
+
     run_golden_opps:
       action: civis.run_job
-
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 10
       input:
         job_id: 219977409
       on-success:
@@ -65,16 +58,16 @@ workflow:
     
     run_giving_summary:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
       input:
         job_id: 237083252
       on-success:
         - run_account
-        # - run_contact
-        # - run_campaign
-        # - run_recurring_donations
-        # - run_attributes
-        # - populate_subledger
-      
       on-error:
         - handle_errors
     
@@ -82,8 +75,14 @@ workflow:
     
     run_account:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
       input:
-        job_id: 237093189
+        job_id: 247055886
       on-success:
         - run_contact
       on-error:
@@ -92,8 +91,14 @@ workflow:
     
     run_contact:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
       input:
-        job_id: 237082876
+        job_id: 247091610
       on-success:
         - run_campaign
       on-error:
@@ -102,6 +107,12 @@ workflow:
     
     run_campaign:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
       input:
         job_id: 237061374
       on-success:
@@ -112,6 +123,12 @@ workflow:
     
     run_recurring_donations:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
       input:
         job_id: 237056580
       on-success:
@@ -131,6 +148,12 @@ workflow:
     
     populate_subledger:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
       input:
         job_id: 237486402
       on-success:
@@ -141,21 +164,18 @@ workflow:
     
     nightly_subledger:
       action: civis.run_job
+      retry:
+        # Number of attempts, not including the first one.
+        # A count of 3 means there are 4 attempts.
+        count: 3
+        # Delay between attempts in seconds
+        delay: 5
       input:
         job_id: 237486273
       on-success:
-        - Data_Mart_RowCount
-        
+        -  data_mart_rowcount    
       on-error:
         - handle_errors
-
-    # sanity_check:
-    #   action: civis.run_job
-    #   input:
-    #     jobid: 241530877
-    #   on-error:
-    #     - handle_errors
-
 
     # update_job_history:
     #   action: civis.scripts.sql
@@ -171,7 +191,7 @@ workflow:
     #       v_insert_timestamp FROM npsp_staging.stg_insert_timestamp);
     #   join: all
     #   on-success:
-    #     - Data_Mart_RowCount
+    #     - data_mart_rowcount
     
     handle_errors:
       action: civis.scripts.sql
@@ -189,19 +209,19 @@ workflow:
         - fail_workflow
     
     
-    Data_Mart_RowCount:
+    data_mart_rowcount:
       action: civis.run_job
       join: all
       input:
         job_id: 239083880
- 
+      on-complete:
+        - stage_table_rowcount
       
 
-    # Stage_Table_Rowcount:
-    #   action: civis.run_job
-    #   input:
-    #     job_id: 242706830
-
+    stage_table_rowcount:
+      action: civis.run_job
+      input:
+        job_id: 242706830
 
 
     fail_workflow:
