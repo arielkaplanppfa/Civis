@@ -1,4 +1,8 @@
 /* 
+Golden Opportunities documentation - https://docs.google.com/document/d/13pNl4fJ3AuBsQGD-_yd_nm_q-ybmC1KrXGevwONhTLY/edit?usp=sharing
+as with all golden tables, doc is linked from DSA Reference Dashboard - https://docs.google.com/spreadsheets/d/1hFM5V9H62yIZdzhQoe-T_QUXpYrvLqUcR6vFLf1JU4Y/edit#gid=0
+*/
+/* 
 select data_source, count(*) 
 from akaplan.golden_opportunities go
 where not exists ( select 'x' from ea_sourcecodes.opportunities_ppid o where go.transaction_id = o.transaction_id)
@@ -20,12 +24,30 @@ UPDATES 10/27/22
 3. Added Dept and subdept logic
 */
 /*
-CFP sharebale flag edge case  - CFP shareable Pass through 
+CFP shareable flag edge case  - CFP shareable Pass through 
 Case - 1 -- 3NALZ2%00M1PTS Cheat Code
+*/
+/*
+20230428 ARHODES.  
+this draft version is in preparation of 7/1/2023 dfse source code conversion. 
+production version of script is Golden Opportunities V2. https://platform.civisanalytics.com/spa/#/scripts/sql/183020648
+changes are: 
+     removed code_org field - duplicative of entity field
+    replaced sourcecodes.Campaign with Messaging_Content 
+     replaced sourcecodes."Ask Type"  with 'CTA type' 
+     replaced sourcecodes.Misc with method_note
+
+     kept site_type ---it will be duplicative of sf channel when the new SF codes are implemented (est Feb 2024). will populate with dfse channel but leave name as site_type so can differentiate from sf channel
+
+
+---for testing period only
+replaced create temporary table srt_temp with CREATE   TABLE srt_temp
+replaced all referenced to srt_temp with srt_temp
+
 */
 
 
-CREATE  temporary TABLE srt_temp (
+CREATE  TEMP TABLE srt_temp (
  transaction_id          VARCHAR(18)   DEFAULT NULL
 ,parent_transaction_id   VARCHAR(18)   DEFAULT NULL
 ,ppid                    varchar(30)
@@ -89,13 +111,13 @@ CREATE  temporary TABLE srt_temp (
 ,onlineform_name           varchar(200)  
 ,code_id                   bigint        
 ,code_name                 varchar(150)  
-,code_org                  varchar(30)   
+---,code_org                  varchar(30)   20230428 ARHODES will fill in gl_entity instead (incl for van gifts not yet in sf)
 ,code_date                 date          
-,marketing_campaign       varchar(50)   
-,ask_type                 varchar(50)
-,misc                     varchar(30)   
-,site                     varchar(15) 
-,site_type                varchar(15)
+,messaging_content       varchar(50)   ---20230428 ARHODES renamed 'marketing_campaign' as messaging_contentfor consistency with new codes
+,CTA_type                varchar(50)   ----20230428 ARHODES renamed 'ask_type' as CTA_type for consistency with new codes
+,method_note             varchar(30)   ---20230428 ARHODES renamed 'misc' as 'method_note' for consistency with new codes
+,site_or_platform         varchar(30) ---20230428 ARHODES renamed 'site' as 'site_or_platform' for consistency with new code
+,site_type                varchar(15)  ---20230428 ARHODES need to eliminate this when new SF codes are implemented (Feb 2024). then sf channel & dfse channel will align. for now, going to populate with dfse channel but leave name as site_type
 ,cc_exp_date              date
 ,rownm_byPPID             bigint   
 ,rownm_byPPID_desc        bigint  
@@ -111,6 +133,8 @@ CREATE  temporary TABLE srt_temp (
 --,f_or_l_sc_sus            varchar(1) -- f_or_l_sc_sus
 --,rownm_byPPIDandsc_sustainer_desc bigint-- l_ppid_sc_sus_desc
 );
+
+
 
 ---Table for has_soft_credit field
 DROP TABLE IF EXISTS akaplan.mv_soft_credit_opportunities ;
@@ -137,9 +161,9 @@ INSERT INTO srt_temp (
 		 ,null                                                                                             as ppid
         ,opportunity.accountid                                                                               ngoc_accountid
 	     ,opportunity.closedate                                                                               closedate
-         ,CASE WHEN opportunity.deposit_date IS NOT NULL THEN opportunity.deposit_date
-               ELSE opportunity.adjusted_deposit_date
-          END                                                                                                 deposit_date
+         ,CASE WHEN opportunity.adjusted_deposit_date IS NOT NULL THEN opportunity.adjusted_deposit_date
+               ELSE  opportunity.deposit_date
+          END                                                                                                     deposit_date
          ,SYSDATE                                                                                             datepulled
          ,coalesce(opportunity.final_amount, opportunity.amount)                                             amount
          ,recordtype.namex                                                                                    data_source
@@ -369,13 +393,12 @@ end as cfp_shareable
           ,null:: bigint as contacts_onlineform_id
           ,null as onlineform_name          
           ,null:: bigint code_id  
-          ,null as code_name        
-          ,null as code_org                
+          ,null as code_name                      
           ,null:: date as code_date   
-          ,null as marketing_campaign 
-          ,null as ask_type              
-          ,null as misc                
-          ,null as site
+          ,null as messaging_content
+          ,null as CTA_Type          
+          ,null as method_note               
+          ,null as site_or_platform
           ,null as site_type
           ,null:: date as cc_exp_date
           ,NULL::bigint as rownm_byPPID
@@ -421,9 +444,9 @@ SELECT
          ,opportunity.accountid                                                                               ngoc_accountid
          ,null                                                                                             as ppid
          ,opportunity.closedate                                                                              closedate
-         ,CASE WHEN opportunity.deposit_date IS NOT NULL THEN opportunity.deposit_date
-               ELSE opportunity.adjusted_deposit_date
-          END                                                                                                 deposit_date
+         ,CASE WHEN opportunity.adjusted_deposit_date IS NOT NULL THEN opportunity.adjusted_deposit_date
+               ELSE  opportunity.deposit_date
+          END                                                                                                    deposit_date
          ,SYSDATE                                                                                           datepulled
          -- ,opportunity.RC_GIVING__EXPECTED_GIVING_AMO                                     amount changed to rc_giving__current_giving_amou by cdelja 20190520
          ,opportunity.rc_giving__current_giving_amou                                                           amount
@@ -441,7 +464,7 @@ SELECT
          ,opportunity.lastmodifiedbyid                                                                        lastmodifiedbyid
          ,opportunity.rc_giving__source_code                                                                  source_code
          ,opportunity.original_source_code                                                                    original_source_code
-         ,opportunity.opp_giving_number                                                                                                 pledge_number
+         ,opportunity.opp_giving_number                                                                        pledge_number
          ,opportunity.stagename                                                                               stagename
          ,opportunity.rc_giving__archive_flag                                                                 rc_giving__archive_flag
          ,opportunity.rc_giving__is_bookable                                                                  bookable
@@ -629,13 +652,12 @@ end as cfp_shareable
           ,null:: bigint as contactsonlineformid
           ,null as onlineformname          
           ,null:: bigint codeid  
-          ,null as codename        
-          ,null as codeorg                
+          ,null as codename                      
           ,null:: date as codedate   
-          ,null as Campaign 
-          ,null as ask_type              
-          ,null as misc 
-          ,null as site
+          ,null as messaging_content
+          ,null as cta_type            
+          ,null as method_note
+          ,null as site_or_platform
           ,null as site_type
           ,null:: date as cc_exp_date
           ,NULL::bigint as rownm_byPPID
@@ -901,13 +923,12 @@ end as cfp_shareable
           ,null:: bigint as contactsonlineformid
           ,null as onlineformname          
           ,null:: bigint codeid  
-          ,null as codename        
-          ,null as codeorg                
+          ,null as codename                  
           ,null:: date as codedate   
-          ,null as Campaign 
-          ,null as ask_type              
-          ,null as misc 
-          ,null as site
+          ,null as messaging_content
+          ,null as cta_type            
+          ,null as method_note
+          ,null as site_or_platform
           ,null as site_type
           ,null:: date as cc_exp_date
           ,NULL::bigint as rownm_byPPID
@@ -931,12 +952,15 @@ end as cfp_shareable
     LEFT JOIN akaplan.rc_bios__preference_vehicle vehicle                                  ON rc_giving__opportunity_credit.rc_giving__account = vehicle.rc_bios__account
      where UPPER(rc_giving__opportunity_credit.delete_flag || rc_giving__opportunity_credit.rc_giving__archive_flag) <> 'YFALSE' -- added via case 165733
   );
-
+---20230525 11:38 AM ARHODES TESTING NOTE - ran code above this point successfully - only incl opportunity.closedate >=2023-04-01
 
 --add giving level pre gift 7/6/2020
 update srt_temp  
 set giving_level_pre_gift = coalesce( ( select giving_level from rounddata.giving_level_history glh where srt_temp.ngoc_accountid = glh.rc_bios__account and  srt_temp.closedate > glh.start_date and srt_temp.closedate < coalesce(glh.end_date, '01-01-2050') order by value asc limit 1  ), 'Low Dollar');
  
+---20230525 12:54  PM ARHODES TESTING NOTE -code above ran successfully - took 12m
+
+
 -- GAU Description and Category via Case 165733
 update srt_temp set 
 gau_credit_code_description = gau.rc_giving__description ,
@@ -977,12 +1001,15 @@ when length(gau.namex) = 13 then
 else 'Other' end,
 sub_dept =  -- AK 10/28/22 OLD GAU Coding added 
   case 
+  when gau.namex = 'C325015' then 'DFSE' --20231012 ARHODES - added this line because these online directed gifts were getting miscredited to Low Dollar & Mid-Level
   when substring(gau.namex,10,3) = 422 and substring(gau.namex,3,5) IN (40100,40105) then 'DFSE'
   when length(gau.namex) = 17 and substring(gau.namex,6,3) = 272 and right(gau.namex, 4) like '402_' then 'DFSE'
   when right(gau.namex, 4) like '4022' then 'DFSE'
   when  srt_temp.group_code ='Low D' then 'Low Dollar Giving'
   when srt_temp.group_code = 'Mid-L' then 'Mid-Level Giving'
-  else srt_temp.group_code end,
+  else srt_temp.group_code end
+  /*,20230519 ARHODES: site & site_type are meant to represent the DFSE source code values but they were previously populated based on sf source code channel/char 10.
+I'm commenting out these sf source code based updates. they will be filled in using the already existing 'van side' code below
 site = 
 case 
  when srt_temp.channel = 'Broadcast Email' then 'Email' 
@@ -990,6 +1017,7 @@ case
  when srt_temp.channel = 'Peer to Peer' then 'Hustle' 
  when substring(srt_temp.source_code, 10,1)='W' then 'PP Site' 
  else NULL end,
+
 site_type = 
 case 
  when srt_temp.channel = 'Broadcast Email' then 'Email' 
@@ -998,9 +1026,12 @@ case
  when srt_temp.channel = 'Social' then 'Social' 
  when substring(srt_temp.source_code, 10,1)='W' then 'PP Site' 
  else NULL end
+ */
 from rounddata.rc_giving__gau gau 
 where gau.namex = srt_temp.gau_credit_code and gau.delete_flag = 'N';
 
+
+---TESTING NOTE - above completed successfully
 ----------------
 ----VAN Side
 ----------------
@@ -1016,35 +1047,45 @@ van.datereceived,
 van.amount,
 sourcecodes.codeid,
 sourcecodes.codename,
-sourcecodes.Org as code_org,
+---sourcecodes.Org as code_org, ---20230428 ARHODES
 sourcecodes.code_date,
-sourcecodes.Campaign,
-sourcecodes."Ask Type" as Ask_Type,
-sourcecodes.Misc,
-sourcecodes.Site,
-sourcecodes.Site_Type,
+sourcecodes.messaging_content,   ---20230428 ARHODES replaced 'campaign'
+sourcecodes.cta_type, ---20230428 ARHODES replaced "Ask Type" as "Ask_Type"
+sourcecodes.method_note, ---20230428 ARHODES replaced 'Misc'
+sourcecodes.site_or_platform,  ---20230428 ARHODES replaced 'Site'
+sourcecodes.channel ,    ---20230428 ARHODES need to remove and just use the existing golden opps'channel' field when the new sf source codes are implemented (expected Feb 2024)
 c.paymenttypename,
 van.creditcardexpirationdate,
-giftfile.onlineformname ,
+forms.onlineformname ,   ---20230428 ARHODES --replaced giftfile.onlineformname b/c new giftfile does not include onlineformname
 van.financialprogramid,
-giftfile.creditaccount
+giftfile.gau_credit_code as creditaccount,   ---20230428 ARHODES - switched table (see comment below) so needed to update field name from creditaccount
+sourcecodes.office ---20230428 ARHODES new field
 
 FROM vansync.ppfa_contactscontributions_mym as van  
 inner join vansync.ppfa_contactscontributionscodes_mym as codes
                       on van.contactscontributionid = codes.contactscontributionid
-inner join ea_sourcecodes.EA_source_code_parsing as sourcecodes
+inner join vansync_projects.dfse_source_codes_parsed as sourcecodes   ---20230428 ARHODES. replaced ea_sourcecodes.EA_source_code_parsing
                       on codes.codeid = sourcecodes.codeid
 inner join vansync.ppfa_paymenttypes as c
                       on van.paymenttypeid = c.paymenttypeid
-left join anneramirez.ea_sf_giftfile as giftfile
-                      on van.contactscontributionid = giftfile.contactscontributionid
-  
+left join easf.ea_sf_giftssenttosf as giftfile   ---20230421 ARHODES replaced anneramirez.ea_sf_giftfile
+                      on van.contactscontributionid = giftfile.batch_upload_sequence_number
+---20230421 ARHODES  adding the below subquery to get online form name
+left join (select
+distinct cof.contactsonlineformid,
+onlineforms.onlineformname 
+from vansync.ppfa_contactsonlineforms_mym as cof
+inner join vansync.ppfa_onlineforms_mym as onlineforms
+on cof.onlineformid = onlineforms.onlineformid
+               )forms 
+               on van.contactsonlineformid = forms.contactsonlineformid
 WHERE van.contributionstatusid in (1,6,3)   ---1 is pending, 6 is deposited, 3 is settled. 
   --and van.datereceived >= dateadd('day',-45,current_date)
   
+  
  )
  ;
----Might need to break this out into two update statements, I THINK not all of the digital fields ar egetting updates and/or Im not getting the same coverage of digital Pk's that opp_id is
+---Might need to break this out into two update statements, I THINK not all of the digital fields are getting updates and/or Im not getting the same coverage of digital Pk's that opp_id is
 update srt_temp
 set
  contactscontributionid = Case when srt_temp.contactscontributionid is null then vangifts.contactscontributionid:: varchar else srt_temp.contactscontributionid end ,
@@ -1052,13 +1093,13 @@ set
  contacts_onlineform_id = vangifts.contactsonlineformid,
  code_id = vangifts.codeid,
  code_name = vangifts.codename,
- code_org = vangifts.code_org,
+ ---code_org = vangifts.code_org,  20230428 ARHODES populating gl_entity instead with new update statement below
  code_date = vangifts.code_date,
- marketing_campaign = vangifts.campaign,
- ask_Type = vangifts.Ask_Type,
- Misc= vangifts.Misc,
- Site = vangifts.Site,
- Site_Type = vangifts.Site_Type,
+ messaging_content = vangifts.messaging_content,
+CTA_type = vangifts.CTA_type,
+method_note= vangifts.method_note,
+ site_or_platform = vangifts.site_or_platform,
+ Site_Type = vangifts.channel,
  payment_method = vangifts.paymenttypename,
  CC_exp_date = vangifts.creditcardexpirationdate,
  onlineform_name = vangifts.onlineformname
@@ -1067,9 +1108,10 @@ where vangifts.contactscontributionid:: varchar = coalesce(srt_temp.contactscont
 
 
 --Insert new gifts
+/*20230428 ARHODES. removed code_org from insert fields. updated field names marketing_campaign, Ask_type, Misc, Site as messaging_content, cta_type, method_note, site_or_platform*/
 
-insert into srt_temp (data_source, etl_id, delete_flag, transaction_id, closedate,amount,channel,gl_entity,gau_credit_code_category,gau_credit_code, dept,sub_dept,  channel_group, contactscontributionid, contactsrecurringcontributionid,
-contacts_onlineform_id, code_id, code_name, code_org, code_date, marketing_campaign, Ask_Type,Misc, Site,Site_Type, reportable_revenue)
+insert into srt_temp (data_source, etl_id, delete_flag, transaction_id, closedate,amount,channel,gau_credit_code,entity, dept,sub_dept,  channel_group, contactscontributionid, contactsrecurringcontributionid,
+contacts_onlineform_id, code_id, code_name,  code_date, messaging_content, CTA_Type,method_note, site_or_platform,Site_Type, reportable_revenue)
 
 select
 'new_van',
@@ -1078,12 +1120,13 @@ van.contactscontributionid,
 van.contactscontributionid:: varchar,  --transaction_id
 van.datereceived   ,   ---closedate
 van.amount ,
-van.Site_Type, ---channel
- van.code_org, ---gl_entity
-  van.code_org, ---gl_category
+van.channel, ---channel
 van.creditaccount, ---gau_credit_code
+case when van.creditaccount like 'C3%' then 'C3'
+     when van.creditaccount like 'C4%' or van.creditaccount like 'PV%' then 'C4'
+     when van.creditaccount like 'PC%' then 'PAC' else null end as entity,  
 'Direct Response',
-'DFSE',
+van.office,   ---20230428 ARHODES. 'DFSE' was hard coded. new DFSE source codes inlcude 'office'
 --'National',
 'online',
 van.contactscontributionid:: varchar,
@@ -1091,13 +1134,13 @@ van.contactsrecurringcontributionid:: varchar, --- ADD CASE STATEMENT FOR IS_SUS
 van.contactsonlineformid,
 van.codeid,
 van.codename,
-van.code_org,
+---van.code_org,
 van.code_date,
-van.campaign,
-van."Ask_Type",
-van.Misc,
-van.Site,
-van.Site_Type,
+van.messaging_content,
+van."CTA_Type",
+van.method_note,
+van.site_or_platform,
+van.channel,
 '1'
 
 from vangifts as van
@@ -1107,10 +1150,11 @@ left outer join ea_sourcecodes.opportunities_PPID as opps
 left outer join ea_sourcecodes.opportunities_PPID as recur
               on van.contactsrecurringcontributionid = recur.acquired_batch_seq   ----- Wouldnt more than one sustainer gift have the same recurring ID, in other words, whats this catching?
 */
-where van.code_org in ('PPAF C4','PPFA C3')
-and van.datereceived >= dateadd('day',-20,current_date) and van.datereceived <= current_date
+where van.datereceived >= dateadd('day',-20,current_date) and van.datereceived <= current_date
 and not exists ( select 'x' from srt_temp where srt_temp.contactscontributionid = van.contactscontributionid:: varchar )
 ;
+---20230525 ARHODES 1:08 PM -TESTING NOTES - running the above that using the van temp table. failed with value too long error
+---20230525 2:31 PM TESTING NOTE - alll of the above ran successfully
 
 ---------------------------
 ----PPID ASSIGNMENT
@@ -1247,11 +1291,14 @@ and  srt_temp.ppid is null
 
 commit;
 
+---TESTING NOTE 20230525 ran successfully
+
 -----------------------
 -----ANALYSIS FIELDS
 ----- For the First and Last fields I can replace the numbers (1 and/or whatever the last is with something else. Perhaps F/L)
 ----- For first and last, those with single gifts will recieve f and not l, should there be something different to indicate single gifts
 -----------------------
+
 
 ----All (non-sustainer specific)
 create temp table rownms as 
@@ -1263,7 +1310,10 @@ with one as (
   row_number () over (partition by ppid order by closedate) as rownm_byPPID,
   row_number () over (partition by ppid order by closedate desc) as rownm_byPPID_desc, 
   row_number () over (partition by PPID, channel_group order by closedate asc) as rownm_byPPID_channel_group, --Y (F and L Only)
-  row_number () over (partition by ppid order by amount asc )  as rownm_HPC_byPPID_desc --Y (F Only)
+  row_number () over (partition by ppid order by amount desc )  as rownm_HPC_byPPID_desc, --Y (F Only)  ---20230621 ARHODES field labeled desc but order command was asc. so changed to desc
+---20230621 ARHODES: found that f/l is not being populated for all HPCs. adding the below line and then changing the logic in the update statement for the hpcs
+ row_number () over (partition by ppid order by amount asc )  as rownm_HPC_byPPID 
+
 	---- GET HPC 36 code from Anna
  -- row_number () over (partition by a.ppid , a.gl_category order by a.closedate) as rownm_byPPID_GL, --X  
  --  row_number () over (partition by a.ppid, a.gl_category order by a.closedate desc) as rownm_byPPID_GL_desc --X
@@ -1285,8 +1335,9 @@ select * from three
   
    Commit;
   lock table rownms;
+  
 
-/*
+/*  20230622 ARHODES - this was previously commented out. there's no note on who did it when. I'm just noting here that it is not currently active in the script
 ----Set first and or last
   update rownms as r
   set
@@ -1313,12 +1364,14 @@ rownm_byPPID = rownms.rownm_byPPID,
 rownm_byPPID_desc = rownms.rownm_byPPID_desc,
 rownm_channel_group = rownms.rownm_byPPID_channel_group, 
 --f_or_l_channel_group = case  when rownms.rownm_byPPID_channel_group = 1 then 'f' when rownms.rownm_byPPID_channel_group = rownms.max_channel_group then 'l' else null end  ,
-f_or_l_hpc = case  when rownms.rownm_HPC_byPPID_desc = 1 then 'f' when rownms.rownm_HPC_byPPID_desc = rownms.max_hpc then 'l' else null end
+---f_or_l_hpc = case  when rownms.rownm_HPC_byPPID_desc = 1 then 'f' when rownms.rownm_HPC_byPPID_desc = rownms.max_hpc then 'l' else null end ---20230621 ARHODES replacing with line below
+f_or_l_hpc = case when rownms.rownm_HPC_byPPID_desc = 1 then 'l' when rownms.rownm_HPC_byPPID = 1 then 'f' else null end
 --rownm_byPPID_GL = rownms.rownm_byPPID_GL,
 --rownm_byPPID_GL_desc = rownms.rownm_byPPID_GL_desc
 from rownms 
 where srt_temp.transaction_id = rownms.transaction_id;
 
+/*20230629 ARHODES - found this code wasn't producing the correct result. replaced with temp sus_rownm below that adds 1 more window function
 ----- Sustainer Analytic fields
 create temp table sus_rownm as
 with one as ( 
@@ -1342,6 +1395,20 @@ with one as (
   join two on one.ppid = two.ppid)
   select * from three
   ;
+  */
+--20230629 ARHODES - replaces above versoin
+ create temp table sus_rownm as 
+ 
+ (select
+  a.transaction_id,
+  a.PPID,
+    row_number () over (partition by a.PPID order by a.closedate) as rownm_byPPID,
+    row_number () over (partition by a.PPID order by a.closedate DESC) as rownm_byPPID_desc,
+    row_number () over (partition by a.PPID, a.source_code order by a.closedate) as rownm_byPPIDandsc
+   from srt_temp as a
+  where a.is_sustainer is not null
+ )
+  ;
 
 ----- Set first and or last 
 ----This may not work, I dont think you can update a rownum field with a char, may have to have another field for each to populate and then use that in case statement.
@@ -1360,18 +1427,20 @@ with one as (
          when  rownm_byPPIDandsc = (select rownm_byPPIDandsc from rownms rr where rr.ppid = r.ppid order by rownm_byPPIDandsc desc limit 1 )   -- (select max(rownm_byPPIDandsc) from rownms rr where rr.ppid = r.ppid ) 
           then 'l'
        else null end;
-       
+       */
         /*
   rownm_byPPIDandsc_desc =  
    Case when rownm_byPPIDandsc_desc = (select max(rownm_byPPID_channel_group) from rownms rr where rr.ppid = r.ppid )
         then rownm_byPPIDandsc_desc 
         else null end;*/
 
-     Commit;
-  lock table rownms;
-*/
 
---AK 10/17/22 - BUP Identification of sustianers
+    --- Commit;
+  ---lock table rownms;
+--- 20230622 ARHODES found rogue end comment here and removed it - didn't correspond to a start comment
+
+
+--AK 10/17/22 - BUP Identification of sustainers
 create temporary table sust as 
 with temp as (
 select distinct transaction_id, parent_transaction_id 
@@ -1388,7 +1457,7 @@ where srt_temp.transaction_id = sust.transaction_id and srt_temp.is_sustainer is
 ----------
 ----------
 update srt_temp
-set f_or_l_sus = case when sus.rownm_byPPID = 1 then 'f'  when sus.rownm_byPPID = last_rownm_sus then 'l' else null end,
+set f_or_l_sus = case when sus.rownm_byPPID = 1 then 'f'  when sus.rownm_byPPID_desc = 1 then 'l' else null end,
 rownm_sc_sus = rownm_byPPIDandsc
 --f_or_l_sc_sus = case when sus.rownm_byPPIDandsc = 1 then 'f'  when sus.rownm_byPPIDandsc = last_rownm_byPPIDandsc then 'l' else null end
 --rownm_byPPIDandsc_sustainer_desc = sus.rownm_byPPIDandsc_desc
@@ -1433,12 +1502,30 @@ update srt_temp set contactscontributionid = convio_sus.contactscontributionid, 
 from convio_sus
 where convio_sus.transaction_id = srt_temp.transaction_id and is_sustainer is null;
 
+
+
 ---Last ditch recurring contribution id -AK 1/24/23
-update ppfa_golden.golden_opportunities set contactsrecurringcontributionid = cc.contactsrecurringcontributionid
+update srt_temp set contactsrecurringcontributionid = cc.contactsrecurringcontributionid
 from  vansync.ppfa_contactscontributions_mym as cc
-where golden_opportunities.contactscontributionid = cc.contactscontributionid and 
-golden_opportunities.contactsrecurringcontributionid is null
+where srt_temp.contactscontributionid = cc.contactscontributionid and 
+srt_temp.contactsrecurringcontributionid is null
 and cc.contactsrecurringcontributionid is not null and  channel_group = 'online';
+
+
+commit;
+
+--- Add in recurringID where applicable
+update srt_temp
+set contactsrecurringcontributionid = ppfa_contactscontributions_mym.contactsrecurringcontributionid
+from vansync.ppfa_contactscontributions_mym
+where srt_temp.contactscontributionid = ppfa_contactscontributions_mym.contactscontributionid
+and srt_temp.contactsrecurringcontributionid is null and srt_temp.contactscontributionid is not null;
+
+commit;
+
+update srt_temp
+set is_sustainer = 'online'
+where contactsrecurringcontributionid is not null and is_sustainer is null;
 
 
 drop table if exists akaplan.golden_opportunities_v2;
