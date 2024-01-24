@@ -1,0 +1,539 @@
+/*
+ * This is the query for the Attributes data mart
+ * Currently calculates the Action Fund Membership category
+ * 
+ * */
+
+
+
+--DELETE FROM npsp_reporting.fact_attributes WHERE contact__c = '0031700001kzlsQAAQ'
+-- Gets records that fall into a rolling 12 month period
+-- Source Golden Opps
+DROP TABLE IF EXISTS npsp_staging.stg_action_fund;
+
+CREATE TABLE npsp_staging.stg_action_fund
+AS
+(
+WITH date_ranks_national AS(
+-- returns National  Members
+SELECT
+	*,
+	ROW_NUMBER () OVER (
+PARTITION BY npsp_contactid
+ORDER BY
+	closedate DESC
+) AS rn
+FROM
+	ppfa_golden.golden_opportunities_npsp gon
+JOIN npsp_reporting.fact_giving_summary fgs
+ON
+	gon.npsp_accountid = fgs.accountid
+JOIN npsp_sfdc.account_v av ON
+	gon.npsp_accountid = av.id
+JOIN npsp_sfdc.recordtype_v rv ON
+	av.recordtypeid = rv.id
+WHERE
+	(closedate BETWEEN dateadd(MONTH,
+	-12,
+	current_date) AND CURRENT_DATE)
+	AND (giving_summary_type IN ('PPFA'))
+	AND npsp_contactid IS NOT NULL
+	AND closedate > '2016-05-01'
+	AND (av.TYPE != 'Estate'
+		OR av.TYPE IS NULL)
+	AND av.isdeleted = FALSE
+	AND (rv.name != 'Estate'
+		OR rv.name IS NULL)
+	AND (sc_program != 'Z'
+		AND LEFT(gon.sc_office_desc,
+		4) = 'PPFA')
+	AND gon.SOURCE != 'Bookable Gift'
+
+
+)
+,
+rolling_12_month_ppfa AS (
+SELECT
+	giving_summary_type,
+	npsp_contactid,
+	closedate,
+	sum(amount::NUMERIC(38, 2)) OVER (
+PARTITION BY giving_summary_type,
+	npsp_contactid
+ORDER BY
+	closedate ASC
+ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
+) AS rolling_12_month_sum
+FROM
+	date_ranks_national
+WHERE
+	rn <= 12
+GROUP BY
+	giving_summary_type,
+	npsp_contactid,
+	closedate,
+	amount
+)
+
+
+,
+date_ranks_ppaz AS(
+SELECT
+	*,
+	ROW_NUMBER () OVER (
+PARTITION BY npsp_contactid
+ORDER BY
+	closedate DESC
+) AS rn
+FROM
+	ppfa_golden.golden_opportunities_npsp gon
+JOIN npsp_reporting.fact_giving_summary fgs
+ON
+	gon.npsp_accountid = fgs.accountid
+JOIN npsp_sfdc.account_v av ON
+	gon.npsp_accountid = av.id
+JOIN npsp_sfdc.recordtype_v rv ON
+	av.recordtypeid = rv.id
+WHERE
+	(closedate BETWEEN dateadd(MONTH,
+	-12,
+	current_date) AND CURRENT_DATE)
+		AND (giving_summary_type IN ('PPAZ'))
+			AND npsp_contactid IS NOT NULL
+			AND closedate > '2016-05-01'
+			AND (av.TYPE != 'Estate'
+				OR av.TYPE IS NULL)
+			AND av.isdeleted = FALSE
+			AND (rv.name != 'Estate'
+				OR rv.name IS NULL)
+			AND LEFT(gon.source_code,
+			3) IN ('4AZ', '5AZ')
+				AND gon.SOURCE != 'Bookable Gift'
+)
+,
+rolling_12_month_ppaz AS (
+SELECT
+	giving_summary_type,
+	npsp_contactid,
+	closedate,
+	sum(amount::NUMERIC(38, 2)) OVER (
+PARTITION BY giving_summary_type,
+	npsp_contactid
+ORDER BY
+	closedate ASC
+ROWS BETWEEN 11 PRECEDING AND CURRENT ROW
+) AS rolling_12_month_sum
+FROM
+	date_ranks_ppaz
+WHERE
+	rn <= 12
+GROUP BY
+	giving_summary_type,
+	npsp_contactid,
+	closedate,
+	amount
+)
+--- All opps in a 12 mth rolling period
+SELECT
+	*
+FROM
+	rolling_12_month_ppfa
+	--WHERE npsp_contactid = '0031700001kzlsQAAQ'
+UNION ALL
+SELECT
+	*
+FROM
+	rolling_12_month_ppaz
+	--WHERE npsp_contactid = '0031700001kzlsQAAQ'
+)
+;
+
+ALTER TABLE npsp_staging.stg_action_fund ALTER DISTKEY npsp_contactid;
+-- Combines National, PPAZ, PPAA
+DROP TABLE IF EXISTS npsp_staging.stg_combined;
+
+CREATE TABLE npsp_staging.stg_combined AS
+SELECT
+	giving_summary_type
+,
+	npsp_contactid
+,
+	max(closedate) closedate
+,
+	sum(rolling_12_month_sum) rolling_sum
+FROM
+	npsp_staging.stg_action_fund
+	--WHERE npsp_contactid = '0031700001kzlsQAAQ'
+GROUP BY
+	giving_summary_type ,
+	npsp_contactid
+UNION ALL
+-- Adding event data
+SELECT
+	'PPAA' giving_summary_type
+,
+	emv.contact
+,
+	max(ev.start_date_time)::date event_start_date
+,
+	0 AS rolling_12_month_sum
+FROM
+	npsp_sfdc.event_v ev
+JOIN npsp_sfdc.event_member_v emv
+ON
+	ev.id = emv.event
+WHERE
+	ev.affiliate = 'PPAA'
+	--AND emv.contact = '0031700001kzlsQAAQ'
+	AND ev.isdeleted = FALSE
+	AND emv.status IN ('Registered', 'Attended', 'Ad hoc attendee')
+	AND ev.start_date_time IS NOT NULL
+	AND (ev.start_date_time BETWEEN (CURRENT_DATE - INTERVAL '12 MONTH') AND dateadd(DAY,
+	1,
+	CURRENT_DATE))
+GROUP BY
+	emv.contact;
+
+ALTER TABLE npsp_staging.stg_combined ALTER DISTKEY npsp_contactid;
+-- Assigns the TYPE
+DROP TABLE IF EXISTS npsp_staging.stg_new_records_hash;
+
+CREATE TABLE npsp_staging.stg_new_records_hash AS 
+(
+WITH newhash AS 
+(
+SELECT
+	giving_summary_type
+,
+	npsp_contactid contact
+,
+	closedate start_date
+,
+	sum(rolling_sum) rolling_sum
+,
+	CASE
+		WHEN sum(rolling_sum) >= 300
+			AND a.giving_summary_type = 'PPFA' THEN 'National Contributing Lifetime Member'
+			WHEN sum(rolling_sum) >= 10
+				AND sum(rolling_sum) < 300
+					AND a.giving_summary_type = 'PPFA' THEN 'National Contributing Annual Member'
+					WHEN a.giving_summary_type = 'PPAZ'
+					OR a.giving_summary_type = 'PPAA' THEN 'PPAZ Annual Member'
+					ELSE 'Exclude'
+				END attribute_type
+			FROM
+				npsp_staging.stg_combined a
+				--WHERE npsp_contactid = '0031700001kzlsQAAQ'
+			GROUP BY
+				a.giving_summary_type
+,
+				npsp_contactid,
+				closedate
+)
+SELECT
+	contact contact__c
+,
+	fnv_hash(contact || attribute_type || start_date)::varchar attribute_external_id__c
+,
+	rolling_sum
+,
+	attribute_type type__c
+,
+	start_date start_date__c
+,
+	CASE
+		WHEN attribute_type = 'PPAZ Annual Member' THEN trunc(add_months(start_date::date,
+		12))
+		WHEN attribute_type = 'National Contributing Annual Member' THEN trunc(add_months(start_date::date,
+		12))
+		WHEN attribute_type = 'National Contributing Lifetime Member' THEN NULL
+	END end_date__c
+,
+	'Action Fund Membership' AS attribute_category__c
+FROM
+	newhash
+WHERE
+	attribute_type <> 'Exclude' 
+);
+
+ALTER TABLE npsp_staging.stg_new_records_hash ALTER DISTKEY contact__c;
+-- Find existing records
+DROP TABLE IF EXISTS npsp_staging.stg_existing_records_hash;
+
+CREATE TABLE npsp_staging.stg_existing_records_hash AS 
+SELECT
+	fa.id 
+,
+	fa.contact__c 
+,
+	fa.lastmodifieddate 
+,
+	fa.type__c 
+,
+	fa.start_date__c 
+,
+	fa.end_date__c 
+,
+	fa.active__c 
+,
+	fa.attribute_category__c 
+,
+	fa.attribute_external_id__c 
+,
+	CASE
+		WHEN fa.type__c = 'National Contributing Lifetime Member' THEN TRUE
+		ELSE FALSE
+	END existing_lifetime
+,
+	CASE
+		WHEN fa.type__c = 'National Contributing Annual Member' THEN TRUE
+		ELSE FALSE
+	END existing_annual
+FROM
+	npsp_reporting.fact_attributes fa
+WHERE
+	active__c = TRUE
+	AND attribute_category__c = 'Action Fund Membership'
+	AND type__c IN ('National Contributing Lifetime Member', 'National Contributing Annual Member');
+--AND contact__c  ='0031700001kzlsQAAQ'
+
+
+DROP TABLE IF EXISTS npsp_staging.stg_attri_recs;
+
+CREATE TABLE npsp_staging.stg_attri_recs (
+    id CHARACTER VARYING(18) ENCODE LZO DISTKEY NULL,
+    contact__c CHARACTER VARYING(18) ENCODE LZO NULL,
+    lastmodifieddate TIMESTAMP WITHOUT TIME ZONE ENCODE AZ64 NULL,
+    type__c CHARACTER VARYING(255) ENCODE LZO NULL,
+    start_date__c DATE ENCODE AZ64 NULL,
+    end_date__c DATE ENCODE AZ64 NULL,
+    attribute_category__c CHARACTER VARYING(255) ENCODE LZO NULL,
+    active__c BOOLEAN ENCODE RAW NULL,
+    attribute_external_id__c CHARACTER VARYING(255) ENCODE LZO NULL
+)
+DISTSTYLE KEY;
+
+INSERT
+	INTO
+	npsp_staging.stg_attri_recs
+SELECT
+	existing_records.id,
+	new_records.contact__c,
+	current_timestamp::timestamp lastmodifieddate,
+	new_records.type__c,
+	new_records.start_date__c,
+	new_records.end_date__c,
+	new_records.attribute_category__c,
+	TRUE active__c,
+	new_records.attribute_external_id__c
+FROM
+	npsp_staging.stg_new_records_hash new_records
+LEFT JOIN npsp_staging.stg_existing_records_hash existing_records ON
+	new_records.attribute_external_id__c = existing_records.attribute_external_id__c;
+--2117
+--SELECT * FROM npsp_staging.stg_attri_recs
+
+
+
+
+
+
+DROP TABLE IF EXISTS npsp_staging.stg_attributes;
+
+CREATE TABLE npsp_staging.stg_attributes AS 
+(
+SELECT
+	a.contact__c
+,
+	a.type__c new_type__c
+,
+	current_timestamp::timestamp lastmodifieddate
+,
+	b.id attribute_id
+,
+	b.type__c existing_type__c
+,
+	a.start_date__c new_start_date__c
+,
+	b.start_date__c existing_start_date__c
+,
+	b.end_date__c existing_end_date__c
+,
+	b.active__c existing_status
+,
+	a.attribute_external_id__c new_attribute_ex_id
+,
+	b.attribute_external_id__c existing_attribute_ex_id
+,
+	CASE
+		WHEN a.attribute_external_id__c = b.attribute_external_id__c THEN 'duplicate'
+		ELSE NULL
+	END dupe_ex_id
+FROM
+	npsp_staging.stg_new_records_hash a
+LEFT JOIN npsp_staging.stg_existing_records_hash b ON
+	a.attribute_external_id__c = b.attribute_external_id__c
+	--WHERE a.contact__c IN ('0031700001kzlsQAAQ')
+ORDER BY
+	1
+);
+--SELECT * FROM npsp_staging.stg_attributes where contact__c = '0031700001kzlsQAAQ'
+-- Removes from the stage table rows that are existing lifetime members
+DELETE
+FROM
+	npsp_staging.stg_attri_recs
+WHERE
+	npsp_staging.stg_attri_recs.id IN (
+	SELECT
+		id
+	FROM
+		npsp_staging.stg_attributes
+	WHERE
+		new_type__c = 'National Contributing Lifetime Member'
+		AND existing_type__c = 'National Contributing Lifetime Member'
+		AND id IS NOT NULL );
+-- Removes entries that have not changed. Identified here as a duplicate
+DELETE
+FROM
+	npsp_staging.stg_attri_recs
+WHERE
+	npsp_staging.stg_attri_recs.contact__c IN (
+	SELECT
+		DISTINCT contact__c
+	FROM
+		npsp_staging.stg_attributes att
+	WHERE
+		dupe_ex_id = 'duplicate'
+		OR dupe_ex_id IS NULL);
+--5
+--SELECT * FROM npsp_staging.stg_attri_recs WHERE contact__c = '0031700001kzlsQAAQ'
+-- Update status and end date of the annual record, when a new lifetime member is detected
+UPDATE
+	npsp_staging.stg_attri_recs
+SET
+	end_date__c = npsp_staging.stg_attributes.new_start_date__c ,
+	lastmodifieddate = current_timestamp::timestamp,
+	active__c = FALSE
+FROM
+	npsp_staging.stg_attributes
+WHERE
+	npsp_staging.stg_attri_recs.id IN (
+	SELECT
+		id
+	FROM
+		npsp_staging.stg_attributes
+	WHERE
+		new_type__c = 'National Contributing Lifetime Member'
+		AND existing_type__c = 'National Contributing Annual Member'
+		AND id IS NOT NULL );
+--updates start and end dates of existing annual members
+-- National Contributing Annual Member
+UPDATE
+	npsp_staging.stg_attri_recs
+SET
+	end_date__c = add_months(new_start_date__c,
+	12),
+	-- start_date__c = new_start_date__c,
+	lastmodifieddate = current_timestamp::timestamp
+FROM
+	npsp_staging.stg_attributes
+WHERE
+	npsp_staging.stg_attri_recs.id IN (
+	SELECT
+		id
+	FROM
+		npsp_staging.stg_attributes
+	WHERE
+		new_type__c = 'National Contributing Annual Member'
+		AND existing_type__c = 'National Contributing Annual Member'
+		AND id IS NOT NULL 
+);
+
+DROP TABLE IF EXISTS npsp_staging.stg_fact_attributes;
+
+CREATE TABLE npsp_staging.stg_fact_attributes (LIKE npsp_reporting.fact_attributes);
+
+INSERT
+	INTO
+	npsp_staging.stg_fact_attributes
+SELECT
+	id,
+	contact__c,
+	lastmodifieddate ,
+	type__c,
+	start_date__c,
+	end_date__c,
+	attribute_category__c,
+	active__c,
+	attribute_external_id__c
+FROM
+	npsp_staging.stg_attri_recs;
+--SELECT * FROM npsp_staging.stg_fact_attributes WHERE contact__c = '0031700001kzlsQAAQ'
+
+UPDATE
+	npsp_reporting.fact_attributes
+SET 
+	id = COALESCE(npsp_staging.stg_fact_attributes.id,
+	npsp_reporting.fact_attributes.id),
+	lastmodifieddate = COALESCE(npsp_staging.stg_fact_attributes.lastmodifieddate,
+	npsp_reporting.fact_attributes.lastmodifieddate),
+	type__c = COALESCE(npsp_staging.stg_fact_attributes.type__c,
+	npsp_reporting.fact_attributes.type__c),
+	start_date__c = COALESCE(npsp_staging.stg_fact_attributes.start_date__c,
+	npsp_reporting.fact_attributes.start_date__c),
+	end_date__c = COALESCE(npsp_staging.stg_fact_attributes.end_date__c,
+	npsp_reporting.fact_attributes.end_date__c),
+	attribute_category__c = COALESCE(npsp_staging.stg_fact_attributes.attribute_category__c,
+	npsp_reporting.fact_attributes.attribute_category__c),
+	active__c = COALESCE(npsp_staging.stg_fact_attributes.active__c,
+	npsp_reporting.fact_attributes.active__c),
+	attribute_external_id__c = COALESCE(npsp_staging.stg_fact_attributes.attribute_external_id__c,
+	npsp_reporting.fact_attributes.attribute_external_id__c)
+FROM
+	npsp_staging.stg_fact_attributes
+WHERE
+	npsp_reporting.fact_attributes.attribute_external_id__c = npsp_staging.stg_fact_attributes.attribute_external_id__c
+	AND (npsp_reporting.fact_attributes.id <> COALESCE(npsp_staging.stg_fact_attributes.id,
+	npsp_reporting.fact_attributes.id)
+		AND npsp_reporting.fact_attributes.lastmodifieddate <> COALESCE(npsp_staging.stg_fact_attributes.lastmodifieddate,
+		npsp_reporting.fact_attributes.lastmodifieddate)
+			AND npsp_reporting.fact_attributes.type__c <> COALESCE(npsp_staging.stg_fact_attributes.type__c,
+			npsp_reporting.fact_attributes.type__c)
+				AND npsp_reporting.fact_attributes.start_date__c <> COALESCE(npsp_staging.stg_fact_attributes.start_date__c,
+				npsp_reporting.fact_attributes.start_date__c)
+					AND npsp_reporting.fact_attributes.end_date__c <> COALESCE(npsp_staging.stg_fact_attributes.end_date__c,
+					npsp_reporting.fact_attributes.end_date__c)
+						AND npsp_reporting.fact_attributes.attribute_category__c <> COALESCE(npsp_staging.stg_fact_attributes.attribute_category__c,
+						npsp_reporting.fact_attributes.attribute_category__c)
+							AND npsp_reporting.fact_attributes.active__c <> COALESCE(npsp_staging.stg_fact_attributes.active__c,
+							npsp_reporting.fact_attributes.active__c)
+								AND npsp_reporting.fact_attributes.attribute_external_id__c <> COALESCE(npsp_staging.stg_fact_attributes.attribute_external_id__c,
+								npsp_reporting.fact_attributes.attribute_external_id__c)
+);
+
+INSERT
+	INTO
+	npsp_reporting.fact_attributes
+SELECT
+	id,
+	contact__c ,
+	current_timestamp::timestamp ,
+	type__c,
+	start_date__c,
+	end_date__c,
+	attribute_category__c,
+	active__c,
+	attribute_external_id__c
+FROM
+	npsp_staging.stg_fact_attributes;
+
+
+
+    
+--SELECT * FROM npsp_reporting.fact_attributes fa WHERE contact__c = '0031700001kzlsQAAQ'
+--DELETE FROM npsp_reporting.fact_attributes 
+--WHERE npsp_reporting.fact_attributes.attribute_external_id__c IN (SELECT attribute_external_id__c FROM npsp_staging.stg_fact_attributes);
+--4224
+--INSERT INTO npsp_reporting.fact_attributes
+--SELECT * FROM npsp_staging.stg_fact_attributes;
+--SELECT * FROM npsp_reporting.fact_attributes fa WHERE contact__c IN ('0031700001kzlsQAAQ')
