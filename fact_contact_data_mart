@@ -1,0 +1,125 @@
+/* 1/27/2024
+ * The purpose of this script is the populate the Contact data mart, which is the Salesforce source 
+ * for pac giving and sustainer status at the contact level
+ */
+
+
+
+/** Watermark Interval
+If fact_account table is NULL, the date will be set to the minimum last mod date of the account object.
+Otherwise, the last modified date is based on the last modified date subtracting the selected value.
+For example, if the last mod date was 1/5/2024, the date will be 1/2/2024. This is to step to capture any missing data due.
+**/
+
+---- Get cutoff timestamp
+-- Looks back one week
+DROP TABLE IF EXISTS max_timestamp;
+CREATE TEMP TABLE max_timestamp AS 
+(SELECT 
+	CASE WHEN to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD HH24:MM:SS') IS NULL THEN /*'2022-09-22 16:15:14.000'*/ (SELECT to_char(min(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.contact c )
+ELSE to_char(max(lastmodifieddate)::timestamp - INTERVAL '3 days','YYYY-MM-DD 00:00:00') -- parameter
+END max_timestamp 
+FROM npsp_reporting.fact_contact);
+
+-- SELECT * FROM max_timestamp
+-- 2024-01-24 00:00:00
+
+
+-- Contact Sustainer Calculation
+DROP TABLE IF EXISTS npsp_staging.stg_contact_sustainer;
+CREATE TABLE npsp_staging.stg_contact_sustainer AS 
+SELECT *
+FROM 
+(select p.Contact contactid 
+       ,case when (p.Lapsed > 0 and p.Active = 0 and p.Paused = 0) then 'Lapsed'  
+            when (p.Active > 0  or p.Paused > 0 ) then 'Active'
+            when (p.Active = 0 and p.Lapsed = 0 and p.Paused = 0 and p.closed > 0) then 'Former' 
+        end as sustainer__c
+       ,r.lastmodifieddate
+ from (select rd.Contact
+             ,rd.Status
+       from npsp_sfdc.Recurring_Donation_v rd where rd.isdeleted = false) 
+pivot( count(*) for Status in('Closed', 'Active', 'Lapsed', 'Paused')) p
+left join (select contact, max(lastmodifieddate) lastmodifieddate from npsp_sfdc.Recurring_Donation_v group by contact) r on r.contact = p.contact) 
+WHERE lastmodifieddate >= (SELECT max_timestamp FROM max_timestamp);
+
+
+
+-- PAC Giving Calculation
+DROP TABLE IF EXISTS npsp_staging.stg_pac_giving;
+CREATE TABLE IF NOT EXISTS npsp_staging.stg_pac_giving
+		(
+		contactid VARCHAR(18)
+		,national_pac_giving_for_current_cy__c NUMERIC(38,2)
+		,lastmodifieddate timestamp
+	)
+DISTSTYLE AUTO
+ DISTKEY (contactid)	;
+	
+	
+INSERT INTO npsp_staging.stg_pac_giving
+WITH rolling_pac AS (
+SELECT gold.npsp_contactid , gold.closedate, gold.amount, ROW_NUMBER () OVER (PARTITION BY gold.npsp_contactid ORDER BY gold.closedate DESC) AS rn
+from ppfa_golden.golden_opportunities_npsp gold
+left join npsp_reporting.v_Summary_Omits om on om.accountid = gold.npsp_accountid
+WHERE left(gold.source_code, 3) in ('5ND', '5NL', '5NM')
+AND (closedate BETWEEN dateadd(month, -12,current_date) AND CURRENT_DATE)
+AND om.accountid is null
+group by gold.npsp_contactid, gold.closedate, gold.amount
+),
+rolling_sum AS (
+SELECT npsp_contactid,
+closedate,
+sum(amount::numeric(38,2)) OVER (
+PARTITION BY npsp_contactid
+ORDER BY closedate ASC ROWS BETWEEN 11 PRECEDING AND CURRENT ROW 
+) AS rolling_12_sum
+FROM rolling_pac
+WHERE rn <=12 AND npsp_contactid IS NOT NULL 
+GROUP BY npsp_contactid, closedate, amount
+
+)
+SELECT npsp_contactid
+,sum(rolling_12_sum)pac_giving
+,max(closedate) closedate
+FROM rolling_sum 
+WHERE closedate >= to_date((SELECT max_timestamp FROM max_timestamp),'YYYY-MM-DD')
+GROUP BY npsp_contactid
+;
+
+
+-- Updates National PAC Giving and Sustainer columns if they already exists
+UPDATE npsp_reporting.fact_contact
+SET national_pac_giving_for_current_cy__c = npsp_staging.stg_pac_giving.national_pac_giving_for_current_cy__c 
+FROM npsp_staging.stg_pac_giving
+WHERE npsp_reporting.fact_contact.id = npsp_staging.stg_pac_giving.contactid 
+AND ( npsp_reporting.fact_contact.national_pac_giving_for_current_cy__c <> npsp_staging.stg_pac_giving.national_pac_giving_for_current_cy__c 
+	OR npsp_reporting.fact_contact.national_pac_giving_for_current_cy__c IS NULL);
+
+
+-- Updates Sustainer column
+UPDATE npsp_reporting.fact_contact 
+SET sustainer__c = npsp_staging.stg_contact_sustainer.sustainer__c ,
+	lastmodifieddate = current_timestamp
+FROM npsp_staging.stg_contact_sustainer 
+WHERE npsp_reporting.fact_contact.id = npsp_staging.stg_contact_sustainer.contactid
+AND (npsp_reporting.fact_contact.sustainer__c <> npsp_staging.stg_contact_sustainer.sustainer__c OR npsp_reporting.fact_contact.sustainer__c IS NULL);
+
+
+-- Inserts rows into fact table that do not exist in the fact table.
+INSERT INTO npsp_reporting.fact_contact (id, lastmodifieddate ,national_pac_giving_for_current_cy__c, sustainer__c) 
+SELECT COALESCE(scs.contactid,spg.contactid, cv.id) AS id ,
+		current_timestamp lastmodifieddate ,
+		spg.national_pac_giving_for_current_cy__c,
+		scs.sustainer__c 
+FROM npsp_staging.stg_contact_sustainer scs
+FULL OUTER JOIN npsp_staging.stg_pac_giving spg ON scs.contactid = spg.contactid 
+FULL OUTER JOIN npsp_sfdc.contact cv ON scs.contactid = cv.id 
+WHERE NOT EXISTS (
+	SELECT 1 FROM npsp_reporting.fact_contact fc
+	WHERE fc.id = COALESCE(scs.contactid, spg.contactid, cv.id) );
+	
+
+-- Deletes rows from fact table that do not exist in the source table
+DELETE FROM npsp_reporting.fact_contact 
+WHERE id NOT IN (SELECT id FROM npsp_sfdc.contact);
