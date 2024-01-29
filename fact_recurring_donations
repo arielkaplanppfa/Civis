@@ -1,0 +1,60 @@
+/*
+ * The purpose of this script is to load the Recurring Donation data mart with the following metrics
+		first_donation_date__c
+		last_dontation_date__c
+ * */
+
+/** Watermark Interval
+If fact_account table is NULL, the date will be set to the minimum last mod date of the account object.
+Otherwise, the last modified date is based on the last modified date subtracting the selected value.
+For example, if the last mod date was 1/5/2024, the date will be 1/2/2024. This is to step to capture any missing data due.
+**/
+
+DROP TABLE IF EXISTS max_timestamp;
+CREATE TEMP TABLE max_timestamp AS 
+(SELECT 
+	CASE WHEN to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD HH24:MM:SS') IS NULL THEN /*'2022-09-22 16:15:14.000'*/ (SELECT to_char(min(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.recurring_donation_v rdv )
+ELSE to_char(max(lastmodifieddate)::timestamp - INTERVAL '3 days','YYYY-MM-DD 00:00:00') -- parameter
+END max_timestamp 
+FROM npsp_reporting.fact_recurring_donation frd);
+
+--SELECT * FROM max_timestamp
+--2024-01-24 00:00:00
+
+-- load the staging table
+DROP TABLE IF EXISTS npsp_staging.stg_fact_recurring_donation;
+CREATE TABLE npsp_staging.stg_fact_recurring_donation as
+SELECT recurring_donation AS Id, current_timestamp::timestamp AS lastmodifieddate,min(closedate) as First_Donation_Date__c, max(closedate) as last_dontation_date__c 
+FROM npsp_sfdc.opportunity_v o
+join npsp_sfdc.opppayment_v p on p.opportunity = o.id 
+WHERE p.paid = TRUE
+AND o.isdeleted = FALSE AND p.isdeleted = FALSE
+AND o.recurring_donation != ''
+AND o.lastmodifieddate >= (SELECT max_timestamp FROM max_timestamp)
+GROUP BY o.recurring_donation;
+
+
+-- Updates the npsp_reporting.fact_recurring_donation table
+UPDATE npsp_reporting.fact_recurring_donation 
+SET 
+	lastmodifieddate = current_timestamp::timestamp,
+	first_donation_date__c = npsp_staging.stg_fact_recurring_donation.first_Donation_Date__c,
+	last_dontation_date__c = npsp_staging.stg_fact_recurring_donation.last_dontation_date__c
+FROM npsp_staging.stg_fact_recurring_donation 
+WHERE npsp_reporting.fact_recurring_donation.id = npsp_staging.stg_fact_recurring_donation.id
+AND (npsp_reporting.fact_recurring_donation.first_donation_date__c <> npsp_staging.stg_fact_recurring_donation.first_Donation_Date__c OR npsp_reporting.fact_recurring_donation.first_donation_date__c IS NULL
+AND npsp_reporting.fact_recurring_donation.last_dontation_date__c <> npsp_staging.stg_fact_recurring_donation.last_dontation_date__c OR npsp_reporting.fact_recurring_donation.last_dontation_date__c IS NULL
+);
+
+-- Inserts new rows to the npsp_reporting.fact_recurring_donation table	
+INSERT INTO npsp_reporting.fact_recurring_donation
+SELECT id ,
+current_timestamp::timestamp  lastmodifieddate ,
+first_donation_date__c ,
+last_dontation_date__c 
+FROM npsp_staging.stg_fact_recurring_donation 
+WHERE id NOT IN (SELECT id FROM npsp_sfdc.recurring_donation_v);
+
+-- Deletes the rows that do not exist in the source table.
+DELETE FROM npsp_reporting.fact_recurring_donation
+WHERE id NOT IN (select id from npsp_sfdc.recurring_donation_v);
