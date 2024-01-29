@@ -39,12 +39,12 @@ WHERE
 	AND (giving_summary_type IN ('PPFA'))
 	AND npsp_contactid IS NOT NULL
 	AND closedate > '2016-05-01'
-	AND (av.TYPE != 'Estate'
+	AND (av.TYPE <> 'Estate'
 		OR av.TYPE IS NULL)
 	AND av.isdeleted = FALSE
-	AND (rv.name != 'Estate'
+	AND (rv.name <> 'Estate'
 		OR rv.name IS NULL)
-	AND (sc_program != 'Z'
+	AND (sc_program <> 'Z'
 		AND LEFT(gon.sc_office_desc,
 		4) = 'PPFA')
 	AND gon.SOURCE != 'Bookable Gift'
@@ -101,14 +101,14 @@ WHERE
 		AND (giving_summary_type IN ('PPAZ'))
 			AND npsp_contactid IS NOT NULL
 			AND closedate > '2016-05-01'
-			AND (av.TYPE != 'Estate'
+			AND (av.TYPE <> 'Estate'
 				OR av.TYPE IS NULL)
 			AND av.isdeleted = FALSE
-			AND (rv.name != 'Estate'
+			AND (rv.name <> 'Estate'
 				OR rv.name IS NULL)
 			AND LEFT(gon.source_code,
 			3) IN ('4AZ', '5AZ')
-				AND gon.SOURCE != 'Bookable Gift'
+				AND gon.SOURCE <> 'Bookable Gift'
 )
 ,
 rolling_12_month_ppaz AS (
