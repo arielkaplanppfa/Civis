@@ -132,6 +132,7 @@ CREATE  TEMP TABLE srt_temp (
 ,rownm_sc_sus            bigint
 --,f_or_l_sc_sus            varchar(1) -- f_or_l_sc_sus
 --,rownm_byPPIDandsc_sustainer_desc bigint-- l_ppid_sc_sus_desc
+original_deposit_date    datetime default null --- ARIEL K 2/16/24 -- Added at request of Andy G
 );
 
 
@@ -412,6 +413,7 @@ end as cfp_shareable
          -- ,NULL::bigint as rownm_byPPID_sustainerC3
           ,NULL::bigint as rownm_sc_sus
           --,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
+          ,opportunity.deposit_date as original_deposit_date
 FROM rounddata.opportunity opportunity
 --JOIN supremeReporting_ID_tracker tracker                         ON opportunity.etl_id = tracker.etl_id
 --    AND tracker.seq >= i
@@ -419,7 +421,7 @@ FROM rounddata.opportunity opportunity
 JOIN rounddata.v_campaign campaign  ON opportunity.rc_giving__source_code = campaign.unique_source_code
 JOIN rounddata.recordtype recordtype  ON opportunity.recordtypeid = recordtype.id
 JOIN rounddata.accountx a   ON a.id = opportunity.accountid
-JOIN rounddata.opportunity parent_opportunity ON opportunity.rc_giving__parent = parent_opportunity.id
+LEFT JOIN rounddata.opportunity parent_opportunity ON opportunity.rc_giving__parent = parent_opportunity.id -- ARIEL K 2/16/24 -- Added to resolve archived orphans, QA by Andy G
 LEFT JOIN rounddata.rc_giving__payment_method rc_giving__payment_method  ON opportunity.rc_giving__payment_method_sele = rc_giving__payment_method.id
 LEFT JOIN rounddata.cfp_log cfp on opportunity.affiliate_number = cfp.affiliate_number
 Left JOIN rounddata.cfp_log ccode on ccode.campaign_code = campaign.sourcecode_office_code
@@ -429,7 +431,7 @@ LEFT JOIN akaplan.mv_soft_credit_opportunities   soft_credit  ON soft_credit.rc_
 -- 
 WHERE recordtype.namex in ('Transaction','Pledge Payment')
 AND opportunity.stagename = 'Completed'
-AND parent_opportunity.rc_giving__is_bookable ilike 'false'
+AND (parent_opportunity.rc_giving__is_bookable ilike 'false' or parent_opportunity.rc_giving__is_bookable is null) -- ARIEL K 2/16/24 -- Added to resolve archived orphans, QA by Andy G
 AND ( opportunity.delete_flag <>'Y' OR opportunity.rc_giving__archive_flag ilike 'TRUE')
 AND opportunity.amount>0 and (opportunity.final_amount > 0 or opportunity.final_amount is null)  -- added 20190520 by cdelja to remove adjustments
 UNION ALL
@@ -671,6 +673,7 @@ end as cfp_shareable
           --,NULL::bigint as rownm_byPPID_sustainerC3
           ,NULL::bigint as rownm_sc_sus
           --,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
+          ,opportunity.deposit_date as original_deposit_date
     FROM rounddata.opportunity
     JOIN rounddata.v_campaign campaign                                         ON opportunity.rc_giving__source_code = campaign.unique_source_code
     JOIN rounddata.accountx a                                                  ON a.id = opportunity.accountid
@@ -942,6 +945,7 @@ end as cfp_shareable
          -- ,NULL::bigint as rownm_byPPID_sustainerC3
           ,NULL::bigint as rownm_sc_sus
          -- ,NULL::bigint as rownm_byPPIDandsc_sustainer_desc
+         ,opportunity.deposit_date as original_deposit_date
     FROM rounddata.rc_giving__opportunity_credit
     JOIN rounddata.opportunity opportunity                                     ON rc_giving__opportunity = opportunity.id
 --    LEFT JOIN ppfa_prod.opportunity parent_opportunity                         ON opportunity.rc_giving__parent = parent_opportunity.id
