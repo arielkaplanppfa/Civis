@@ -51,12 +51,12 @@ workflow:
       input:
         job_id: 219977409
       on-success:
-        -  run_giving_summary
+        -  run_giving_summary_wrapper
       on-error:
         - handle_errors
     
     
-    run_giving_summary:
+    run_giving_summary_wrapper:
       action: civis.run_job
       retry:
         # Number of attempts, not including the first one.
@@ -65,15 +65,15 @@ workflow:
         # Delay between attempts in seconds
         delay: 5
       input:
-        job_id: 237083252
+        job_id: 256481669
       on-success:
-        - run_account
+        - run_account_wrapper
       on-error:
         - handle_errors
     
     
     
-    run_account:
+    run_account_wrapper:
       action: civis.run_job
       retry:
         # Number of attempts, not including the first one.
@@ -82,14 +82,14 @@ workflow:
         # Delay between attempts in seconds
         delay: 5
       input:
-        job_id: 253537714
+        job_id: 256735379
       on-success:
-        - run_contact
+        - run_contact_wrapper
       on-error:
         - handle_errors
     
     
-    run_contact:
+    run_contact_wrapper:
       action: civis.run_job
       retry:
         # Number of attempts, not including the first one.
@@ -98,7 +98,7 @@ workflow:
         # Delay between attempts in seconds
         delay: 5
       input:
-        job_id: 253539344
+        job_id: 256757666
       on-success:
         - run_campaign
       on-error:
