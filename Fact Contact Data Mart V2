@@ -1,0 +1,138 @@
+CALL npsp_reporting.sp_fact_contact_job();
+
+/*
+ * This script calculates the pac giving and sustainer at the contact level
+ * Civis location: https://platform.civisanalytics.com/spa/#/scripts/sql/256752767
+ * 
+ * */
+
+-- CREATE OR REPLACE PROCEDURE npsp_reporting.sp_fact_contact_job()
+-- 	LANGUAGE plpgsql
+-- 	AS $$
+-- 	DECLARE 
+-- 		watermark TIMESTAMP;
+-- 		sus_tblSQL VARCHAR(65535) :='';
+-- 		stg_pac_giving VARCHAR(65535) :='';
+-- 		insert_stg_pac_giving VARCHAR(65535) :='';
+-- 		update_pac_giving VARCHAR(65535) :='';
+-- 		update_sustainer VARCHAR(65535) :='';
+-- 		insert_fact_tbl VARCHAR(65535) :='';
+-- 		clean_fact_contact VARCHAR(65535) :='';
+		
+
+-- 	BEGIN
+		
+		
+-- 		EXECUTE 'SELECT to_char(max(lastmodifieddate)::timestamp,''YYYY-MM-DD 00:00:00'') FROM npsp_sfdc.contact where isdeleted = FALSE' INTO watermark;
+	
+-- 		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_contact_sustainer';	
+-- 		sus_tblSQL := 'CREATE TABLE npsp_staging.stg_contact_sustainer 
+-- 						AS 
+-- 						SELECT *
+-- 						FROM 
+-- 						(select p.Contact contactid 
+-- 						       ,case when (p.Lapsed > 0 and p.Active = 0 and p.Paused = 0) then ''Lapsed''  
+-- 						            when (p.Active > 0  or p.Paused > 0 ) then ''Active''
+-- 						            when (p.Active = 0 and p.Lapsed = 0 and p.Paused = 0 and p.closed > 0) then ''Former'' 
+-- 						        end as sustainer__c
+-- 						       ,r.lastmodifieddate
+-- 						 from (select rd.Contact
+-- 						             ,rd.Status
+-- 						       from npsp_sfdc.Recurring_Donation_v rd where rd.isdeleted = false) 
+-- 						pivot( count(*) for Status in(''Closed'', ''Active'', ''Lapsed'', ''Paused'')) p
+-- 						left join (select contact, max(lastmodifieddate) lastmodifieddate from npsp_sfdc.Recurring_Donation_v group by contact) r on r.contact = p.contact) 
+-- 						WHERE lastmodifieddate >= ''2024-01-24 00:00:00''';
+					
+-- 		EXECUTE sus_tblSQL;
+	
+-- 		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_pac_giving';
+	
+-- 		stg_pac_giving := 'CREATE TABLE IF NOT EXISTS npsp_staging.stg_pac_giving
+-- 									(
+-- 									contactid VARCHAR(18)
+-- 									,national_pac_giving_for_current_cy__c NUMERIC(38,2)
+-- 									,lastmodifieddate timestamp
+-- 								)
+-- 							DISTSTYLE AUTO
+-- 							 DISTKEY (contactid)';
+							
+-- 		EXECUTE stg_pac_giving;
+	
+-- 		insert_stg_pac_giving := 'INSERT INTO npsp_staging.stg_pac_giving
+-- 									WITH rolling_pac AS (
+-- 									SELECT gold.npsp_contactid , gold.closedate, gold.amount, ROW_NUMBER () OVER (PARTITION BY gold.npsp_contactid ORDER BY gold.closedate DESC) AS rn
+-- 									from ppfa_golden.golden_opportunities_npsp gold
+-- 									left join npsp_reporting.v_Summary_Omits om on om.accountid = gold.npsp_accountid
+-- 									WHERE left(gold.source_code, 3) in (''5ND'', ''5NL'', ''5NM'')
+-- 									AND (closedate BETWEEN dateadd(month, -12,current_date) AND CURRENT_DATE)
+-- 									AND om.accountid is null
+-- 									group by gold.npsp_contactid, gold.closedate, gold.amount
+-- 									),
+-- 									rolling_sum AS (
+-- 									SELECT npsp_contactid,
+-- 									closedate,
+-- 									sum(amount::numeric(38,2)) OVER (
+-- 									PARTITION BY npsp_contactid
+-- 									ORDER BY closedate ASC ROWS BETWEEN 11 PRECEDING AND CURRENT ROW 
+-- 									) AS rolling_12_sum
+-- 									FROM rolling_pac
+-- 									WHERE rn <=12 AND npsp_contactid IS NOT NULL 
+-- 									GROUP BY npsp_contactid, closedate, amount
+									
+-- 									)
+-- 									SELECT npsp_contactid
+-- 									,sum(rolling_12_sum)pac_giving
+-- 									,max(closedate) closedate
+-- 									FROM rolling_sum 
+-- 									WHERE closedate >= '''||watermark||'''
+-- 									GROUP BY npsp_contactid';
+-- 		EXECUTE insert_stg_pac_giving;
+	
+	
+-- 		update_pac_giving := '-- Updates National PAC Giving and Sustainer columns if they already exists
+-- 								UPDATE npsp_reporting.fact_contact
+-- 								SET national_pac_giving_for_current_cy__c = npsp_staging.stg_pac_giving.national_pac_giving_for_current_cy__c 
+-- 								FROM npsp_staging.stg_pac_giving
+-- 								WHERE npsp_reporting.fact_contact.id = npsp_staging.stg_pac_giving.contactid 
+-- 								AND ( npsp_reporting.fact_contact.national_pac_giving_for_current_cy__c <> npsp_staging.stg_pac_giving.national_pac_giving_for_current_cy__c 
+-- 									OR npsp_reporting.fact_contact.national_pac_giving_for_current_cy__c IS NULL)';
+-- 		EXECUTE update_pac_giving;				
+								
+-- 								-- Updates Sustainer column
+-- 		update_sustainer :=		'UPDATE npsp_reporting.fact_contact 
+-- 								SET sustainer__c = npsp_staging.stg_contact_sustainer.sustainer__c ,
+-- 									lastmodifieddate = current_timestamp
+-- 								FROM npsp_staging.stg_contact_sustainer 
+-- 								WHERE npsp_reporting.fact_contact.id = npsp_staging.stg_contact_sustainer.contactid
+-- 								AND (npsp_reporting.fact_contact.sustainer__c <> npsp_staging.stg_contact_sustainer.sustainer__c 
+-- 								OR npsp_reporting.fact_contact.sustainer__c IS NULL)';
+		
+-- 		EXECUTE update_sustainer;
+								
+-- 								-- Inserts rows into fact table that do not exist in the fact table.
+-- 		insert_fact_tbl := 'INSERT INTO npsp_reporting.fact_contact (id, lastmodifieddate ,national_pac_giving_for_current_cy__c, sustainer__c) 
+-- 								SELECT COALESCE(scs.contactid,spg.contactid, cv.id) AS id ,
+-- 										current_timestamp lastmodifieddate ,
+-- 										spg.national_pac_giving_for_current_cy__c,
+-- 										scs.sustainer__c 
+-- 								FROM npsp_staging.stg_contact_sustainer scs
+-- 								FULL OUTER JOIN npsp_staging.stg_pac_giving spg ON scs.contactid = spg.contactid 
+-- 								FULL OUTER JOIN npsp_sfdc.contact cv ON scs.contactid = cv.id 
+-- 								WHERE NOT EXISTS (
+-- 									SELECT 1 FROM npsp_reporting.fact_contact fc
+-- 									WHERE fc.id = COALESCE(scs.contactid, spg.contactid, cv.id) )';
+									
+-- 		EXECUTE insert_fact_tbl;						
+-- 								-- Deletes rows from fact table that do not exist in the source table
+-- 		clean_fact_contact :=	'DELETE FROM npsp_reporting.fact_contact 
+-- 								WHERE id NOT IN (SELECT id FROM npsp_sfdc.contact)';
+		
+-- 		EXECUTE clean_fact_contact;
+		
+-- 		EXECUTE 'ANALYZE npsp_reporting.fact_contact';
+	
+	
+	
+-- 	-- SELECT * FROM npsp_staging.stg_contact_sustainer;
+-- END;
+-- $$;
