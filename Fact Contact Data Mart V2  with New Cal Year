@@ -1,0 +1,40 @@
+--CALL npsp_reporting.sp_contact_job_with_newcal();
+/*
+    The purpose of this script is the process contact records where the national_pac_giving_for_current_cy__c 
+    greater than zero, and update the column to NULL for the new calendar year.
+
+*/
+ CREATE OR REPLACE PROCEDURE npsp_reporting.sp_contact_job_with_newcal()
+ LANGUAGE plpgsql
+ AS $$
+
+ BEGIN 
+
+ 			EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_contact_with_newcal';
+ 			EXECUTE 'CREATE TABLE npsp_staging.stg_contact_with_newcal
+ 						AS
+ 						SELECT
+ 							fc.id,
+ 							current_timestamp::timestamp lastmodifieddate,
+ 							NULL::numeric(16,2) national_pac_giving_for_current_cy__c 						FROM
+ 							npsp_reporting.fact_contact fc
+ 						WHERE
+ 							fc.national_pac_giving_for_current_cy__c > 0';
+						
+-- 						-- 79,660/6,550,351
+						
+			
+						
+ 			EXECUTE 'UPDATE npsp_reporting.fact_contact
+ 						SET national_pac_giving_for_current_cy__c = npsp_staging.stg_contact_with_newcal.national_pac_giving_for_current_cy__c,
+ 							lastmodifieddate = npsp_staging.stg_contact_with_newcal.lastmodifieddate
+ 						FROM npsp_staging.stg_contact_with_newcal- 						WHERE npsp_reporting.fact_contact.id = npsp_staging.stg_contact_with_newcal.id';
+			
+ 			EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_contact_with_newcal';
+
+            
+            EXECUTE 'ANALYZE npsp_reporting.fact_contact';
+
+
+END;
+$$;
