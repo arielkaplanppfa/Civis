@@ -1,0 +1,55 @@
+--CALL npsp_reporting.sp_account_job_with_newcal();
+
+/*
+ * This stored prodecure is ran if the calendar date is the first of the new calendar year
+ * Sets giving level to NULL and x10/x25 columns are set to FALSE.
+ * */
+
+CREATE OR REPLACE PROCEDURE npsp_reporting.sp_account_job_with_newcal()
+LANGUAGE plpgsql
+AS $$
+
+BEGIN 
+
+
+		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_account_with_newcal';
+	
+		EXECUTE 'CREATE TABLE npsp_staging.stg_account_with_newcal
+				AS
+				SELECT
+					fa.id,
+					current_timestamp::timestamp lastmodifieddate,
+					NULL::numeric(18) cy_giving_for_giving_level__c,
+					FALSE::bool x10k_gift_in_cy__c,
+					FALSE::bool x25k_gift_in_cy__c
+				FROM
+					npsp_reporting.fact_account fa
+				WHERE
+					cy_giving_for_giving_level__c > 0
+					OR x10k_gift_in_cy__c IS TRUE
+					OR x25k_gift_in_cy__c IS TRUE';
+			-- 974 row / 6,123,411
+		
+		
+		EXECUTE 'ANALYZE npsp_staging.stg_account_with_newcal';
+		
+		EXECUTE 'UPDATE npsp_reporting.fact_account	
+				SET lastmodifieddate = npsp_staging.stg_account_with_newcal.lastmodifieddate,
+					cy_giving_for_giving_level__c = npsp_staging.stg_account_with_newcal.cy_giving_for_giving_level__c,
+					x10k_gift_in_cy__c = npsp_staging.stg_account_with_newcal.x10k_gift_in_cy__c,
+					x25k_gift_in_cy__c = npsp_staging.stg_account_with_newcal.x25k_gift_in_cy__c
+				FROM npsp_staging.stg_account_with_newcal
+				WHERE npsp_reporting.fact_account.id = npsp_staging.stg_account_with_newcal.id';
+		
+		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_account_with_newcal';
+	
+		EXECUTE 'ANALYZE npsp_reporting.fact_account';
+/*
+TRUNCATE TABLE npsp_reporting.fact_account;
+INSERT INTO npsp_reporting.fact_account	
+SELECT * FROM npsp_reporting.fact_account;
+
+*/
+
+END;
+$$;
