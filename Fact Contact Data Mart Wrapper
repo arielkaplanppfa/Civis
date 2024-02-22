@@ -1,0 +1,32 @@
+CALL npsp_reporting.sp_contact_job_with_newcal_wrapper();
+/*
+ * This is the wrapper script that will evaluate the calendar year for giving summary data,
+ * based on a comparison of the current date.
+ * The following function is used for the calendar year evaluation:
+ * mss.f_current_calendar_year_start_date()
+ * */
+ 
+-- CREATE OR REPLACE PROCEDURE npsp_reporting.sp_contact_job_with_newcal_wrapper()
+-- LANGUAGE plpgsql
+-- AS $$
+-- DECLARE
+--        	--current_date DATE := '2024-01-01'; 
+--        	current_date DATE :=to_date((current_date),'YYYY-MM-DD');
+--         cal_start_date DATE := mss.f_current_calendar_year_start_date(); 
+
+-- BEGIN
+--     -- Example IF THEN statement
+--     IF current_date = cal_start_date THEN
+--         -- Operation or logic when the condition is true
+--         RAISE INFO 'New Calendar Year Stored Procedure Running';
+--         EXECUTE 'CALL npsp_reporting.sp_contact_job_with_newcal()';
+        
+--     ELSE
+--         -- Operation or logic when the condition is false
+    	
+--         RAISE INFO 'Proceed as usual, no new calendar year.';
+--         -- Runs the daily sync job
+--        EXECUTE 'CALL npsp_reporting.sp_fact_contact_job()';
+--     END IF;
+-- END;
+-- $$;
