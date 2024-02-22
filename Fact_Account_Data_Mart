@@ -1,3 +1,4 @@
+--CALL npsp_reporting.sp_fact_account_job();
 /*
 The purpose of this script is to populate the Account Data Mart, which is the Salesforce source for 
 	account giving level
@@ -11,80 +12,94 @@ If fact_account table is NULL, the date will be set to the minimum last mod date
 Otherwise, the last modified date is based on the last modified date subtracting the selected value.
 For example, if the last mod date was 1/5/2024, the date will be 1/2/2024. This is to step to capture any missing data due.
 **/
+CREATE OR REPLACE PROCEDURE npsp_reporting.sp_fact_account_job() 
+LANGUAGE plpgsql
+AS $$
+DECLARE 
 
-DROP TABLE IF EXISTS max_timestamp;
-CREATE TEMP TABLE max_timestamp AS 
-(SELECT 
-	CASE WHEN to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') IS NULL THEN  (SELECT to_char(min(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.account c )
-ELSE to_char(max(lastmodifieddate)::timestamp - INTERVAL '3 days','YYYY-MM-DD 00:00:00') --parameter
-END max_timestamp 
-FROM npsp_reporting.fact_account);
+	watermark TIMESTAMP; --Timestamp used TO find recently updated DATA
+
+	
+    
+	BEGIN     
+    
+				   -- IF SELECT to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.account where isdeleted = FALSE
+					
+		
+		
+					EXECUTE 'SELECT to_char(max(lastmodifieddate)::timestamp,''YYYY-MM-DD 00:00:00'') FROM npsp_sfdc.account where isdeleted = FALSE' INTO watermark;
+
+								
+					EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_account';
+				
+				
+					EXECUTE 'CREATE TABLE "npsp_staging"."stg_fact_account" (
+								    "accountid" CHARACTER VARYING(18) ENCODE lzo DISTKEY NULL,
+								    "cy_giving_for_giving_level__c" NUMERIC(38,8) ENCODE az64 NULL,
+								    "x10k_gift_in_cy__c" boolean NULL,
+								    "x25k_gift_in_cy__c" boolean NULL,
+								    "max_max_last_updated" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL,
+								    "lastmodifieddate" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL
+								)
+								DISTSTYLE KEY';
+						
+						-- Drops the staging table
+						-- Account Giving Level Calculation
+					EXECUTE 'INSERT INTO npsp_staging.stg_fact_account
+								select g.npsp_accountid accountid
+								,sum(g.amount::NUMERIC(38,2)) CY_Giving_for_Giving_Level__c
+								,case when max(g.amount) >= 10000 then true else false end X10k_gift_in_CY__c
+								,case when max(g.amount) >= 25000 then true else false end X25k_gift_in_CY__c
+								,max(g.max_last_updated) max_max_last_updated
+								,current_timestamp::timestamp AS lastmodifieddate
+								from ppfa_golden.golden_opportunities_npsp g
+								left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
+								where g.closedate >= mss.f_current_calendar_year_start_date()
+								and g.closedate <= mss.f_current_calendar_year_end_date()
+								and (g.sc_office not in (''NP'',''NF'')
+								or (g.sc_office = ''NP''
+								and right(g.source_code,2) = ''38'')
+								and g.gau_credit_code not in (''C325015'', ''C325005'', ''11000000000002340'',''11000000000002356'',''C340100TR422ONL'')
+								and (left(g.sc_office_desc,4) = ''PPFA''
+								or (left(g.sc_office_desc,4) <> ''PPFA''
+								and g.gau_credit_code like ''%CFP%'')))
+								and om.accountid is NULL
+								AND to_char(g.closedate::timestamp, ''YYYY-MM-DD 00:00:00'') >= '''||watermark||
+								''' group by g.npsp_accountid';
+						
+						
+						-- Update Giving Level
+					EXECUTE 'UPDATE npsp_reporting.fact_account 
+								SET 
+									cy_giving_for_giving_level__c = npsp_staging.stg_fact_account.cy_giving_for_giving_level__c,
+									x10k_gift_in_cy__c = npsp_staging.stg_fact_account.x10k_gift_in_cy__c,
+									x25k_gift_in_cy__c = npsp_staging.stg_fact_account.x25k_gift_in_cy__c,
+									lastmodifieddate = npsp_staging.stg_fact_account.lastmodifieddate
+								FROM npsp_staging.stg_fact_account
+								WHERE npsp_reporting.fact_account.id = npsp_staging.stg_fact_account.accountid
+								AND (npsp_reporting.fact_account.cy_giving_for_giving_level__c  <> npsp_staging.stg_fact_account.cy_giving_for_giving_level__c OR npsp_reporting.fact_account.cy_giving_for_giving_level__c IS NULL
+								AND npsp_reporting.fact_account.x10k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x10k_gift_in_cy__c OR npsp_reporting.fact_account.x10k_gift_in_cy__c IS NULL
+								AND npsp_reporting.fact_account.x25k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x25k_gift_in_cy__c OR npsp_reporting.fact_account.x25k_gift_in_cy__c IS NULL )'
+								;
+						
+						--SELECT * FROM npsp_reporting.fact_account fa WHERE id = '0011700001vKMxTAAW'
+						-- Inserts new data into the fact table
+					EXECUTE 'INSERT INTO npsp_reporting.fact_account
+								SELECT fa.id, current_timestamp::timestamp, gld.cy_giving_for_giving_level__c, gld.x10k_gift_in_cy__c, gld.x25k_gift_in_cy__c
+								FROM npsp_staging.stg_fact_account gld
+								FULL OUTER JOIN npsp_sfdc.account fa ON gld.accountid = fa.id 
+								WHERE NOT EXISTS (
+									SELECT 1 FROM npsp_reporting.fact_account f
+									WHERE f.id = fa.id 
+								)
+								AND fa.isdeleted = FALSE' ;
+						
+						-- Deletes rows from fact account that do not exist in npsp_sfdc.account
+					EXECUTE 'DELETE FROM npsp_reporting.fact_account 
+								WHERE id NOT IN (SELECT id FROM npsp_sfdc.account)';
+							
+					EXECUTE 'ANALYZE npsp_reporting.fact_account';
 
 
-DROP TABLE IF EXISTS npsp_staging.stg_fact_account;
-CREATE TABLE "npsp_staging"."stg_fact_account" (
-    "accountid" CHARACTER VARYING(18) ENCODE lzo DISTKEY NULL,
-    "cy_giving_for_giving_level__c" NUMERIC(38,8) ENCODE az64 NULL,
-    "x10k_gift_in_cy__c" boolean NULL,
-    "x25k_gift_in_cy__c" boolean NULL,
-    "max_max_last_updated" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL,
-    "lastmodifieddate" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL
-)
-DISTSTYLE KEY;
-
--- Drops the staging table
--- Account Giving Level Calculation
-INSERT INTO "npsp_staging"."stg_fact_account"
-select g.npsp_accountid accountid
-,sum(g.amount::NUMERIC(38,2)) CY_Giving_for_Giving_Level__c
-,case when max(g.amount) >= 10000 then true else false end X10k_gift_in_CY__c
-,case when max(g.amount) >= 25000 then true else false end X25k_gift_in_CY__c
-,max(g.max_last_updated) max_max_last_updated
-,current_timestamp::timestamp AS lastmodifieddate
-from ppfa_golden.golden_opportunities_npsp g
-left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
-where g.closedate >= mss.f_current_calendar_year_start_date()
-and g.closedate <= mss.f_current_calendar_year_end_date()
---AND g.npsp_accountid = '0011700001vKMxTAAW'
-and (g.sc_office not in ('NP','NF')
-or (g.sc_office = 'NP'
-and right(g.source_code,2) = '38')
-and g.gau_credit_code not in ('C325015', 'C325005', '11000000000002340','11000000000002356','C340100TR422ONL')
-and (left(g.sc_office_desc,4) = 'PPFA'
-or (left(g.sc_office_desc,4) <> 'PPFA'
-and g.gau_credit_code like '%CFP%')))
-and om.accountid is NULL
---and g.npsp_accountid = '0011700001vKMxTAAW'
-AND to_char(g.closedate::timestamp, 'YYYY-MM-DD 00:00:00') >= (SELECT max_timestamp FROM max_timestamp)
-group by g.npsp_accountid;
-
-
--- Update Giving Level
-UPDATE npsp_reporting.fact_account 
-SET 
-	cy_giving_for_giving_level__c = npsp_staging.stg_fact_account.cy_giving_for_giving_level__c,
-	x10k_gift_in_cy__c = npsp_staging.stg_fact_account.x10k_gift_in_cy__c,
-	x25k_gift_in_cy__c = npsp_staging.stg_fact_account.x25k_gift_in_cy__c,
-	lastmodifieddate = npsp_staging.stg_fact_account.lastmodifieddate
-FROM npsp_staging.stg_fact_account
-WHERE npsp_reporting.fact_account.id = npsp_staging.stg_fact_account.accountid
-AND (npsp_reporting.fact_account.cy_giving_for_giving_level__c  <> npsp_staging.stg_fact_account.cy_giving_for_giving_level__c OR npsp_reporting.fact_account.cy_giving_for_giving_level__c IS NULL
-AND npsp_reporting.fact_account.x10k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x10k_gift_in_cy__c OR npsp_reporting.fact_account.x10k_gift_in_cy__c IS NULL
-AND npsp_reporting.fact_account.x25k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x25k_gift_in_cy__c OR npsp_reporting.fact_account.x25k_gift_in_cy__c IS NULL )
-;
-
---SELECT * FROM npsp_reporting.fact_account fa WHERE id = '0011700001vKMxTAAW'
--- Inserts new data into the fact table
-INSERT INTO npsp_reporting.fact_account
-SELECT fa.id, current_timestamp::timestamp, gld.cy_giving_for_giving_level__c, gld.x10k_gift_in_cy__c, gld.x25k_gift_in_cy__c
-FROM npsp_staging.stg_fact_account gld
-FULL OUTER JOIN npsp_sfdc.account fa ON gld.accountid = fa.id 
-WHERE NOT EXISTS (
-	SELECT 1 FROM npsp_reporting.fact_account f
-	WHERE f.id = fa.id 
-)
-AND fa.isdeleted = FALSE ;
-
--- Deletes rows from fact account that do not exist in npsp_sfdc.account
-DELETE FROM npsp_reporting.fact_account 
-WHERE id NOT IN (SELECT id FROM npsp_sfdc.account);
+  END;
+  $$;
