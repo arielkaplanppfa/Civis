@@ -1,12 +1,12 @@
 /*
  * This is the query for the Attributes data mart
- * Currently calculates the Action Fund Membership category
+ * Currently calculates the Action Fund categories 
  * 
  * */
 
 
 
---DELETE FROM npsp_reporting.fact_attributes WHERE contact__c = '0031700001kzlsQAAQ'
+
 -- Gets records that fall into a rolling 12 month period
 -- Source Golden Opps
 DROP TABLE IF EXISTS npsp_staging.stg_action_fund;
