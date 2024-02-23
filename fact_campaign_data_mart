@@ -6,7 +6,7 @@
 		first_response_date__c
 		last_response_date__c
 		numberofcontacts_rd__c
-		roi_rd__c
+		roi__c
 		total_amount_paid__c
 		total_amount_pledged__c
 		total_number_paid__c
@@ -23,10 +23,10 @@ For example, if the last mod date was 1/5/2024, the date will be 1/2/2024. This 
 DROP TABLE IF EXISTS max_timestamp;
 CREATE TEMP TABLE max_timestamp AS 
 (SELECT 
-	CASE WHEN to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD HH24:MM:SS') IS NULL THEN /*'2022-09-22 16:15:14.000'*/ (SELECT to_char(min(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.contact c )
+	CASE WHEN to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD HH24:MM:SS') IS NULL THEN /*'2022-09-22 16:15:14.000'*/ (SELECT to_char(min(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.campaign )
 ELSE to_char(max(lastmodifieddate)::timestamp - INTERVAL '3 days','YYYY-MM-DD 00:00:00') -- parameter
 END max_timestamp 
-FROM npsp_reporting.fact_contact);
+FROM npsp_reporting.fact_campaign);
 
 
 -- Gets data by source code
@@ -62,7 +62,7 @@ FROM
 	ppfa_golden.golden_opportunities_npsp
 WHERE
 	source_code IS NOT NULL
-	--AND max_last_updated >= 
+	AND max_last_updated >= (SELECT max_timestamp FROM max_timestamp)
 GROUP BY
 	source_code;
 
@@ -77,7 +77,7 @@ SELECT a.id
 ,b.first_response_date::date first_response_date__c
 ,b.last_response_date::date last_response_date__c
 ,nvl(a.numbersent,0) numberofcontacts_rd__c
-,((b.total_amount_paid - a.actualcost)/nullif(a.actualcost,0))::decimal(18,2) roi_rd__c
+,((b.total_amount_paid - a.actualcost)/nullif(a.actualcost,0))::decimal(18,2) roi__c
 ,b.total_amount_paid::decimal(18,2) total_amount_paid__c
 ,b.total_amount_pledged::decimal(18,2) total_amount_pledged__c
 ,b.total_number_paid::integer total_number_paid__c
@@ -85,7 +85,8 @@ SELECT a.id
 ,nvl(a.numbersent,0) total_number_solicited__c
 FROM npsp_staging.stg_fact_camp_opp b
 LEFT JOIN npsp_sfdc.campaign a
-ON b.source_code = a.name	;
+ON b.source_code = a.name	
+;
 
 
 -- Add a distribution key
@@ -101,7 +102,7 @@ SET
 	first_response_date__c = npsp_staging.stg_fact_campaign.first_response_date__c ,
 	last_response_date__c = npsp_staging.stg_fact_campaign.last_response_date__c ,
 	numberofcontacts_rd__c = npsp_staging.stg_fact_campaign.numberofcontacts_rd__c ,
-	roi_rd__c = npsp_staging.stg_fact_campaign.roi_rd__c ,
+	roi__c = npsp_staging.stg_fact_campaign.roi__c ,
 	total_amount_paid__c = npsp_staging.stg_fact_campaign.total_amount_paid__c ,
 	total_amount_pledged__c = npsp_staging.stg_fact_campaign.total_amount_pledged__c ,
 	total_number_paid__c = npsp_staging.stg_fact_campaign.total_number_paid__c ,
@@ -115,7 +116,7 @@ AND npsp_reporting.fact_campaign.cost_per_contact__c <> npsp_staging.stg_fact_ca
 AND	npsp_reporting.fact_campaign.first_response_date__c <> npsp_staging.stg_fact_campaign.first_response_date__c OR npsp_reporting.fact_campaign.first_response_date__c IS NULL 
 AND	npsp_reporting.fact_campaign.last_response_date__c <> npsp_staging.stg_fact_campaign.last_response_date__c OR npsp_reporting.fact_campaign.last_response_date__c IS NULL 
 AND	npsp_reporting.fact_campaign.numberofcontacts_rd__c <> npsp_staging.stg_fact_campaign.numberofcontacts_rd__c OR npsp_reporting.fact_campaign.numberofcontacts_rd__c IS NULL 
-AND	npsp_reporting.fact_campaign.roi_rd__c <> npsp_staging.stg_fact_campaign.roi_rd__c OR npsp_reporting.fact_campaign.roi_rd__c IS NULL 
+AND	npsp_reporting.fact_campaign.roi__c <> npsp_staging.stg_fact_campaign.roi__c OR npsp_reporting.fact_campaign.roi__c IS NULL 
 AND	npsp_reporting.fact_campaign.total_amount_paid__c <> npsp_staging.stg_fact_campaign.total_amount_paid__c OR npsp_reporting.fact_campaign.total_amount_paid__c IS NULL 
 AND	npsp_reporting.fact_campaign.total_amount_pledged__c <> npsp_staging.stg_fact_campaign.total_amount_pledged__c OR npsp_reporting.fact_campaign.total_amount_pledged__c IS null
 AND	npsp_reporting.fact_campaign.total_number_paid__c <> npsp_staging.stg_fact_campaign.total_number_paid__c OR npsp_reporting.fact_campaign.total_number_paid__c IS NULL 
@@ -135,7 +136,7 @@ SELECT
 	fc.first_response_date__c,
 	fc.last_response_date__c,
 	fc.numberofcontacts_rd__c,
-	fc.roi_rd__c,
+	fc.roi__c,
 	fc.total_amount_paid__c,
 	fc.total_amount_pledged__c,
 	fc.total_number_paid__c,
@@ -151,7 +152,7 @@ WHERE
 		npsp_sfdc.campaign);
 	
 
--- Deletes rows that do not exist in the salesforce table		
+--Deletes rows that do not exist in the salesforce table		
 DELETE FROM npsp_reporting.fact_campaign
 WHERE id NOT IN (SELECT id FROM npsp_sfdc.campaign)
 ;
