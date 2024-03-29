@@ -1,4 +1,4 @@
---CALL npsp_reporting.sp_fact_account_job();
+CALL npsp_reporting.sp_fact_account_job_new();
 /*
 The purpose of this script is to populate the Account Data Mart, which is the Salesforce source for 
 	account giving level
@@ -12,94 +12,210 @@ If fact_account table is NULL, the date will be set to the minimum last mod date
 Otherwise, the last modified date is based on the last modified date subtracting the selected value.
 For example, if the last mod date was 1/5/2024, the date will be 1/2/2024. This is to step to capture any missing data due.
 **/
-CREATE OR REPLACE PROCEDURE npsp_reporting.sp_fact_account_job() 
-LANGUAGE plpgsql
-AS $$
-DECLARE 
+--  CREATE OR REPLACE PROCEDURE npsp_reporting.sp_fact_account_job_new() 
+--  LANGUAGE plpgsql
+--  AS $$
+--  DECLARE 
 
-	watermark TIMESTAMP; --Timestamp used TO find recently updated DATA
-
+-- 	 	v_starttime TIMESTAMP;
+-- 	    v_endtime TIMESTAMP;
+-- 	    v_notes VARCHAR(5000);
+-- 	   	v_transactionid VARCHAR(50);
+-- 	   	v_insert_timestamp TIMESTAMP;
+-- 	   	v_watermark DATE;
+-- 	   	v_row_count INTEGER;
+-- 	   	v_inserted_row_count INTEGER ;
+-- 	 	v_updated_row_count INTEGER ;
+-- 	 	v_deleted_row_count INTEGER ;
+-- 	 	v_jobid INTEGER;
+-- 	 	v_status VARCHAR(50);
+-- 	 	v_final_status VARCHAR(50);
+-- 	 	v_final_notes VARCHAR(5000) :='';
+	
 	
     
-	BEGIN     
+--  	BEGIN     
     
-				   -- IF SELECT to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.account where isdeleted = FALSE
+-- 	 		-- IF SELECT to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.account where isdeleted = FALSE
+-- 			EXECUTE 'select transactionid, v_insert_timestamp from npsp_staging.stg_insert_timestamp' INTO v_transactionid,v_insert_timestamp;
+	   
+								   
+-- 			v_starttime := CURRENT_TIMESTAMP;
+-- 			v_status := 'Started';
+-- 			v_notes := '';
+					   	
 					
+-- 					    -- Insert initial log entry
+-- --			EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, transactionid,jobid, lastrun, runstatus, notes, starttime)
+-- --			VALUES ('''||v_transactionid ||''', 1, CURRENT_DATE,''' || v_status ||''',''' || v_notes ||''',''' || v_starttime ||''')';
+			
 		
-		
-					EXECUTE 'SELECT to_char(max(lastmodifieddate)::timestamp,''YYYY-MM-DD 00:00:00'') FROM npsp_sfdc.account where isdeleted = FALSE' INTO watermark;
-
-								
-					EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_account';
-				
-				
-					EXECUTE 'CREATE TABLE "npsp_staging"."stg_fact_account" (
-								    "accountid" CHARACTER VARYING(18) ENCODE lzo DISTKEY NULL,
-								    "cy_giving_for_giving_level__c" NUMERIC(38,8) ENCODE az64 NULL,
-								    "x10k_gift_in_cy__c" boolean NULL,
-								    "x25k_gift_in_cy__c" boolean NULL,
-								    "max_max_last_updated" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL,
-								    "lastmodifieddate" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL
-								)
-								DISTSTYLE KEY';
-						
-						-- Drops the staging table
-						-- Account Giving Level Calculation
-					EXECUTE 'INSERT INTO npsp_staging.stg_fact_account
-								select g.npsp_accountid accountid
-								,sum(g.amount::NUMERIC(38,2)) CY_Giving_for_Giving_Level__c
-								,case when max(g.amount) >= 10000 then true else false end X10k_gift_in_CY__c
-								,case when max(g.amount) >= 25000 then true else false end X25k_gift_in_CY__c
-								,max(g.max_last_updated) max_max_last_updated
-								,current_timestamp::timestamp AS lastmodifieddate
-								from ppfa_golden.golden_opportunities_npsp g
-								left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
-								where g.closedate >= mss.f_current_calendar_year_start_date()
-								and g.closedate <= mss.f_current_calendar_year_end_date()
-								and (g.sc_office not in (''NP'',''NF'')
-								or (g.sc_office = ''NP''
-								and right(g.source_code,2) = ''38'')
-								and g.gau_credit_code not in (''C325015'', ''C325005'', ''11000000000002340'',''11000000000002356'',''C340100TR422ONL'')
-								and (left(g.sc_office_desc,4) = ''PPFA''
-								or (left(g.sc_office_desc,4) <> ''PPFA''
-								and g.gau_credit_code like ''%CFP%'')))
-								and om.accountid is NULL
-								AND to_char(g.closedate::timestamp, ''YYYY-MM-DD 00:00:00'') >= '''||watermark||
-								''' group by g.npsp_accountid';
-						
-						
-						-- Update Giving Level
-					EXECUTE 'UPDATE npsp_reporting.fact_account 
-								SET 
-									cy_giving_for_giving_level__c = npsp_staging.stg_fact_account.cy_giving_for_giving_level__c,
-									x10k_gift_in_cy__c = npsp_staging.stg_fact_account.x10k_gift_in_cy__c,
-									x25k_gift_in_cy__c = npsp_staging.stg_fact_account.x25k_gift_in_cy__c,
-									lastmodifieddate = npsp_staging.stg_fact_account.lastmodifieddate
-								FROM npsp_staging.stg_fact_account
-								WHERE npsp_reporting.fact_account.id = npsp_staging.stg_fact_account.accountid
-								AND (npsp_reporting.fact_account.cy_giving_for_giving_level__c  <> npsp_staging.stg_fact_account.cy_giving_for_giving_level__c OR npsp_reporting.fact_account.cy_giving_for_giving_level__c IS NULL
-								AND npsp_reporting.fact_account.x10k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x10k_gift_in_cy__c OR npsp_reporting.fact_account.x10k_gift_in_cy__c IS NULL
-								AND npsp_reporting.fact_account.x25k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x25k_gift_in_cy__c OR npsp_reporting.fact_account.x25k_gift_in_cy__c IS NULL )'
-								;
-						
-						--SELECT * FROM npsp_reporting.fact_account fa WHERE id = '0011700001vKMxTAAW'
-						-- Inserts new data into the fact table
-					EXECUTE 'INSERT INTO npsp_reporting.fact_account
-								SELECT fa.id, current_timestamp::timestamp, gld.cy_giving_for_giving_level__c, gld.x10k_gift_in_cy__c, gld.x25k_gift_in_cy__c
-								FROM npsp_staging.stg_fact_account gld
-								FULL OUTER JOIN npsp_sfdc.account fa ON gld.accountid = fa.id 
-								WHERE NOT EXISTS (
-									SELECT 1 FROM npsp_reporting.fact_account f
-									WHERE f.id = fa.id 
-								)
-								AND fa.isdeleted = FALSE' ;
-						
-						-- Deletes rows from fact account that do not exist in npsp_sfdc.account
-					EXECUTE 'DELETE FROM npsp_reporting.fact_account 
-								WHERE id NOT IN (SELECT id FROM npsp_sfdc.account)';
+-- 			EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, starttime, endtime) ' ||
+-- 				        'VALUES (40485812, current_date, ''Started'', ''Fact Account Data Mart Sync started.'', ' ||
+-- 				        quote_literal(v_transactionid) || ', ' || 
+-- 				        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+			
+-- 	 		EXECUTE 'SELECT cast(max(lastmodifieddate) as date) FROM npsp_sfdc.account where isdeleted = FALSE' INTO v_watermark;
+	
+									
+-- 	 		EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_account';
+					
+					
+-- 	 		EXECUTE 'CREATE TABLE "npsp_staging"."stg_fact_account" (
+-- 	 				"accountid" CHARACTER VARYING(18) ENCODE lzo DISTKEY NULL,
+-- 	 				"cy_giving_for_giving_level__c" NUMERIC(38,8) ENCODE az64 NULL,
+-- 	 				"x10k_gift_in_cy__c" boolean NULL,
+-- 	 				"x25k_gift_in_cy__c" boolean NULL,
+-- 	 				"max_max_last_updated" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL,
+-- 	 				"lastmodifieddate" TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL
+-- 	 					)
+-- 	 					DISTSTYLE KEY';
 							
-					EXECUTE 'ANALYZE npsp_reporting.fact_account';
+-- 	 		-- Drops the staging table
+-- 	 		-- Account Giving Level Calculation
+-- 	 		EXECUTE 'INSERT INTO npsp_staging.stg_fact_account
+-- 	 				select g.npsp_accountid accountid
+-- 	 				,sum(g.amount::NUMERIC(38,2)) CY_Giving_for_Giving_Level__c
+-- 	 				,case when max(g.amount) >= 10000 then true else false end X10k_gift_in_CY__c
+-- 	 				,case when max(g.amount) >= 25000 then true else false end X25k_gift_in_CY__c
+-- 	 				,max(g.max_last_updated) max_max_last_updated
+-- 	 				,current_timestamp::timestamp AS lastmodifieddate
+-- 	 				from ppfa_golden.golden_opportunities_npsp g
+-- 	 				left join npsp_reporting.v_summary_omits om on om.accountid = g.npsp_accountid -- exclusion list
+-- 	 				where g.closedate >= mss.f_current_calendar_year_start_date()
+-- 	 				and g.closedate <= mss.f_current_calendar_year_end_date()
+-- 	 				and (g.sc_office not in (''NP'',''NF'')
+-- 	 				or (g.sc_office = ''NP''
+-- 	 				and right(g.source_code,2) = ''38'')
+-- 	 				and g.gau_credit_code not in (''C325015'', ''C325005'', ''11000000000002340'',''11000000000002356'',''C340100TR422ONL'')
+-- 	 				and (left(g.sc_office_desc,4) = ''PPFA''
+-- 	 				or (left(g.sc_office_desc,4) <> ''PPFA''
+-- 	 				and g.gau_credit_code like ''%CFP%'')))
+-- 	 				and om.accountid is NULL
+-- 	 				AND g.closedate >= '''||v_watermark||
+-- 	 				''' group by g.npsp_accountid';
+							
+							
+-- 	 		-- Update Records
+-- 	 		v_starttime := current_timestamp::timestamp;
+-- 	 		BEGIN 
+			 	
+-- 		 		EXECUTE 'UPDATE npsp_reporting.fact_account 
+-- 		 					SET 
+-- 		 						cy_giving_for_giving_level__c = npsp_staging.stg_fact_account.cy_giving_for_giving_level__c,
+-- 		 						x10k_gift_in_cy__c = npsp_staging.stg_fact_account.x10k_gift_in_cy__c,
+-- 		 						x25k_gift_in_cy__c = npsp_staging.stg_fact_account.x25k_gift_in_cy__c,
+-- 		 						lastmodifieddate = npsp_staging.stg_fact_account.lastmodifieddate
+-- 		 						FROM npsp_staging.stg_fact_account
+-- 		 						WHERE npsp_reporting.fact_account.id = npsp_staging.stg_fact_account.accountid
+-- 		 						AND (npsp_reporting.fact_account.cy_giving_for_giving_level__c  <> npsp_staging.stg_fact_account.cy_giving_for_giving_level__c OR npsp_reporting.fact_account.cy_giving_for_giving_level__c IS NULL
+-- 		 						AND npsp_reporting.fact_account.x10k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x10k_gift_in_cy__c OR npsp_reporting.fact_account.x10k_gift_in_cy__c IS NULL
+-- 		 						AND npsp_reporting.fact_account.x25k_gift_in_cy__c  <> npsp_staging.stg_fact_account.x25k_gift_in_cy__c OR npsp_reporting.fact_account.x25k_gift_in_cy__c IS NULL )'
+-- 		 						;
+							
+-- 		 		GET DIAGNOSTICS v_updated_row_count := ROW_COUNT;
+		 	
+-- 		 		IF v_updated_row_count = 0 THEN 
+-- 		 		v_updated_row_count :=0;
+-- 		 		END IF;
+		 		
+		 	
+-- 				EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, recordcount, starttime, endtime) ' ||
+-- 				        'VALUES (40485812, current_date, ''Complete'', ''Update successful'', ' ||
+-- 				        quote_literal(v_transactionid) || ', ' || v_updated_row_count || ', ' || 
+-- 				        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+
+				
+				
+-- 			EXCEPTION WHEN OTHERS THEN
+-- 			v_status := 'Failed';
+			
+			
+-- 				EXECUTE 'INSERT INTO  npsp_integration.dw_job_step_history (jobstepid, lastrun,runstatus, notes,transactionid,starttime,endtime )' ||
+-- 						'VALUES (40485812, current_date::date,''Failed'',''Update failed due to an unexpected error'','||
+-- 						quote_literal(v_transactionid) || ','||
+-- 						'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';		
+-- 			END; 		
+-- --	 		
+-- --			-- Insert New Records
+-- 			BEGIN
+		
+			
+-- 		 		EXECUTE 'INSERT INTO npsp_reporting.fact_account
+-- 		 				SELECT fa.id, current_timestamp::timestamp, gld.cy_giving_for_giving_level__c, gld.x10k_gift_in_cy__c, gld.x25k_gift_in_cy__c
+-- 		 				FROM npsp_staging.stg_fact_account gld
+-- 		 				FULL OUTER JOIN npsp_sfdc.account fa ON gld.accountid = fa.id 
+-- 		 				WHERE NOT EXISTS (
+-- 		 				SELECT 1 FROM npsp_reporting.fact_account f
+-- 		 				WHERE f.id = fa.id 
+-- 		 				)
+-- 		 				AND fa.isdeleted = FALSE' ;
+							
+-- 		 		GET DIAGNOSTICS v_inserted_row_count = ROW_COUNT;
+-- 		 		IF v_inserted_row_count = 0 THEN
+-- 		 		v_inserted_row_count :=0;
+-- 		 		END IF;
+					
+-- 				EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, recordcount, starttime, endtime) ' ||
+-- 				        'VALUES (40485813, current_date, ''Complete'', ''Insert successful'', ' ||
+-- 				        quote_literal(v_transactionid) || ', ' || v_inserted_row_count || ', ' || 
+-- 				        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+			
+-- 			EXCEPTION WHEN OTHERS THEN
+-- 			v_status := 'Failed';
+			
+		
+-- 				EXECUTE 'INSERT INTO  npsp_integration.dw_job_step_history (jobstepid, lastrun,runstatus, notes,transactionid,starttime,endtime )' ||
+-- 						'VALUES (40485813, current_date::date,''Failed'',''Update failed due to an unexpected error'','||
+-- 						quote_literal(v_transactionid) || ','||
+-- 						'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+-- 			END; 		
+			
+			
+-- 			BEGIN
+			
+				
+-- 	 			-- Deletes rows from fact account that do not exist in npsp_sfdc.account
+-- 		 		EXECUTE 'DELETE FROM npsp_reporting.fact_account 
+-- 		 				WHERE id NOT IN (SELECT id FROM npsp_sfdc.account WHERE isdeleted is true and archive__c is false)';
+							
+-- 		 		GET DIAGNOSTICS v_deleted_row_count = ROW_COUNT;
+		 	
+-- 		 		IF v_deleted_row_count = 0 THEN
+-- 		 		v_deleted_row_count :=0;
+-- 		 		END IF; 
+
+-- 		 		EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, recordcount, starttime, endtime) ' ||
+-- 				        'VALUES (40485814, current_date, ''Complete'', ''Delete successful'', ' ||
+-- 				        quote_literal(v_transactionid) || ', ' || v_deleted_row_count || ', ' || 
+-- 				        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+		 	
+
+			
+-- 			EXCEPTION WHEN OTHERS THEN
+-- 			v_status := 'Failed';
+					
+-- 				EXECUTE 'INSERT INTO  npsp_integration.dw_job_step_history (jobstepid, lastrun,runstatus, notes,transactionid,starttime,endtime )' ||
+-- 						'VALUES (40485814, current_date::date,''Failed'',''Update failed due to an unexpected error'','||
+-- 						quote_literal(v_transactionid) || ','||
+-- 						'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+-- 		 	END; 
+	 	
+	 		
+-- 	 	EXECUTE 'ANALYZE npsp_reporting.fact_account';
+	 	
+-- 	-- Finalize
+-- 	v_endtime := CURRENT_TIMESTAMP;
+-- 	IF v_status != 'Failed' THEN
+-- 	v_final_status := 'Complete';
+-- 	v_final_notes := 'Steps completed for updating the Fact Account Data Mart.';
+-- 	END IF;
+		
+-- 	-- Update log with final status
+-- 	UPDATE npsp_integration.dw_job_step_history 
+-- 	SET endtime = v_endtime, runstatus = v_final_status, notes = v_final_notes
+-- 	WHERE transactionid = v_transactionid AND runstatus = 'Started' ; 
 
 
-  END;
-  $$;
+--    END;
+--    $$;
