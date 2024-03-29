@@ -1,158 +1,273 @@
-/*
- * The purpose of this script is to load the campaign data mart and loads the following into salesforce:
- * 
-		average_gift_amount__c
-		cost_per_contact__c
-		first_response_date__c
-		last_response_date__c
-		numberofcontacts_rd__c
-		roi__c
-		total_amount_paid__c
-		total_amount_pledged__c
-		total_number_paid__c
-		total_number_pledged__c
-		total_number_solicited__c
- * */
-
-/** Watermark Interval
-If fact_account table is NULL, the date will be set to the minimum last mod date of the account object.
-Otherwise, the last modified date is based on the last modified date subtracting the selected value.
-For example, if the last mod date was 1/5/2024, the date will be 1/2/2024. This is to step to capture any missing data due.
-**/
-
-DROP TABLE IF EXISTS max_timestamp;
-CREATE TEMP TABLE max_timestamp AS 
-(SELECT 
-	CASE WHEN to_char(max(lastmodifieddate)::timestamp,'YYYY-MM-DD HH24:MM:SS') IS NULL THEN /*'2022-09-22 16:15:14.000'*/ (SELECT to_char(min(lastmodifieddate)::timestamp,'YYYY-MM-DD 00:00:00') FROM npsp_sfdc.campaign )
-ELSE to_char(max(lastmodifieddate)::timestamp - INTERVAL '3 days','YYYY-MM-DD 00:00:00') -- parameter
-END max_timestamp 
-FROM npsp_reporting.fact_campaign);
+CALL npsp_reporting.sp_fact_campaign_job();
+-- CREATE OR REPLACE PROCEDURE npsp_reporting.sp_fact_campaign_job()
+-- LANGUAGE plpgsql
+-- AS $$
+-- DECLARE
+-- 		v_starttime TIMESTAMP := CURRENT_TIMESTAMP;
+-- 	    v_endtime TIMESTAMP;
+-- 	    v_notes VARCHAR(5000) := '';
+-- 	   	v_transactionid VARCHAR(50);
+-- 	   	v_insert_timestamp TIMESTAMP;
+-- 	   	v_watermark DATE ;
+-- 	   	v_row_count INTEGER;
+-- 	   	v_inserted_row_count INTEGER ;
+-- 	 	v_updated_row_count INTEGER ;
+-- 	 	v_deleted_row_count INTEGER ;
+-- 	 	v_jobid INTEGER;
+-- 	 	v_status VARCHAR(50);
+-- 	 	v_final_status VARCHAR(50);
+-- 	 	v_final_notes VARCHAR(5000) :='';
+-- 	 	v_source_codeSQL VARCHAR(65000);
+-- 	 	v_stageSQL VARCHAR(65000) := '';
+-- 	 	v_updateSQL VARCHAR(65000) :='';
+-- 	 	v_insertSQL VARCHAR(65000):='';
+-- 	 	v_dropSQL VARCHAR(65000):='';
 
 
--- Gets data by source code
-DROP TABLE IF EXISTS npsp_staging.stg_fact_camp_opp;
-CREATE TABLE npsp_staging.stg_fact_camp_opp AS 
-SELECT
-	source_code
- 						,
-	min(closedate) first_response_date
- 						,
-	max(closedate) last_response_date
- 						,
-	sum(CASE WHEN gift_type IN ('Donation Payment', 'Pledge Payment')
- 						THEN 1
- 						ELSE 0
- 						END)total_number_paid
- 						,
-	sum(CASE WHEN gift_type IN ('Donation Payment', 'Pledge Payment')
- 						THEN amount
- 						ELSE 0
- 						END)total_amount_paid
- 						,
-	sum(CASE WHEN gift_type IN ('Donation Payment', 'Pledge')
- 						THEN 1
- 						ELSE 0
- 						END)total_number_pledged
- 						,
-	sum(CASE WHEN gift_type IN ( 'Donation Payment', 'Pledge')
- 						THEN amount
- 						ELSE 0
- 						END)total_amount_pledged
-FROM
-	ppfa_golden.golden_opportunities_npsp
-WHERE
-	source_code IS NOT NULL
-	AND max_last_updated >= (SELECT max_timestamp FROM max_timestamp)
-GROUP BY
-	source_code;
+-- BEGIN
+	
+-- 	v_starttime := CURRENT_TIMESTAMP;
+-- 	-- Gets transaction id and insert timestamp
+-- 	EXECUTE 'select transactionid, v_insert_timestamp from npsp_staging.stg_insert_timestamp' INTO v_transactionid,v_insert_timestamp;
+
+-- 	EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, starttime, endtime) ' ||
+-- 				        'VALUES (40485820, current_date, ''Started'', ''Fact Campaign Data Mart Sync started.'', ' ||
+-- 				        quote_literal(v_transactionid) || ', ' || 
+-- 				        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)'; -- ADD IN the jobstepid HERE
+			
+	
+-- 	EXECUTE 'SELECT cast(max(lastmodifieddate) as date) FROM npsp_sfdc.campaign where isdeleted = FALSE' INTO v_watermark;
+				        
+				        
+				        
+-- 	-- Returns the watermark date, that will be used to find any updates. This will determine if a full backfill is needed
+-- --	SELECT count(*) INTO v_row_count FROM npsp_reporting.fact_campaign;
+-- --    
+-- --    IF v_row_count = 0 THEN
+-- --        -- If table is empty, get the minimum lastmodifieddate
+-- --        SELECT MIN(lastmodifieddate)::DATE INTO v_watermark
+-- --        FROM npsp_sfdc.campaign
+-- --        WHERE isdeleted IS TRUE AND archive__c IS FALSE;
+-- --    ELSE
+-- --        -- Otherwise, get the maximum lastmodifieddate
+-- --        SELECT MAX(lastmodifieddate)::DATE INTO v_watermark
+-- --        FROM npsp_sfdc.campaign
+-- --        WHERE isdeleted IS TRUE AND archive__c IS FALSE;
+-- --    END IF;
+
+-- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_camp_opp';
+-- 	v_source_codeSQL := '-- Gets data by source code
+						
+-- 						CREATE TABLE npsp_staging.stg_fact_camp_opp AS 
+-- 						SELECT
+-- 							source_code
+-- 						 						,
+-- 							min(closedate) first_response_date
+-- 						 						,
+-- 							max(closedate) last_response_date
+-- 						 						,
+-- 							sum(CASE WHEN gift_type IN (''Donation Payment'', ''Pledge Payment'')
+-- 						 						THEN 1
+-- 						 						ELSE 0
+-- 						 						END)total_number_paid
+-- 						 						,
+-- 							sum(CASE WHEN gift_type IN (''Donation Payment'', ''Pledge Payment'')
+-- 						 						THEN amount
+-- 						 						ELSE 0
+-- 						 						END)total_amount_paid
+-- 						 						,
+-- 							sum(CASE WHEN gift_type IN (''Donation Payment'', ''Pledge'')
+-- 						 						THEN 1
+-- 						 						ELSE 0
+-- 						 						END)total_number_pledged
+-- 						 						,
+-- 							sum(CASE WHEN gift_type IN ( ''Donation Payment'', ''Pledge'')
+-- 						 						THEN amount
+-- 						 						ELSE 0
+-- 						 						END)total_amount_pledged
+-- 						FROM
+-- 							ppfa_golden.golden_opportunities_npsp
+-- 						WHERE
+-- 							source_code IS NOT NULL
+-- 							AND cast(max_last_updated as date) >='|| v_watermark ||
+-- 						'GROUP BY
+-- 							source_code';
+						
+-- 	EXECUTE v_source_codeSQL;
+	
+-- 	EXECUTE 'DROP TABLE IF EXISTS npsp_staging.stg_fact_campaign';
+-- 	v_stageSQL := 'CREATE TABLE npsp_staging.stg_fact_campaign AS 
+-- 					SELECT a.id
+-- 					,current_timestamp::timestamp AS lastmodifieddate
+-- 					,(b.total_amount_paid/nullif(b.total_number_paid,0))::decimal(18,2) average_gift_amount__c
+-- 					,((a.actualcost/1000) * a.numbersent / nullif(a.numbersent,0))::decimal(18,2) cost_per_contact__c
+-- 					,b.first_response_date::date first_response_date__c
+-- 					,b.last_response_date::date last_response_date__c
+-- 					,nvl(a.numbersent,0) numberofcontacts_rd__c
+-- 					,((b.total_amount_paid - a.actualcost)/nullif(a.actualcost,0))::decimal(18,2) roi__c
+-- 					,b.total_amount_paid::decimal(18,2) total_amount_paid__c
+-- 					,b.total_amount_pledged::decimal(18,2) total_amount_pledged__c
+-- 					,b.total_number_paid::integer total_number_paid__c
+-- 					,b.total_number_pledged::integer total_number_pledged__c
+-- 					,nvl(a.numbersent,0) total_number_solicited__c
+-- 					FROM npsp_staging.stg_fact_camp_opp b
+-- 					LEFT JOIN npsp_sfdc.campaign a
+-- 					ON b.source_code = a.name';
+				
+-- 	EXECUTE v_stageSQL;
 
 	
+
+-- 	EXECUTE 'ALTER TABLE npsp_staging.stg_fact_campaign ALTER DISTKEY id';
+
+
+-- 			BEGIN 
+-- 			v_updateSQL := '-- Updates the fact campaign table
+-- 								UPDATE npsp_reporting.fact_campaign 
+-- 								SET 
+-- 									lastmodifieddate = npsp_staging.stg_fact_campaign.lastmodifieddate ,
+-- 									average_gift_amount__c = npsp_staging.stg_fact_campaign.average_gift_amount__c ,
+-- 									cost_per_contact__c = npsp_staging.stg_fact_campaign.cost_per_contact__c ,
+-- 									first_response_date__c = npsp_staging.stg_fact_campaign.first_response_date__c ,
+-- 									last_response_date__c = npsp_staging.stg_fact_campaign.last_response_date__c ,
+-- 									numberofcontacts_rd__c = npsp_staging.stg_fact_campaign.numberofcontacts_rd__c ,
+-- 									roi__c = npsp_staging.stg_fact_campaign.roi__c ,
+-- 									total_amount_paid__c = npsp_staging.stg_fact_campaign.total_amount_paid__c ,
+-- 									total_amount_pledged__c = npsp_staging.stg_fact_campaign.total_amount_pledged__c ,
+-- 									total_number_paid__c = npsp_staging.stg_fact_campaign.total_number_paid__c ,
+-- 									total_number_pledged__c = npsp_staging.stg_fact_campaign.total_number_pledged__c ,
+-- 									total_number_solicited__c = npsp_staging.stg_fact_campaign.total_number_solicited__c 
+-- 								FROM npsp_staging.stg_fact_campaign 
+-- 								WHERE npsp_reporting.fact_campaign.id = npsp_staging.stg_fact_campaign.id 
+-- 								AND (
+-- 								npsp_reporting.fact_campaign.average_gift_amount__c <> npsp_staging.stg_fact_campaign.average_gift_amount__c 
+-- 								AND npsp_reporting.fact_campaign.cost_per_contact__c <> npsp_staging.stg_fact_campaign.cost_per_contact__c OR npsp_reporting.fact_campaign.cost_per_contact__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.first_response_date__c <> npsp_staging.stg_fact_campaign.first_response_date__c OR npsp_reporting.fact_campaign.first_response_date__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.last_response_date__c <> npsp_staging.stg_fact_campaign.last_response_date__c OR npsp_reporting.fact_campaign.last_response_date__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.numberofcontacts_rd__c <> npsp_staging.stg_fact_campaign.numberofcontacts_rd__c OR npsp_reporting.fact_campaign.numberofcontacts_rd__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.roi__c <> npsp_staging.stg_fact_campaign.roi__c OR npsp_reporting.fact_campaign.roi__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.total_amount_paid__c <> npsp_staging.stg_fact_campaign.total_amount_paid__c OR npsp_reporting.fact_campaign.total_amount_paid__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.total_amount_pledged__c <> npsp_staging.stg_fact_campaign.total_amount_pledged__c OR npsp_reporting.fact_campaign.total_amount_pledged__c IS null
+-- 								AND	npsp_reporting.fact_campaign.total_number_paid__c <> npsp_staging.stg_fact_campaign.total_number_paid__c OR npsp_reporting.fact_campaign.total_number_paid__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.total_number_pledged__c <> npsp_staging.stg_fact_campaign.total_number_pledged__c OR npsp_reporting.fact_campaign.total_number_pledged__c IS NULL 
+-- 								AND	npsp_reporting.fact_campaign.total_number_solicited__c <> npsp_staging.stg_fact_campaign.total_number_solicited__c OR npsp_reporting.fact_campaign.total_number_solicited__c IS NULL)';
+							
+							
+-- 			EXECUTE v_updateSQL;
+		
+-- 			GET DIAGNOSTICS v_updated_row_count := ROW_COUNT;
+			
+-- 			IF v_updated_row_count = 0 THEN 
+-- 				 		v_updated_row_count :=0;
+-- 				 		END IF;
+				 		
+				 	
+-- 						EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, recordcount, starttime, endtime) ' ||
+-- 						        'VALUES (40485820, current_date, ''Complete'', ''Update successful'', ' ||
+-- 						        quote_literal(v_transactionid) || ', ' || v_updated_row_count || ', ' || 
+-- 						        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+		
+						
+						
+-- 					EXCEPTION WHEN OTHERS THEN
+-- 					v_status := 'Failed';
+					
+					
+-- 						EXECUTE 'INSERT INTO  npsp_integration.dw_job_step_history (jobstepid, lastrun,runstatus, notes,transactionid,starttime,endtime )' ||
+-- 								'VALUES (40485820, current_date::date,''Failed'',''Update failed due to an unexpected error'','||
+-- 								quote_literal(v_transactionid) || ','||
+-- 								'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+-- 			END;
+
+			
+-- 			BEGIN -- Insert Records
+-- 					v_insertSQL := '-- Inserts any new campaign records
+-- 										INSERT
+-- 											INTO
+-- 											npsp_reporting.fact_campaign
+-- 										SELECT
+-- 											fc.id,
+-- 											fc.lastmodifieddate,
+-- 											fc.average_gift_amount__c,
+-- 											fc.cost_per_contact__c,
+-- 											fc.first_response_date__c,
+-- 											fc.last_response_date__c,
+-- 											fc.numberofcontacts_rd__c,
+-- 											fc.roi__c,
+-- 											fc.total_amount_paid__c,
+-- 											fc.total_amount_pledged__c,
+-- 											fc.total_number_paid__c,
+-- 											fc.total_number_pledged__c,
+-- 											fc.total_number_solicited__c
+-- 										FROM
+-- 											npsp_staging.stg_fact_campaign fc
+-- 										WHERE
+-- 											id NOT IN (
+-- 											SELECT
+-- 												id
+-- 											FROM
+-- 												npsp_sfdc.campaign)';
+-- 					EXECUTE v_insertSQL;
+-- 					GET DIAGNOSTICS v_inserted_row_count = ROW_COUNT;
+-- 						 		IF v_inserted_row_count = 0 THEN
+-- 						 		v_inserted_row_count :=0;
+-- 						 		END IF;
+									
+-- 								EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, recordcount, starttime, endtime) ' ||
+-- 								        'VALUES (40485821, current_date, ''Complete'', ''Insert successful'', ' ||
+-- 								        quote_literal(v_transactionid) || ', ' || v_inserted_row_count || ', ' || 
+-- 								        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+							
+-- 							EXCEPTION WHEN OTHERS THEN
+-- 							v_status := 'Failed';
+							
+						
+-- 								EXECUTE 'INSERT INTO  npsp_integration.dw_job_step_history (jobstepid, lastrun,runstatus, notes,transactionid,starttime,endtime )' ||
+-- 										'VALUES (40485821, current_date::date,''Failed'',''Update failed due to an unexpected error'','||
+-- 										quote_literal(v_transactionid) || ','||
+-- 										'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+-- 			END;
+		
+-- 			BEGIN 
+-- 					-- Deleted Records
+-- 					v_deleteSQL := 'DELETE FROM npsp_reporting.fact_campaign
+-- 									WHERE id NOT IN (SELECT id FROM npsp_sfdc.campaign WHERE isdeleted is true and archive__c is false )';
+-- 					EXECUTE v_deleteSQL;
+-- 					GET DIAGNOSTICS v_deleted_row_count = ROW_COUNT;
+						 	
+-- 						 		IF v_deleted_row_count = 0 THEN
+-- 						 		v_deleted_row_count :=0;
+-- 						 		END IF; 
+				
+-- 						 		EXECUTE 'INSERT INTO npsp_integration.dw_job_step_history (jobstepid, lastrun, runstatus, notes, transactionid, recordcount, starttime, endtime) ' ||
+-- 								        'VALUES (40485822, current_date, ''Complete'', ''Delete successful'', ' ||
+-- 								        quote_literal(v_transactionid) || ', ' || v_deleted_row_count || ', ' || 
+-- 								        'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+						 	
+				
+							
+-- 							EXCEPTION WHEN OTHERS THEN
+-- 							v_status := 'Failed';
+							
+						
+-- 								EXECUTE 'INSERT INTO  npsp_integration.dw_job_step_history (jobstepid, lastrun,runstatus, notes,transactionid,starttime,endtime )' ||
+-- 										'VALUES (40485822, current_date::date,''Failed'',''Update failed due to an unexpected error'','||
+-- 										quote_literal(v_transactionid) || ','||
+-- 										'CAST(' || quote_literal(v_starttime) || ' AS TIMESTAMP), current_timestamp)';
+				
+-- 			END;
+		
+-- 	-- Finalize
+-- 	v_endtime := CURRENT_TIMESTAMP;
+-- 	IF v_status != 'Failed' THEN
+-- 	v_final_status := 'Complete';
+-- 	v_final_notes := 'Steps completed for updating the Fact Campaign Data Mart.';
+-- 	END IF;
+		
+-- 	-- Update log with final status
+-- 	UPDATE npsp_integration.dw_job_step_history 
+-- 	SET endtime = v_endtime, runstatus = v_final_status, notes = v_final_notes
+-- 	WHERE transactionid = v_transactionid AND runstatus = 'Started' ;
 	
-DROP TABLE npsp_staging.stg_fact_campaign;
-CREATE TABLE npsp_staging.stg_fact_campaign AS 
-SELECT a.id
-,current_timestamp::timestamp AS lastmodifieddate
-,(b.total_amount_paid/nullif(b.total_number_paid,0))::decimal(18,2) average_gift_amount__c
-,((a.actualcost/1000) * a.numbersent / nullif(a.numbersent,0))::decimal(18,2) cost_per_contact__c
-,b.first_response_date::date first_response_date__c
-,b.last_response_date::date last_response_date__c
-,nvl(a.numbersent,0) numberofcontacts_rd__c
-,((b.total_amount_paid - a.actualcost)/nullif(a.actualcost,0))::decimal(18,2) roi__c
-,b.total_amount_paid::decimal(18,2) total_amount_paid__c
-,b.total_amount_pledged::decimal(18,2) total_amount_pledged__c
-,b.total_number_paid::integer total_number_paid__c
-,b.total_number_pledged::integer total_number_pledged__c
-,nvl(a.numbersent,0) total_number_solicited__c
-FROM npsp_staging.stg_fact_camp_opp b
-LEFT JOIN npsp_sfdc.campaign a
-ON b.source_code = a.name	
-;
-
-
--- Add a distribution key
-ALTER TABLE npsp_staging.stg_fact_campaign ALTER DISTKEY id;
-
-
--- Updates the fact campaign table
-UPDATE npsp_reporting.fact_campaign 
-SET 
-	lastmodifieddate = npsp_staging.stg_fact_campaign.lastmodifieddate ,
-	average_gift_amount__c = npsp_staging.stg_fact_campaign.average_gift_amount__c ,
-	cost_per_contact__c = npsp_staging.stg_fact_campaign.cost_per_contact__c ,
-	first_response_date__c = npsp_staging.stg_fact_campaign.first_response_date__c ,
-	last_response_date__c = npsp_staging.stg_fact_campaign.last_response_date__c ,
-	numberofcontacts_rd__c = npsp_staging.stg_fact_campaign.numberofcontacts_rd__c ,
-	roi__c = npsp_staging.stg_fact_campaign.roi__c ,
-	total_amount_paid__c = npsp_staging.stg_fact_campaign.total_amount_paid__c ,
-	total_amount_pledged__c = npsp_staging.stg_fact_campaign.total_amount_pledged__c ,
-	total_number_paid__c = npsp_staging.stg_fact_campaign.total_number_paid__c ,
-	total_number_pledged__c = npsp_staging.stg_fact_campaign.total_number_pledged__c ,
-	total_number_solicited__c = npsp_staging.stg_fact_campaign.total_number_solicited__c 
-FROM npsp_staging.stg_fact_campaign 
-WHERE npsp_reporting.fact_campaign.id = npsp_staging.stg_fact_campaign.id 
-AND (
-npsp_reporting.fact_campaign.average_gift_amount__c <> npsp_staging.stg_fact_campaign.average_gift_amount__c 
-AND npsp_reporting.fact_campaign.cost_per_contact__c <> npsp_staging.stg_fact_campaign.cost_per_contact__c OR npsp_reporting.fact_campaign.cost_per_contact__c IS NULL 
-AND	npsp_reporting.fact_campaign.first_response_date__c <> npsp_staging.stg_fact_campaign.first_response_date__c OR npsp_reporting.fact_campaign.first_response_date__c IS NULL 
-AND	npsp_reporting.fact_campaign.last_response_date__c <> npsp_staging.stg_fact_campaign.last_response_date__c OR npsp_reporting.fact_campaign.last_response_date__c IS NULL 
-AND	npsp_reporting.fact_campaign.numberofcontacts_rd__c <> npsp_staging.stg_fact_campaign.numberofcontacts_rd__c OR npsp_reporting.fact_campaign.numberofcontacts_rd__c IS NULL 
-AND	npsp_reporting.fact_campaign.roi__c <> npsp_staging.stg_fact_campaign.roi__c OR npsp_reporting.fact_campaign.roi__c IS NULL 
-AND	npsp_reporting.fact_campaign.total_amount_paid__c <> npsp_staging.stg_fact_campaign.total_amount_paid__c OR npsp_reporting.fact_campaign.total_amount_paid__c IS NULL 
-AND	npsp_reporting.fact_campaign.total_amount_pledged__c <> npsp_staging.stg_fact_campaign.total_amount_pledged__c OR npsp_reporting.fact_campaign.total_amount_pledged__c IS null
-AND	npsp_reporting.fact_campaign.total_number_paid__c <> npsp_staging.stg_fact_campaign.total_number_paid__c OR npsp_reporting.fact_campaign.total_number_paid__c IS NULL 
-AND	npsp_reporting.fact_campaign.total_number_pledged__c <> npsp_staging.stg_fact_campaign.total_number_pledged__c OR npsp_reporting.fact_campaign.total_number_pledged__c IS NULL 
-AND	npsp_reporting.fact_campaign.total_number_solicited__c <> npsp_staging.stg_fact_campaign.total_number_solicited__c OR npsp_reporting.fact_campaign.total_number_solicited__c IS NULL);
-
-
--- Inserts any new campaign records
-INSERT
-	INTO
-	npsp_reporting.fact_campaign
-SELECT
-	fc.id,
-	fc.lastmodifieddate,
-	fc.average_gift_amount__c,
-	fc.cost_per_contact__c,
-	fc.first_response_date__c,
-	fc.last_response_date__c,
-	fc.numberofcontacts_rd__c,
-	fc.roi__c,
-	fc.total_amount_paid__c,
-	fc.total_amount_pledged__c,
-	fc.total_number_paid__c,
-	fc.total_number_pledged__c,
-	fc.total_number_solicited__c
-FROM
-	npsp_staging.stg_fact_campaign fc
-WHERE
-	id NOT IN (
-	SELECT
-		id
-	FROM
-		npsp_sfdc.campaign);
-	
-
---Deletes rows that do not exist in the salesforce table		
-DELETE FROM npsp_reporting.fact_campaign
-WHERE id NOT IN (SELECT id FROM npsp_sfdc.campaign)
-;
+-- END;
+-- $$;
