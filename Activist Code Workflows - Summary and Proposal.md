@@ -653,17 +653,20 @@ graph TD
     subgraph Sources["Source Tables"]
         ht["ppfa_golden.high_touch<br/><i>1 row/ppid</i>"]
         pg["NPSP planned giving tables"]
-        gm["ppfa_golden.golden_membership<br/><i>1 row/(ppid, type)</i>"]
     end
 
-    subgraph NEW["★ NEW — Unified Sync Script"]
-        defs["Step 1: Definition Blocks<br/><i>who should have each code</i>"]
-        suppress["Step 2: Suppressions<br/><i>who to exclude (per code)</i>"]
-        resolve["Step 3: Identity Resolution<br/><i>ppid → vanid via customer graph</i>"]
-        committee["Step 4: Committee Filtering<br/><i>national/active or affiliate</i>"]
-        diff["Step 5: Diff vs EA<br/><i>add: should have but doesn't<br/>remove: has but shouldn't</i>"]
-        dedup["Step 6: Dedup<br/><i>correct merged vanids</i>"]
-        write["Step 7: Write Output"]
+    subgraph SCRIPT1["★ Script 1: Definitions (code-specific, edit here)"]
+        defs["Definition Blocks<br/><i>who should have each code</i>"]
+        suppress["Suppressions<br/><i>who to exclude (per code, incl. deceased)</i>"]
+    end
+
+    bridge["easf.ac_sync_should_have<br/><i>(ppid, code_name)</i>"]
+
+    subgraph SCRIPT2["★ Script 2: Sync Engine (common, don't edit)"]
+        resolve["Identity Resolution<br/><i>ppid → vanid via customer graph</i>"]
+        committee["Committee Filtering<br/><i>national/active or affiliate</i>"]
+        diff["Diff vs EA<br/><i>add: should have but doesn't<br/>remove: has but shouldn't</i>"]
+        dedup["Dedup<br/><i>correct merged vanids</i>"]
     end
 
     output["★ easf.activist_code_sync<br/><i>1 row/(vanid, code, action)</i>"]
@@ -672,10 +675,10 @@ graph TD
 
     ht --> defs
     pg --> defs
-    gm --> defs
     defs --> suppress
-    suppress --> resolve
+    suppress --> bridge
 
+    bridge --> resolve
     ccg["current_customer_graph"] --> resolve
     resolve --> committee
     cc["contactscommittees_mym<br/>+ committeeid_translation"] --> committee
@@ -683,18 +686,21 @@ graph TD
     ac["contactsactivistcodes_mym<br/><i>current EA state</i>"] --> diff
     diff --> dedup
     dd["contactsdeduped_mym"] --> dedup
-    dedup --> write
-    write --> output
+    dedup --> output
     output --> push
     push --> EA
 
-    style NEW fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
-    style output fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style SCRIPT1 fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style SCRIPT2 fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style bridge fill:#cce5ff,stroke:#0066cc,stroke-width:2px
+    style output fill:#cce5ff,stroke:#0066cc,stroke-width:2px
 ```
 
 **New pieces** (★):
-1. **Definition blocks** in unified SQL script — ~10 lines per code, replacing 5+ separate scripts
-2. **`easf.activist_code_sync`** — single output table, replacing 4 tables with different schemas
+1. **Script 1 (`step1_definitions.sql`)** — code-specific definitions + suppressions. ~10 lines per code. Edit here to add/remove codes.
+2. **Script 2 (`step2_sync_engine.sql`)** — common logic: identity resolution, committee filtering, diff, dedup. Doesn't change when codes are added.
+3. **`easf.ac_sync_should_have`** — bridge table between the two scripts (ppid, code_name)
+4. **`easf.activist_code_sync`** — single output table, replacing 4 tables with different schemas
 
 ---
 
