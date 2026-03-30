@@ -706,41 +706,56 @@ graph TD
 
 # Appendix C: Complete Activist Code Catalog
 
-## SF-Sourced Codes (in scope)
+## SF-Sourced Codes — In Scope for Unified Sync
 
-| Code Name | Code ID | SF Attribute | Workflow | Suppresses DFSE? | Blocks Affiliates? |
-|-----------|---------|-------------|----------|:-:|:-:|
-| High Touch | 4484811 | Any `high_touch` row | 2.1 (active) | No | **Yes** |
-| Mid-Level | 4402903 | `giving_level ILIKE '%mid%'` (not major/VIP) | 2.1 (active) | No | No |
-| Mid-Level VIP | 4444102 | `giving_level ILIKE '%vip%'` | 2.1 (active) | No | No |
-| Legacy Society | 4658459 | NPSP: Recognition Program / Federation Wide Legacy Society | 2.2 (planned) | ? | ? |
-| Planned Giving | 4490504 | NPSP: CGA, LIG, Bequest | 2.2 (planned) | ? | ? |
-| PG Action Fund | 4729913 | PG donors w/ Action Fund estate beneficiary | Planned | ? | ? |
-| Corporate | 4490499 | `high_touch.corporations = 'Managed Account'` | Manual → Planned | **Yes** | ? |
-| Foundations | 4490505 | `high_touch.foundation = 'Managed Account'` | Manual → Planned | **Yes** | ? |
-| National Board | 4490261 | `high_touch.board_member LIKE '%National%'` | Manual → Planned | **Yes** | ? |
-| PMG | 4490493 | `managing_program` / `prospect_management` | Manual → Planned | **Yes** | ? |
-| PMG CFI PPAZ | 4490494 | `portfolio` + CFP affiliate | Manual → Planned | **Yes** | ? |
-| PMG CFI PPFL | 4737206 | " | Manual → Planned | **Yes** | ? |
-| PMG CFI PPGP | 5488495 | " | Manual → Planned | **Yes** | ? |
-| PMG CFI PPHP | 4961475 | " | Manual → Planned | **Yes** | ? |
-| PMG CFI PPIL | 4490495 | " | Manual → Planned | **Yes** | ? |
-| PMG CFI PPKeystone | 4576862 | " | Manual → Planned | **Yes** | ? |
-| PMG CFI PPSE | 4490497 | " | Manual → Planned | **Yes** | ? |
-| PMG CFI PPSNE | 4961474 | " | Manual → Planned | **Yes** | ? |
-| PMG CFI PPSP | 4490498 | " | Manual → Planned | **Yes** | ? |
-| PMG: No Email | 4644776 | N/A (team preference) | Manual (stays manual) | PMG's own | ? |
-| AF Lifetime | 4304186 | `golden_membership` (Lifetime, active) | 2.4 (active) | ? | ? |
-| Hustle C4→Votes | 4475017 | Survey Q 535749 response | 2.5 (likely inactive) | ? | ? |
-| Hustle C4 Opt-in | 4132411 | Survey Q 175872/R 745599 | 2.5 (likely inactive) | ? | ? |
-| Transitional | 4490260 | ? | Manual — active | ? | ? |
+| Code Name | Code ID | SF Attribute | Current Status | Unified Sync Phase | Suppresses DFSE? | Blocks Affiliates? |
+|-----------|---------|-------------|----------------|-------------------|:-:|:-:|
+| High Touch | 4484811 | Any `high_touch` row + all PPFA PG donors | 2.1 (active) | Phase 1 | No | **Yes** |
+| Mid-Level | 4402903 | `giving_level` or `managing_program` (PC — see note) | 2.1 (active) | Phase 1 | No | No |
+| Mid-Level VIP | 4444102 | `giving_level` or `managing_program` (PC VIP — see note) | 2.1 (active, **0 rows** — needs investigation) | Phase 1 | No | No |
+| Legacy Society | 4658459 | NPSP: `attribute_category = 'Recognition Program Listing'`, `type = 'Federation Wide Legacy Society'` | 2.2 (paused) | Phase 4 | ? | ? |
+| Planned Giving | 4490504 | NPSP: CGA, LIG, Bequest (PPFA designation required; affiliate-only excluded) | 2.2 (paused) | Phase 4 | ? | ? |
 
-## Notes
+**Notes:**
+- **Mid-Level definition discrepancy**: Current script uses `giving_level`; business definition is President's Circle (PC) via `managing_program`. Row counts differ slightly — needs validation before unified sync.
+- **High Touch sources combined**: Golden HT table (all rows) + all PPFA PG donors. Single definition block prevents the nightly add/remove conflict between HT/ML and PG pipelines.
+- **PG remove logic**: Being added via [DSA-1848](https://app.asana.com/1/8719232879967/project/1213578586282357/task/1211457702886338?focus=true). PG code removed when no active PG records remain; Legacy Society removed when attribute is end-dated.
+- **PG designation filter**: Confirmed — all segments require PPFA designation. Affiliate-only planned gifts excluded.
 
-- Full query results in `Reference - Query Results.md`
-- **PG Action Fund** (4729913): undocumented in workflow scripts, needs definition criteria
-- **PPOL: No Comm**: not part of SF→EA sync but interacts with it (see Known Issues)
-- **4 PMG CFI affiliates** found beyond earlier docs: PPFL, PPGP, PPHP, PPSNE
+## SF-Sourced Codes — Status TBD (Open Questions)
+
+| Code Name | Code ID | SF Attribute | Current Status | Notes |
+|-----------|---------|-------------|----------------|-------|
+| Corporate | 4490499 | `managing_program = 'Corporation'` | Data automated in golden HT table | Open Q: is the specific code applied separately, or covered by general HT code? |
+| Foundations | 4490505 | `account_team_member_v.team = 'Foundations'` | Data automated in golden HT table | Same as above |
+| National Board | 4490261 | `affiliation_v.type ILIKE '%board%'` | Data automated in golden HT table | Same as above |
+| PMG | 4490493 | `managing_program` / `prospect_management` | Manual (2.6) — to be replaced by CFP sync (2.3) | PMG CFI workflow already in prod |
+| PG Action Fund | 4729913 | PG donors w/ Action Fund estate beneficiary | Planned | Undocumented — needs definition criteria |
+| Transitional | 4490260 | ? | Active (1,148 vanids) | Unknown SF attribute — include or keep manual? |
+
+## PMG CFI Codes — In Prod (Manual Process, to Be Replaced by CFP Sync)
+
+| Code Name | Code ID |
+|-----------|---------|
+| PMG CFI PPAZ | 4490494 |
+| PMG CFI PPFL | 4737206 |
+| PMG CFI PPGP | 5488495 |
+| PMG CFI PPHP | 4961475 |
+| PMG CFI PPIL | 4490495 |
+| PMG CFI PPKeystone | 4576862 |
+| PMG CFI PPSE | 4490497 |
+| PMG CFI PPSNE | 4961474 |
+| PMG CFI PPSP | 4490498 |
+
+## Out of Scope
+
+| Code Name | Code ID | Reason |
+|-----------|---------|--------|
+| PMG: No Email | 4644776 | Team preference, not data-driven — stays manual |
+| AF Lifetime | 4304186 | Separate workflow (2.4) — uses tracker table + survey questions |
+| Hustle C4→Votes | 4475017 | Likely inactive — pending decommission confirmation |
+| Hustle C4 Opt-in | 4132411 | Likely inactive — pending decommission confirmation |
+| EA-only codes | — | Not sourced from SF data |
 
 ---
 
