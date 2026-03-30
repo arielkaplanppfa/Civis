@@ -85,7 +85,7 @@ Replace the patchwork of separate processes with **one system** that manages all
 | Phase | What |
 |-------|------|
 | **1 — Build** | Build the unified system with Mid-Level + High Touch codes (replacing the existing automated sync) |
-| **2 — Validation** | Run old and new systems side-by-side to validate they produce the same results |
+| **2 — Validate** | Run old and new systems side-by-side to validate they produce the same results |
 | **3 — Cutover** | Switch over to the new system for ML + HT. Retire old scripts. |
 | **4 — Expand** | Add Planned Giving codes to the unified system |
 | **5 — Expand** | Add CFP Affiliate codes |

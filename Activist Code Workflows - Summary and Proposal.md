@@ -1,7 +1,7 @@
 # Activist Code Workflows — Summary & Unified SF→EA Sync Proposal
 
-**Ticket:** DSA-3433
-**Date:** 2026-03-24
+**Ticket:** [DSA-3433](https://app.asana.com/1/8719232879967/project/1213578586282357/task/1213737458627724?focus=true)
+**Date:** 2026-03-30
 **Status:** Research / Discovery
 
 ## Table of Contents
@@ -464,17 +464,17 @@ One Civis workflow that:
 
 | Phase | What | Effort |
 |-------|------|--------|
-| **Phase 1 — Build** | Create `easf.activist_code_sync` output table. Write unified SQL script with definition blocks (Mid-Level + High Touch) and sync engine. | Medium |
-| **Phase 2 — Validate** | Run new sync in parallel with existing workflow. Validate by comparing row counts per code and diffing vanid sets per code between old and new outputs. Investigate any discrepancies before proceeding. | Low |
-| **Phase 3 — Cutover** | Cut over Mid-Level + High Touch to new workflow. Decommission old scripts. | Low |
-| **Phase 4 — Expand** | Add Planned Giving definition blocks to the unified script. | Low |
-| **Phase 5 — Expand** | Add CFP Affiliate definition blocks. | Low |
+| **1 — Build** | Create `easf.activist_code_sync` output table. Write unified SQL script with definition blocks (Mid-Level + High Touch) and sync engine. | Medium |
+| **2 — Validate** | Run new sync in parallel with existing workflow. Validate by comparing row counts per code and diffing vanid sets per code between old and new outputs. Investigate any discrepancies before proceeding. | Low |
+| **3 — Cutover** | Cut over Mid-Level + High Touch to new workflow. Decommission old scripts. | Low |
+| **4 — Expand** | Add Planned Giving definition blocks to the unified script. | Low |
+| **5 — Expand** | Add CFP Affiliate definition blocks. | Low |
 
 ### Scope
 
 **Not in scope for the unified sync:**
 - **Action Fund membership (2.4):** Uses a tracker table pattern and survey questions (not just activist codes). Remains a separate workflow.
-- **Contributing membership (2.4):** Uses survey question 203939/860300 instead of an activist code. Stays with AF workflow.
+- **Contributing membership (2.4):** Uses survey question 203939/860303 instead of an activist code. Stays with AF workflow.
 - **Hustle Rentals (2.5):** Likely inactive. Cross-committee push with inline diffing against survey responses. Pending decommission confirmation from DFSE.
 - **PMG: No Email (4644776):** Team preference, stays manual.
 - **EA-only codes:** Codes not sourced from upstream data are out of scope.
