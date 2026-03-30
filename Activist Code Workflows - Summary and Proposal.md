@@ -6,15 +6,17 @@
 
 ## Table of Contents
 
-1. Summary
-2. Inventory of Existing Workflows — 2.0 Golden HT Table | 2.1 Mid-Level & HT (Active) | 2.2 PG (Planned) | 2.3 CFP Affiliate (Planned) | 2.4 Action Fund (Active) | 2.5 Hustle Rentals (Likely Inactive) | 2.6 Manual | 2.7 Operational
-3. Comparison Matrix
-4. Shared Infrastructure & Key Differences
-5. Proposal: Unified SF→EA Sync — Design | Definitions | Sync Engine | Worked Example | Push Workflow | What Changes | Migration | Not in Scope
-6. Open Questions
-7. File Inventory
+1. [Summary](#1-summary)
+2. [Inventory of Existing Workflows](#2-inventory-of-existing-activist-code-workflows)
+   - [2.0 Golden HT Table](#20-golden-high-touch-table-upstream) | [2.1 Mid-Level & HT](#21-mid-level--high-touch-activist-code-sync-active--dsa-1848) | [2.2 PG](#22-planned-giving-pg-activist-codes-planned--dsa-1845) | [2.3 CFP Affiliate](#23-cfp-affiliate-activist-code-sync-planned-not-yet-coded--dsa-1656) | [2.4 Action Fund](#24-action-fund-membership-updates-active) | [2.5 Hustle Rentals](#25-hustle-rentals-opt-in-activist-codes-likely-inactive) | [2.6 Manual](#26-manual-processes) | [2.7 Operational](#27-operational-details)
+3. [Comparison Matrix](#3-comparison-matrix-sfea-workflows-only)
+4. [Shared Infrastructure & Key Differences](#4-shared-infrastructure--key-differences)
+5. [Proposal: Unified SF→EA Sync](#5-proposal-unified-sfea-sync)
+   - [5.1 Design Principles](#51-design-principles) | [5.2 Definitions](#52-script-1-definitions-step1_definitionssql) | [5.3 Sync Engine](#53-script-2-sync-engine-step2_sync_enginesql) | [5.4 Worked Example](#54-worked-example-mid-level-4402903) | [5.5 EA Push](#55-ea-push-single-workflow) | [5.6 What Changes](#56-what-changes-vs-today) | [5.7 Migration](#57-migration-path)
+6. [Open Questions](#6-open-questions)
+7. [File Inventory](#7-file-inventory)
 
-**Appendices:** A. Key Concepts | B. Data Flow Diagram | C. Activist Code Catalog | D. Reference: Data Pipeline & Tables
+**Appendices:** [A. Key Concepts](#appendix-a-key-concepts) | [B. Data Flow Diagram](#appendix-b-data-flow-diagram) | [C. Activist Code Catalog](#appendix-c-complete-activist-code-catalog) | [D. Reference: Data Pipeline & Tables](#appendix-d-reference--data-pipeline--tables)
 
 ---
 
@@ -250,63 +252,43 @@ The PG pipeline uses `dfse_ads.allsupporters` as an intermediary for vanid resol
 
 ## 5.1 Design Principles
 
-1. **One SQL script, two sections**: a **definitions section** (edit here — what codes exist, who should have them) and a **sync engine** (don't edit — shared logic for all codes)
+1. **Two SQL scripts**: **Script 1 — Definitions** (edit here — who should have each code, per-code suppressions incl. deceased) and **Script 2 — Sync Engine** (don't edit — identity resolution, committee filtering, diff, dedup)
 2. **Adding a new code = adding a definition block**: copy a template, fill in the source query and suppression
 3. **Single output table**: all codes write to one `easf.activist_code_sync` table
 4. **Explicit everything**: suppressions, committee scope visible as labeled blocks — not buried in joins
 
-## 5.2 Layer 1: Code Definitions (top of script)
+## 5.2 Script 1: Definitions (`step1_definitions.sql`)
 
 Each activist code gets **exactly one definition block**. To add a new code, copy a block and edit the queries. To disable, comment it out.
 
 **Constraint: one definition per code.** Each activist code ID must appear in exactly one `should_have_*` table. If multiple sources contribute to the same code (e.g., High Touch comes from both the golden HT table and PG segments), they must be UNIONed into a single definition block. This prevents the conflict where separate pipelines add/remove the same code independently.
 
-> **Note:** `{pg_segment_table}` refers to the PG segment staging table built upstream — currently `lists_audiences_segments.digital_plannedgiving_activistcodes`. This will be replaced with the actual table name in the final script.
->
-> **Schema mismatch (2026-03-26):** The definition blocks below reference columns (`legacy_society`, `bequest_intent`, `bequest_inquiry`, `lig_established`, `lig_inquiry`, `cga`) that do NOT exist in the current production table. The actual table has only 8 columns: `vanid`, `contact_id`, `account_id`, `rc_bios__end_date`, `delete_flag`, `legacysociety`, `hightouch`, `plannedgiving`. The table is also currently empty (PG workflow paused). The definition blocks may need to be rewritten to query NPSP source tables directly, or the PG build script needs to be updated to output the expected columns.
+
+**Example 1: Simple definition (no suppressions)**
 
 ```sql
--- ============================================================
--- CODE DEFINITIONS (edit here)
--- Each block defines: who should have this code, who to exclude
--- RULE: each activist code ID must appear in exactly one block.
---       If multiple sources feed a code, UNION them here.
--- ============================================================
-
 -- ---------- HIGH TOUCH (4484811) ----------
 -- Combined from: golden HT table (all rows) + PG segments (qualifying donors).
--- Prevents affiliate sharing.
--- Sources: create_add_and_remove_high_touch_activist_code_table.sql,
---          planned_giving_pg_digital_lists...sql lines 157-182
 CREATE TEMP TABLE should_have_hightouch AS (
-    -- Golden HT: all donors in the high_touch table
     SELECT DISTINCT ppid FROM ppfa_golden.high_touch
     UNION
-    -- PG: donors qualifying via any PG segment
-    SELECT DISTINCT ppid FROM lists_audiences_segments.digital_plannedgiving_activistcodes
-    WHERE legacy_society = 'Y'
-    OR bequest_intent = 'Y'
-    OR bequest_inquiry = 'Y'
-    OR lig_established = 'Y'
-    OR lig_inquiry = 'Y'
-    OR cga = 'Y'
+    SELECT DISTINCT ppid FROM {pg_segment_table}
+    WHERE legacy_society = 'Y' OR bequest_intent = 'Y'
+    OR bequest_inquiry = 'Y' OR lig_established = 'Y'
+    OR lig_inquiry = 'Y' OR cga = 'Y'
 );
--- no suppressions
+```
 
+**Example 2: Definition with suppressions**
+
+```sql
 -- ---------- MID-LEVEL (4402903) ----------
--- Mid-level donors (not major). Note: VIP donors are excluded here;
--- the VIP block below handles 4444102 separately.
--- Source: mid-level_activist_codes.sql lines 71-89
 CREATE TEMP TABLE should_have_midlevel AS (
     SELECT DISTINCT ppid FROM ppfa_golden.high_touch
     WHERE giving_level ILIKE '%mid%'
     AND giving_level NOT ILIKE '%major%'
-    AND giving_level NOT ILIKE '%Mid-Level VIP%'  -- VIP handled separately
+    AND giving_level NOT ILIKE '%Mid-Level VIP%'
 );
--- Source: mid-level_activist_codes.sql lines 61-68
--- Note on prospect_management: NULL values are NOT suppressed
--- (NULL NOT LIKE returns NULL/falsy in Redshift). This is intentional —
--- only donors with a non-Discovery prospect_management value are suppressed.
 CREATE TEMP TABLE suppress_midlevel AS (
     SELECT ppid FROM ppfa_golden.high_touch
     WHERE board_member LIKE '%National%'
@@ -316,57 +298,16 @@ CREATE TEMP TABLE suppress_midlevel AS (
 );
 DELETE FROM should_have_midlevel
 WHERE ppid IN (SELECT ppid FROM suppress_midlevel);
-
--- ---------- MID-LEVEL VIP (4444102) ----------
--- VIP mid-level donors. Same suppressions as mid-level.
--- Source: mid-level_activist_codes.sql lines 75-76
-CREATE TEMP TABLE should_have_midlevel_vip AS (
-    SELECT DISTINCT ppid FROM ppfa_golden.high_touch
-    WHERE giving_level ILIKE '%Mid-Level VIP%'
-);
-DELETE FROM should_have_midlevel_vip
-WHERE ppid IN (SELECT ppid FROM suppress_midlevel);
-
--- ---------- LEGACY SOCIETY (4658459) ----------
--- Source: planned_giving_pg_digital_lists...sql lines 134-154
-CREATE TEMP TABLE should_have_legacy_society AS (
-    SELECT DISTINCT ppid FROM lists_audiences_segments.digital_plannedgiving_activistcodes
-    WHERE legacy_society = 'Y'
-);
-
--- ---------- PLANNED GIVING (4490504) ----------
--- Source: planned_giving_pg_digital_lists...sql lines 185-208
--- NOTE: lig_inquiry is NOT included (per actual script)
-CREATE TEMP TABLE should_have_planned_giving AS (
-    SELECT DISTINCT ppid FROM lists_audiences_segments.digital_plannedgiving_activistcodes
-    WHERE cga = 'Y'
-    OR lig_established = 'Y'
-    OR bequest_intent = 'Y'
-    OR bequest_inquiry = 'Y'
-);
-
--- ---------- CORPORATE (4490499) ----------
-CREATE TEMP TABLE should_have_corporate AS (
-    SELECT DISTINCT ppid FROM ppfa_golden.high_touch
-    WHERE corporations = 'Managed Account'
-);
-
--- ... additional codes follow the same pattern ...
--- To add a new code: copy a block, set the temp table name and query.
 ```
 
-**Not in scope for the unified sync:**
-- **Action Fund membership (2.4):** Uses a tracker table pattern and survey questions (not just activist codes). Remains a separate workflow.
-- **Contributing membership (2.4):** Uses survey question 203939/860303 instead of an activist code. Stays with AF workflow.
-- **Hustle Rentals (2.5):** Likely inactive. Cross-committee push with inline diffing against survey responses. Pending decommission confirmation from DFSE.
-- **PMG: No Email (4644776):** Team preference, stays manual.
-- **EA-only codes:** Codes not sourced from upstream data are out of scope.
+Additional codes follow the same pattern. See `step1_definitions.sql` for the full set.
+
 
 **The key shift:** Today these definitions are spread across 200+ line scripts in different folders. In the new system, they're all in one script — scannable, commentable, version-controllable. Adding a code = copying a 10-line block.
 
-## 5.3 Layer 2: Sync Engine (bottom of script)
+## 5.3 Script 2: Sync Engine (`step2_sync_engine.sql`)
 
-Below the definitions, the sync engine runs once for all codes. Steps 3-4 are batched (one pass for all codes), step 5 is per-code (different code IDs), steps 6-7 are batched again. This section doesn't need editing when adding codes — just add the new code to `codes_to_sync` and the UNION in step 1.
+Reads from `easf.ac_sync_should_have` (output of Script 1) and runs the common logic: identity resolution (ppid → vanid), committee filtering, diff vs current EA state, and dedup. This script doesn't need editing when adding codes.
 
 ```sql
 -- ============================================================
@@ -489,12 +430,12 @@ CREATE TABLE easf.activist_code_sync (
     processed          BOOLEAN DEFAULT FALSE,
     processed_date     TIMESTAMP
 );
--- Additive table — rows are never deleted. Each sync run appends new rows.
 -- Push workflow reads WHERE processed = FALSE, then marks processed = TRUE + timestamp.
--- Historical queries: filter by sync_date, code_name, action for audit/debugging.
+-- OPEN QUESTION: Should this table be additive (append-only, preserves history for
+-- audit/debugging) or truncated daily (simpler, but loses history)?
 ```
 
-## 5.5 Layer 3: EA Push (Single Workflow)
+## 5.5 EA Push (Single Workflow)
 
 One Civis workflow that:
 1. Runs the sync engine (one SQL script)
@@ -523,13 +464,20 @@ One Civis workflow that:
 
 | Phase | What | Effort |
 |-------|------|--------|
-| **Phase 1** | Create `easf.activist_code_sync` output table. Write unified SQL script with definition blocks (Mid-Level + High Touch) and sync engine. | Medium |
-| **Phase 2** | Run new sync in parallel with existing workflow. Validate by comparing row counts per code and diffing vanid sets per code between old and new outputs. Investigate any discrepancies before proceeding. | Low |
-| **Phase 3** | Cut over Mid-Level + High Touch to new workflow. Decommission old scripts. | Low |
-| **Phase 4** | Add Planned Giving definition blocks to the unified script. | Low |
-| **Phase 5** | Add CFP Affiliate definition blocks. | Low |
+| **Phase 1 — Build** | Create `easf.activist_code_sync` output table. Write unified SQL script with definition blocks (Mid-Level + High Touch) and sync engine. | Medium |
+| **Phase 2 — Validate** | Run new sync in parallel with existing workflow. Validate by comparing row counts per code and diffing vanid sets per code between old and new outputs. Investigate any discrepancies before proceeding. | Low |
+| **Phase 3 — Cutover** | Cut over Mid-Level + High Touch to new workflow. Decommission old scripts. | Low |
+| **Phase 4 — Expand** | Add Planned Giving definition blocks to the unified script. | Low |
+| **Phase 5 — Expand** | Add CFP Affiliate definition blocks. | Low |
 
-**Out of scope for migration:** Action Fund membership (2.4) remains a separate workflow due to its tracker table pattern and survey question mechanics. Hustle Rentals (2.5) is likely inactive and pending decommission confirmation.
+### Scope
+
+**Not in scope for the unified sync:**
+- **Action Fund membership (2.4):** Uses a tracker table pattern and survey questions (not just activist codes). Remains a separate workflow.
+- **Contributing membership (2.4):** Uses survey question 203939/860300 instead of an activist code. Stays with AF workflow.
+- **Hustle Rentals (2.5):** Likely inactive. Cross-committee push with inline diffing against survey responses. Pending decommission confirmation from DFSE.
+- **PMG: No Email (4644776):** Team preference, stays manual.
+- **EA-only codes:** Codes not sourced from upstream data are out of scope.
 
 ---
 
@@ -554,9 +502,13 @@ One Civis workflow that:
 7. **Corporate, Foundations, National Board, PMG-specific activist codes**: The underlying data for these is already automated — populated daily in the golden HT table from SF (`managing_program`, `account_team_member_v.team`, `affiliation_v.type`). The general High Touch code (4484811) is applied to all rows. Open question: are the *specific* codes (Corporate 4490499, Foundations 4490505, National Board 4490261, PMG 4490493) applied separately, or does the HT code cover them? Transitional (4490260) still unknown.
 8. **Can the Hustle Rentals workflow (2.5) be decommissioned?** Per Anna Rhodes (2026-03-25), last qualifying records are from 2022/2023. Ariel to confirm with DFSE.
 
+### Engineering
+
+9. **Sync output table — additive or truncate?** Should `easf.activist_code_sync` be append-only (preserves full history for audit/debugging, but grows over time) or truncated daily (simpler, but loses history)?
+
 ### Nice to have
 
-9. **Monitoring/alerting**: Volume checks (alert if adds/removes exceed historical norms) and failure notifications (alert if workflow fails or doesn't complete).
+10. **Monitoring/alerting**: Volume checks (alert if adds/removes exceed historical norms) and failure notifications (alert if workflow fails or doesn't complete).
 
 ---
 
@@ -592,10 +544,10 @@ One Civis workflow that:
 |------|---------|
 | [Golden HighTouch Description](https://docs.google.com/document/d/1IogCzDtijZfcxJNNFvgSMLBaOHP9NUrck2OciKMddqc/edit) | Schema documentation for `ppfa_golden.high_touch` — column definitions and business logic |
 | [MidLevel and HighTouch QA](https://docs.google.com/spreadsheets/d/1k3JHEGc9c52rD4it3Lm06iRq2THTlYzdOSvJpN8UzLw/edit) | QA from Jan 2023 — data quality findings, code IDs, volume benchmarks |
-| [EA HighTouch and Direct Mail Committees Data](https://docs.google.com/document/d/1M8_6QUgL59AXbbYCPc2Gmk-TVIEsJE2ASiZ6PVxcWL0/edit) | EA team structure, treatment rules, **complete list of all High Touch activist codes** |
-| [PC President's Circle Digital Lists](https://docs.google.com/document/d/1Tkec8gjLzffwDLP1az05brw4xL325HGY_gMHgEnJVlg/edit) | PC segment definitions, activist code usage, EA email list names |
-| [President's Circle (PC) Activist Codes in EA](https://docs.google.com/document/d/1woqAkJHe-YJiWybyIh2iJ89IfVX53JtGBB5WGKYUw7U/edit) | Data flow, timeline, troubleshooting for PC codes |
-| [HighTouch Golden Table Build](https://docs.google.com/document/d/1kgBTNgqGfLhWuTlahAeHhYJhuc-KYmM3Ort4ciy6qzY/edit) (superseded by [new doc](https://docs.google.com/document/d/1IogCzDtijZfcxJNNFvgSMLBaOHP9NUrck2OciKMddqc/edit)) | Golden HT table build description |
+| [EA HighTouch and Direct Mail Committees Data](https://docs.google.com/document/d/1M8_6QUgL59AXbbYCPc2Gmk-TVIEsJE2ASiZ6PVxcWL0/edit) | **ARCHIVED** — older doc for the ML/HT workflow. EA team structure, treatment rules, list of High Touch activist codes |
+| [PC President's Circle Digital Lists](https://docs.google.com/document/d/1Tkec8gjLzffwDLP1az05brw4xL325HGY_gMHgEnJVlg/edit) | **ARCHIVED** — predates ML/HT workflow. PC segment definitions, activist code usage, EA email list names |
+| [President's Circle (PC) Activist Codes in EA](https://docs.google.com/document/d/1woqAkJHe-YJiWybyIh2iJ89IfVX53JtGBB5WGKYUw7U/edit) | **ARCHIVED** — predates ML/HT workflow. Data flow, timeline, troubleshooting for PC codes |
+| [HighTouch Golden Table Build](https://docs.google.com/document/d/1kgBTNgqGfLhWuTlahAeHhYJhuc-KYmM3Ort4ciy6qzY/edit) | **ARCHIVED** — superseded by [new doc](https://docs.google.com/document/d/1IogCzDtijZfcxJNNFvgSMLBaOHP9NUrck2OciKMddqc/edit). Golden HT table build description |
 | [HighTouch Activist Code](https://docs.google.com/document/d/184TKtTLNzmixKHlTsCaghkg-VFjMIclaRNZhAsHMOO0/edit) | CFP Affiliate criteria — SF field definitions for PC and PMG segments, C3 Affiliate Number logic |
 | `Discovery - PG script cleanup` | **Detailed PG segment discovery** — requirements vs. implementations, resolved decisions, open questions ([source doc](https://docs.google.com/document/d/1lVL0qNhwA0iiffBEpIFVxi30tZ0nE65e6h7fwvyFCmM/edit)) |
 
