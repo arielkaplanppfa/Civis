@@ -479,6 +479,52 @@ One Civis workflow that:
 - **PMG: No Email (4644776):** Team preference, stays manual.
 - **EA-only codes:** Codes not sourced from upstream data are out of scope.
 
+## 5.8 Logging & Monitoring
+
+### Daily Volume Log
+
+After each sync run, a summary table aggregates the sync output by day and code:
+
+```sql
+CREATE TABLE easf.activist_code_sync_daily_log (
+    sync_date          DATE,
+    code_name          VARCHAR(100),
+    activist_code_id   INT,
+    adds               INT,
+    removes            INT,
+    net_change          INT,
+    total_active       INT      -- count of vanids with this code after sync
+);
+
+-- Populated after each sync run:
+INSERT INTO easf.activist_code_sync_daily_log
+SELECT
+    sync_date,
+    code_name,
+    activist_code_id,
+    SUM(CASE WHEN action = 'add' THEN 1 ELSE 0 END) AS adds,
+    SUM(CASE WHEN action = 'remove' THEN 1 ELSE 0 END) AS removes,
+    SUM(CASE WHEN action = 'add' THEN 1 ELSE -1 END) AS net_change,
+    NULL -- backfilled from EA state or running total
+FROM easf.activist_code_sync
+WHERE sync_date = CURRENT_DATE
+GROUP BY sync_date, code_name, activist_code_id;
+```
+
+### Failure Notifications
+
+The Civis workflow is configured with built-in on-failure email notifications — no custom script needed. If any step in the workflow fails or doesn't complete, the configured recipients are alerted automatically.
+
+### Volume Anomaly Detection
+
+A Python script runs as the final workflow step. For each code, it compares today's add/remove counts against the trailing 30-day mean ± 2 standard deviations and sends an email alert if any code falls outside that range.
+
+The mean ± 2 SD threshold is an initial approach — it will need to be refined incrementally as the log accumulates data and we get a better sense of normal variation per code.
+
+**Workflow integration:** The sync workflow adds two final steps after the EA push:
+1. SQL script to populate `easf.activist_code_sync_daily_log`
+2. Python container script for volume anomaly detection + email alert
+
 ---
 
 # 6. Open Questions
@@ -486,7 +532,7 @@ One Civis workflow that:
 ### Code Definitions — which codes, who gets them
 
 1. **Transitional code** (4490260): Active with 1,148 vanids (see [query results](Reference%20-%20Query%20Results.md)). What SF attribute drives it? Include in the unified sync or keep manual?
-2. **Mid-Level VIP code** (4444102): Has **0 rows** in `ppfa_contactsactivistcodes_mym` as of 2026-03-26 — not currently applied to any vanid. The HT/ML workflow defines it (`giving_level ILIKE '%Mid-Level VIP%'`) but either it was recently cleared, never successfully applied, or the giving_level values don't match. Needs investigation — is this code still in use?
+2. **Mid-Level VIP code** (4444102): Has **0 rows** in `ppfa_contactsactivistcodes_mym` as of 2026-03-26. This code should have donors assigned. The likely root cause is that the script uses `giving_level ILIKE '%Mid-Level VIP%'` but the business definition maps to `managing_program` (e.g., "President's Circle - Midlevel VIP"). Switching from `giving_level` to `managing_program` should resolve this — to be validated during build.
 3. **CFP Affiliate decisions**: Contactable vs. managed distinction, PC portfolio handling. (Account Team Member exclusion resolved — not excluding.) See section 2.3.
 
 ### Structure — how the sync works
@@ -494,7 +540,7 @@ One Civis workflow that:
 4. **Committee filtering necessity**: The HT/ML workflow (2.1) filters via `committeeid_translation`, but [QA testing](https://docs.google.com/spreadsheets/d/1k3JHEGc9c52rD4it3Lm06iRq2THTlYzdOSvJpN8UzLw/edit) showed C3 API auto-propagates to other national committees. The PG workflow (2.2) has no committee filtering at all. Is the filtering still needed for the unified sync, or can it be dropped?
 ### Common elements — suppressions, overlaps
 
-5. **Mid-Level suppression review**: Confirm that PMG is suppressed from ML codes (as well as foundations & corp), and whether these suppressions are still needed. Source: [EA HT & Direct Mail doc (older)](https://docs.google.com/document/d/1M8_6QUgL59AXbbYCPc2Gmk-TVIEsJE2ASiZ6PVxcWL0/edit) — may be out of date.
+5. **Mid-Level suppression review**: **Resolved — suppressions stay.** Current ML suppressions (PMG, foundations, corporate, national board) are confirmed and will carry over to the unified sync. Source: [EA HT & Direct Mail doc](https://docs.google.com/document/d/1M8_6QUgL59AXbbYCPc2Gmk-TVIEsJE2ASiZ6PVxcWL0/edit).
 6. **Codes applied by multiple sources**: High Touch (4484811) is applied by HT/ML (2.1), PG (2.2), and HT staff manually. Mid-Level (4402903) and Mid-Level VIP (4444102) are applied by HT/ML (2.1) and HT staff manually. The unified sync resolves the HT/PG conflict by combining sources, but should it also protect manually-applied codes from automated removal?
 
 ### Process / status checks
@@ -625,6 +671,12 @@ graph TD
     push["EA Push<br/>NGPVAN API"]
     EA["EveryAction"]
 
+    subgraph MONITORING["★ Logging & Monitoring"]
+        log["Daily Volume Log<br/><i>adds/removes per code per day</i>"]
+        anomaly["Volume Anomaly Detection<br/><i>mean ± 2 SD check</i>"]
+        alert["Email Alert<br/><i>anomalies + workflow failures</i>"]
+    end
+
     ht --> defs
     pg --> defs
     defs --> suppress
@@ -640,12 +692,17 @@ graph TD
     dd["contactsdeduped_mym"] --> dedup
     dedup --> output
     output --> push
+    output --> log
+    log --> anomaly
+    anomaly --> alert
     push --> EA
 
     style SCRIPT1 fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
     style SCRIPT2 fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style MONITORING fill:#fff3e6,stroke:#cc6600,stroke-width:2px
     style bridge fill:#cce5ff,stroke:#0066cc,stroke-width:2px
     style output fill:#cce5ff,stroke:#0066cc,stroke-width:2px
+    style log fill:#ffe5cc,stroke:#cc6600,stroke-width:2px
 ```
 
 **New pieces** (★):
@@ -653,6 +710,7 @@ graph TD
 2. **Script 2 (`step2_sync_engine.sql`)** — common logic: identity resolution, committee filtering, diff, dedup. Doesn't change when codes are added.
 3. **`easf.ac_sync_should_have`** — bridge table between the two scripts (ppid, code_name)
 4. **`easf.activist_code_sync`** — single output table, replacing 4 tables with different schemas
+5. **`easf.activist_code_sync_daily_log`** — day-grain summary table for monitoring; feeds volume anomaly detection
 
 ---
 

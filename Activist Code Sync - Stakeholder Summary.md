@@ -28,7 +28,7 @@ There are several separate processes that manage different sets of activist code
 | Process | What It Does | Civis Links |
 |---------|-------------|-------------|
 | **Planned Giving sync** — [DSA-1845](https://app.asana.com/1/8719232879967/project/1213578586282357/task/1211447776598924?focus=true), [DSA-1848](https://app.asana.com/1/8719232879967/project/1213578586282357/task/1211457702886338?focus=true) | Identifies donors in PG segments (Legacy Society, Bequest, CGA, etc.) and applies PG-related codes. Currently paused — was add-only (never removes outdated codes) and had other gaps. Remove logic being added via DSA-1848: PG code removed when no active PG records remain on the account; Legacy Society code removed when the attribute is end-dated. Confirmed: all PG segments require PPFA designation — donors with only affiliate-designated planned gifts are excluded. All PPFA PG donors get High Touch + Planned Giving codes. Only donors with the Legacy Society attribute get the Legacy Society code. | [Workflow](https://platform.civisanalytics.com/spa/#/workflows/75818) · [PG SQL](https://platform.civisanalytics.com/spa/#/scripts/sql/202504702) |
-| **CFP Affiliate sync** — [DSA-1656](https://app.asana.com/1/8719232879967/project/1213578586282357/task/1211163255897088?focus=true) | Would automatically tag High Touch donors in affiliate committees so CFP partners can segment their emails. Not yet built. Intended to replace the current PMG/CFP manual process (see below). | — |
+| **CFP Affiliate sync** — [DSA-1656](https://app.asana.com/1/8719232879967/project/1213578586282357/task/1211163255897088?focus=true) | Would automatically tag High Touch donors in affiliate committees so CFP partners can segment their emails. Not yet built. Intended to replace the current PMG/CFP manual process (see below). The contactable vs. managed distinction is set in the Account Team Member definition — CFP portfolio assignment (not national team portfolio) identifies the affiliate-managed segment. EA supports **sharing rules** configurable per activist code in the front end (some codes shared, some not). *(Contact for sharing rule config TBD — possibly Aimee Martin.)* | — |
 
 ### Manual
 
@@ -66,7 +66,63 @@ Replace the patchwork of separate processes with **one system** that manages all
    - Compares that against who *currently* has each code in EA
    - Pushes the differences: adds codes for new qualifiers, removes codes for donors who no longer qualify
 
-3. **One output log** — Every add and remove is recorded with a timestamp, making it easy to audit what changed and when.
+3. **One output log** — Every add and remove is recorded with a timestamp, making it easy to audit what changed and when. The sync output table is **additive** (append-only) — rows are never deleted, preserving full history for audit and debugging.
+
+4. **Daily volume log** — After each sync, a summary table records the number of adds and removes per code per day. Provides at-a-glance monitoring and historical baselines.
+
+5. **Monitoring & alerts** — A notification script sends email alerts if the workflow fails or if daily add/remove volume for any code falls outside the normal range (mean ± 2 standard deviations), flagging potential data issues before they reach EA.
+
+### Visual Overview
+
+```mermaid
+graph TD
+    subgraph Sources["Source Tables"]
+        ht["ppfa_golden.high_touch<br/><i>1 row/ppid</i>"]
+        pg["NPSP planned giving tables"]
+    end
+
+    subgraph SCRIPT1["★ Script 1: Definitions (edit here)"]
+        defs["Definition Blocks<br/><i>who should have each code</i>"]
+        suppress["Suppressions<br/><i>who to exclude (per code)</i>"]
+    end
+
+    bridge["who should have each code<br/><i>(ppid, code_name)</i>"]
+
+    subgraph SCRIPT2["★ Script 2: Sync Engine (common, don't edit)"]
+        resolve["Identity Resolution<br/><i>ppid → vanid</i>"]
+        diff["Diff vs EA<br/><i>add / remove</i>"]
+        dedup["Dedup merged vanids"]
+    end
+
+    output["★ Sync Output Table<br/><i>(vanid, code, action, date)</i>"]
+    push["EA Push<br/>NGPVAN API"]
+    EA["EveryAction"]
+
+    subgraph MONITORING["★ Logging & Monitoring"]
+        log["Daily Volume Log<br/><i>adds/removes per code per day</i>"]
+        anomaly["Volume Anomaly Detection<br/><i>alerts on unusual activity</i>"]
+    end
+
+    ht --> defs
+    pg --> defs
+    defs --> suppress
+    suppress --> bridge
+
+    bridge --> resolve
+    resolve --> diff
+    diff --> dedup
+    dedup --> output
+    output --> push
+    output --> log
+    log --> anomaly
+    push --> EA
+
+    style SCRIPT1 fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style SCRIPT2 fill:#e6f3ff,stroke:#0066cc,stroke-width:2px
+    style MONITORING fill:#fff3e6,stroke:#cc6600,stroke-width:2px
+    style output fill:#cce5ff,stroke:#0066cc,stroke-width:2px
+    style log fill:#ffe5cc,stroke:#cc6600,stroke-width:2px
+```
 
 ### What Changes
 
@@ -101,23 +157,18 @@ Replace the patchwork of separate processes with **one system** that manages all
 
 ---
 
-## Open Questions for Stakeholders
+## Proposals for Stakeholder Input
 
-These need input before we can finalize the design:
+1. **Manual code protection**: The automated sync should **skip removal** for codes that were applied manually (i.e., not by a previous sync run). This prevents the nightly wipe issue while still allowing automation to manage its own codes. Manual overrides persist until explicitly removed by a person.
 
-1. **Manual code protection**: When the automated sync sees a code that was applied manually, should it leave it alone? Or should the automated rules always win?
+2. **Committee filtering**: **Drop committee filtering** from the unified sync. QA testing confirmed that codes applied via the C3 API auto-propagate to other national committees, and the PG workflow already runs without it. Simplifies the sync engine and avoids filtering out valid vanids.
 
-2. **Committee filtering**: When a code is applied via the national committee, EA automatically copies it to other national committees. The PG workflow has no committee filtering at all. Do we still need the extra filtering step, or can it be dropped?
+3. **Corporate, Foundations, National Board, PMG-specific codes**: The specific codes are Corporate (4490499), Foundations (4490505), National Board (4490261), PMG (4490493). The data is already in the Golden HT table. Three options:
+   - A. Apply only the general High Touch code (4484811) — the specific codes are redundant
+   - **B. Apply both the general HT code and the specific sub-codes — preserves affiliate-blocking behavior (via HT) while giving email teams finer segmentation. Minimal additional effort since the data already exists. (Recommended.)**
+   - C. Apply only the specific sub-codes, no general HT code for these donors
 
-3. **CFP Affiliate decisions**: How should the system distinguish between donors who are just contactable by an affiliate vs. those actively managed by a PPFA fundraiser?
-
-4. **Mid-Level VIP code (4444102)**: This code is defined in the system but currently has zero donors assigned to it. Is it still in use?
-
-5. **Mid-Level suppression review**: The current ML workflow suppresses PMG, foundations, and corporate donors from getting ML codes. Are these suppressions still needed?
-
-6. **Corporate, Foundations, National Board, PMG-specific codes**: The data for these is already automated in the Golden HT table. Are the specific codes (Corporate 4490499, Foundations 4490505, National Board 4490261, PMG 4490493) applied separately, or does the general High Touch code cover them?
-
-7. **Hustle Rentals**: Can this be decommissioned?
+4. **Hustle Rentals**: **Decommission** this workflow. Last qualifying records are from 2022–2023, it runs in under a minute, and DFSE confirmation is pending. Turn it off and monitor for any impact.
 
 ---
 
