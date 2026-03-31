@@ -161,14 +161,12 @@ graph TD
 
 1. **Manual code protection**: The automated sync should **skip removal** for codes that were applied manually (i.e., not by a previous sync run). This prevents the nightly wipe issue while still allowing automation to manage its own codes. Manual overrides persist until explicitly removed by a person.
 
-2. **Committee filtering**: **Drop committee filtering** from the unified sync. QA testing confirmed that codes applied via the C3 API auto-propagate to other national committees, and the PG workflow already runs without it. Simplifies the sync engine and avoids filtering out valid vanids.
-
-3. **Corporate, Foundations, National Board, PMG-specific codes**: The specific codes are Corporate (4490499), Foundations (4490505), National Board (4490261), PMG (4490493). The data is already in the Golden HT table. Three options:
+2. **Corporate, Foundations, National Board, PMG-specific codes**: The specific codes are Corporate (4490499), Foundations (4490505), National Board (4490261), PMG (4490493). The data is already in the Golden HT table. Three options:
    - A. Apply only the general High Touch code (4484811) — the specific codes are redundant
    - **B. Apply both the general HT code and the specific sub-codes — preserves affiliate-blocking behavior (via HT) while giving email teams finer segmentation. Minimal additional effort since the data already exists. (Recommended.)**
    - C. Apply only the specific sub-codes, no general HT code for these donors
 
-4. **Hustle Rentals**: **Decommission** this workflow. Last qualifying records are from 2022–2023, it runs in under a minute, and DFSE confirmation is pending. Turn it off and monitor for any impact.
+3. **Hustle Rentals**: **Decommission** this workflow. Last qualifying records are from 2022–2023, it runs in under a minute, and DFSE confirmation is pending. Turn it off and monitor for any impact.
 
 ---
 
