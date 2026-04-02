@@ -79,6 +79,7 @@ graph TD
     subgraph Sources["Source Tables"]
         ht["ppfa_golden.high_touch<br/><i>1 row/ppid</i>"]
         pg["NPSP planned giving tables"]
+        other["..."]
     end
 
     subgraph SCRIPT1["★ Script 1: Definitions (edit here)"]
@@ -105,6 +106,7 @@ graph TD
 
     ht --> defs
     pg --> defs
+    other --> defs
     defs --> suppress
     suppress --> bridge
 
