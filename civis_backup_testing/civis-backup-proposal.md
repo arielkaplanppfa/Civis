@@ -35,7 +35,7 @@ Incremental after initial backfill. First run: ~30 min (last 2 yrs) to ~2.2 hrs 
 1. Does the overall approach make sense?
 2. Are we ok with the regex PII scanner? If we account for names, do we have data to test on?
 3. Do we only mirror scripts active in the last year?
-4. Where in the repo (branch? main?)?
+4. Where in the repo (branch? main?) does the code mirror live?
 5. Each sync overwrites the repo with current state (no git history of past syncs). Ok?
 6. Daily v weekly schedule?
 
