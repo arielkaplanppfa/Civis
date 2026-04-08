@@ -1,146 +1,96 @@
-# Civis Backup: One-Way Sync to Git
+# Civis Mirror: One-Way Sync to Git
 
-## Why
+## Summary
 
-Civis has no full-text search across scripts, no version history, and no way to see dependencies or data flow at a glance. A Git mirror gives us grep, diffs, workflow mapping, and AI tooling over the full codebase.
+We have thousands of scripts in Civis, but finding what you need is a pain — there's no good way to search across script contents, no version history, and it's hard to piece together how scripts relate to each other. This proposal is for a nightly service that copies Civis scripts into a private GitHub repo under the PPFA org, giving us real search, version history, and a starting point for organizing things better.
 
-## What
+## Value
 
-Daily automated sync: Civis API -> PII scan -> private GitHub repo.
+Right now, finding scripts and identifying data flow in Civis means a lot of searching, clicking, and painstakingly piecing together information. A civis mirror gives us:
 
-| Asset Type | Count | Stored |
+- **Better search**: We can find every script that touches a specific table or dataset — something that's technically possible in Civis but really frustrating in practice.
+- **History of scripts**: We can see how scripts have changed over time, compare versions, and roll back if something breaks.
+- **Visibility**: We can browse and read through the codebase without hunting down and opening scripts one by one in Civis.
+- **Organization**: Down the road, we can start grouping and classifying scripts so the codebase is easier to navigate.
+
+### How DE and Harmony Hub would use this day-to-day
+
+- **Tracing data pipelines**: When investigating an issue or building something new, DE can search for every script that touches a table and see how they connect — instead of hunting through Civis one at a time.
+- **Onboarding**: A new team member can browse the codebase, find examples, and get up to speed without needing someone to walk them through everything.
+- **Catching regressions**: When a script changes unexpectedly, the daily diff shows what was edited and when — helpful for debugging issues that show up downstream.
+- **Harmony Hub**: Scripts become linkable and taggable, which feeds into broader knowledge management and documentation.
+- **Accountability**: We get a complete record of what code existed and when — useful for audits or just understanding how things got to where they are.
+
+## What currently exists on Civis?
+
+Civis contains thousands of scripts of varying kinds:
+
+| Asset Type | Count | What's Stored |
 |-----------|-------|--------|
-| SQL | ~26,000 | Source + metadata |
-| Python | ~8,900 | Source + metadata |
-| Containers | ~17,900 | Config only (arguments, params, schedule) |
-| Workflows | 513 | DAG definitions |
-| JS/R/dbt | ~170 | Source + metadata |
+| SQL scripts | ~26,000 | Code + metadata |
+| Python scripts | ~8,900 | Code + metadata |
+| Containers | ~17,900 | Configuration (arguments, params, schedule) |
+| Workflows | 513 | Pipeline definitions |
+| JS/R/dbt scripts | ~170 | Code + metadata |
 
-Incremental after initial backfill. First run: ~30 min (last 2 yrs) to ~2.2 hrs (all time).
+## Proposal
 
-**Recommendation**: start with scripts active in the last year (~4,500 SQL + ~3,700 Python), expand to older scripts later if needed.
+A nightly Civis container script pulls scripts from the Civis API, scans them for personal information, and pushes them to a private GitHub repo under the PPFA org. Once it's set up, it runs on its own — no manual steps. It's the only thing that writes to the repo; everyone else gets read-only access.
 
-## Testing
+```mermaid
+graph TD
+    A[Civis Platform] -->|Nightly API pull| B[Sync Script]
+    B --> D[Private GitHub Repo\nPPFA org only]
+    D -->|Read-only access| F[DE / Harmony Hub / Team]
+    B -.->|Optional| C{PII Scanner}
+    C -.->|Clean| D
+    C -.->|Flagged| E[Human Review]
 
-- **Core pipeline**: [test script](https://platform.civisanalytics.com/spa/#/scripts/python3/347646218) fetches scripts from API and pushes to GitHub from Civis. Working.
-- **PII safety**: nothing enters the repo without passing the scanner or human approval.
-  - Regex scanner catches emails, phones, SSNs, SF case IDs (context-aware to reduce false positives)
-    - Tested on 938 SQL scripts: 22 flagged (2.3%), all routed to human review
-  - NER (presidio/spaCy) planned for names and addresses
-  - False negative investigation in progress
-  - Gating workflow (flagging, human review, approval) still needs testing
+    style A fill:#4a90d9,color:#fff
+    style D fill:#2d8659,color:#fff
+    style F fill:#2d8659,color:#fff
+    style C fill:#e6a817,color:#fff
+    style E fill:#e6a817,color:#fff
+```
+
+Each mirrored file includes metadata (author, dates, project folder, tags) and a direct link back to the script in Civis.
+
+### PII
+
+Scripts in Civis are code — they shouldn't contain personal information, and we're not too worried about it. That said, we can build in an automated pattern scanner as a safety net that catches things like email addresses, phone numbers, SSNs, and Salesforce case IDs. We tested it on 938 SQL scripts and 22 were flagged (2.3%), all routed to human review.
+
+The repo itself is private and only accessible to PPFA team members, so even in a worst case where something like a donor name slips through, exposure is limited. And if it does happen, we can delete the affected file and wipe it from the repo's history entirely — GitHub supports permanent removal of sensitive data.
+
+In the future, we could look into NER (named entity recognition) systems for catching things like names and addresses, but that's not a priority right now.
+
+## Scope & Recommended Path Forward
+
+| Step | Estimate | Status |
+|------|----------|--------|
+| Create private repo under PPFA GitHub org | ~0.5 day | — |
+| Create PPFA-owned GitHub credential on Civis | ~0.5 day | Tested with [personal credential](https://platform.civisanalytics.com/spa/#/credentials/38869) — needs PPFA-owned one |
+| Pull scripts from API, extract metadata, push to GitHub | ~2–3 days | [Tested](https://platform.civisanalytics.com/spa/#/scripts/python3/347646218) |
+| Incremental sync (nightly updates — only changed scripts get updated) | ~1–2 days | Not yet tested |
+| Initial backfill — all scripts active in the last year (~4,500 SQL + ~3,700 Python), organized by type, no further categorization | ~0.5 day | — |
+
+Potential future work:
+- **Organization**: Add project folder structure, tagging, or classification layers on top of the mirrored code.
+- **Broader backfill**: Expand beyond the last year to older scripts, or include containers, workflows, and other asset types.
+- **PII scanner improvements**: Look into NER systems for name/address detection, refine false positives based on what the initial scan surfaces.
+- **Dependency mapping**: Trace how scripts connect — which scripts feed into which workflows, what tables they share.
+- **Alerts/notifications**: Flag when important scripts change unexpectedly.
+
+## Risks
+
+- **PII leakage**: A script could contain a donor name, email, or other personal info. Mitigated by the PII scanner and the fact that the repo is private to PPFA. If something does slip through, we can wipe it from history.
+- **Stale mirror**: If the nightly sync breaks silently, the repo drifts out of date without anyone noticing. We'd want some kind of alerting or monitoring to catch this.
+- **Credential management**: The sync service needs a PPFA-owned GitHub login (not a personal account) that's kept up to date.
+- **Scope creep**: The mirror is read-only — if people start treating it as the source of truth or editing scripts there instead of Civis, things get confusing fast.
 
 ## Open Questions
 
-1. Does the overall approach make sense?
-2. Are we ok with the regex PII scanner? If we account for names, do we have data to test on?
-3. Do we only mirror scripts active in the last year?
-4. Where in the repo (branch? main?) does the code mirror live?
-5. Each sync overwrites the repo with current state (no git history of past syncs). Ok?
-6. Daily v weekly schedule?
+1. Which PPFA GitHub org/account should the repo live under?
+2. Daily or weekly sync?
+3. Where does metadata live — embedded in each file as a header, or as a separate companion file?
+4. Anything else we should scan for beyond the current PII patterns?
 
-## Civis API Quirks
-
-- **Pagination cap**: `client.scripts.list()` maxes out at 300 pages x 50 = 15,000 results, then returns a 500 error (not an empty list)
-  - Workaround: query with `order="created_at"` using both `order_dir="asc"` and `"desc"` to get up to 30k per query
-- **Type filter mismatch**: `.type` field on results returns capitalized names (`SQL`, `Python`, `Container`, `Custom`) but the `type` filter param expects lowercase (`sql`, `python3`, `containers`)
-- **Custom scripts unfilterable**: `Custom` is not a valid `type` filter value -- these ~12,500+ scripts only appear in unfiltered listings
-- **Category filter broken**: `category` param returns 15k for `script` and 0 for `import`/`export`/`enhancement`
-- **No SSH in containers**: git push must use HTTPS + PAT
-- **Credentials not readable via API**: `credentials.get()` doesn't return password -- must inject as script parameter (env var)
-
-## Appendix: Code Snippets
-
-### List all scripts by type (handles pagination cap)
-```python
-import civis
-
-client = civis.APIClient()
-
-# For types under 15k
-for s in client.scripts.list(type="python3", iterator=True, limit=50):
-    print(s.id, s.name, s.type)
-
-# For types over 15k (sql, containers): union asc + desc
-ids = set()
-for order_dir in ["asc", "desc"]:
-    try:
-        for s in client.scripts.list(type="sql", iterator=True, limit=50,
-                                     order="created_at", order_dir=order_dir):
-            ids.add(s.id)
-    except:
-        pass  # 500 error at end of pagination
-print(f"sql: {len(ids)} unique")
-```
-
-### Fetch script source code
-```python
-# SQL
-full = client.scripts.get_sql(script_id)
-source = full.sql
-
-# Python
-full = client.scripts.get_python3(script_id)
-source = full.source
-
-# Container (usually empty -- config in arguments/params)
-full = client.scripts.get_containers(script_id)
-source = full.docker_command  # typically empty for template-based scripts
-config = full.arguments       # the useful part
-```
-
-### Fetch workflow definition
-```python
-full = client.workflows.get(workflow_id)
-definition_yaml = full.definition
-```
-
-### PII regex scanner
-```python
-import re
-
-PII_PATTERNS = {
-    'EMAIL': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-    'PHONE': r'\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b',
-    'SSN': r'\b\d{3}-\d{2}-\d{4}\b',
-    'SF_CASE_ID': r'\b0[23]\d{6}\b',
-}
-ID_CONTEXT = re.compile(r'\w*(?:_id|_key|_code)\b', re.IGNORECASE)
-
-def scan_pii(content):
-    hits = {}
-    for label, pattern in PII_PATTERNS.items():
-        for m in re.finditer(pattern, content):
-            if label == 'PHONE':
-                prefix = content[max(0, m.start()-80):m.start()]
-                suffix = content[m.end():m.end()+50]
-                if ID_CONTEXT.search(prefix) or re.match(
-                    r'^\s*(?:\'?\s*(?:,|as)\s+\w*(?:id|key|code)\b)',
-                    suffix, re.IGNORECASE
-                ):
-                    continue
-            hits.setdefault(label, []).append(m.group())
-    return hits
-```
-
-### Git push from Civis container script
-```python
-import subprocess
-import os
-
-token = os.environ["GITHUB_PAT_PASSWORD"]  # injected via Civis credential param
-repo = "your-org/your-repo"
-branch = "civis-backup-test"
-work_dir = "/tmp/civis-backup"
-
-subprocess.run(["git", "clone", f"https://{token}@github.com/{repo}.git", work_dir])
-subprocess.run(["git", "checkout", branch], cwd=work_dir)
-subprocess.run(["git", "config", "user.email", "civis-backup@noreply.ppfa.org"], cwd=work_dir)
-subprocess.run(["git", "config", "user.name", "Civis Backup Bot"], cwd=work_dir)
-
-# ... write files ...
-
-subprocess.run(["git", "add", "-A"], cwd=work_dir)
-subprocess.run(["git", "commit", "-m", "sync from civis"], cwd=work_dir)
-subprocess.run(["git", "push", "origin", branch], cwd=work_dir)
-```
