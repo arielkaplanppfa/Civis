@@ -1,0 +1,592 @@
+CALL npsp_reporting.load_ppfa_nightly_subledger_for_gl('2026',10);
+
+/**
+
+CREATE OR REPLACE PROCEDURE npsp_reporting.load_ppfa_nightly_subledger_for_gl(fiscal_year varchar, min_fiscal_month int)
+	LANGUAGE plpgsql
+AS $$
+	
+	
+	
+-- Prior to July When the Fiscal Year changes you need to run the GL for 2 fiscal years temporarily
+-- Replace this script in the "Nightly GL" step in the "Civis Daily DW Data Mart Pipeline - with tracking" workflow with load_ppfa_nightly_subledger_for_gl_2_fy https://platform.civisanalytics.com/spa/#/scripts/sql/273909741
+-- When all June gifts are entered and previous FY closed return to using this script in the workflow
+
+
+	
+
+	
+-- 6/14/24 kch updated npsp_sfdc to npsp_reporting for the applicable tables and functions, and removed _test from table names	
+-- 6/20/24 kch updated fiscal year and month paramenter to come from call statement
+-- 7/2/24 GJ updated _13000 to be 'OR' between gl_account_credit/gl_account_debit
+-- 7/24/24 kch removed deposit_ref_number from grouping, and combine 13000 with regular
+-- 9/18/24 case 01550417 updated order by clauses to include gau_1  
+-- 4/27/26 kch DSA-3408 Update subledger for new PAC/Votes resource IDs: PAC was P40000 and now needs to be: 100018, Votes was V40000 and now needs to be: 100020. Also per Amy C,  Finance no longer wants the C3 and C4 hard coded resource IDs 
+
+-- things to drop
+-- drop PROCEDURE  npsp_reporting.load_ppfa_nightly_subledger_for_gl();	
+	
+	
+	
+
+declare i_run_id varchar(30)  := to_char(sysdate, 'YYYYMMDDHHMISS'); 
+declare v_process_id varchar(30) :=  'DEV'||trunc(sysdate)||'_'|| to_char(sysdate,'HH:MI:SS');	
+declare i_fiscal_year varchar := fiscal_year;
+declare i_min_fiscal_month int := min_fiscal_month;
+declare i_subledger_run_id varchar(75);
+declare i_gl_file_date VARCHAR(75);
+declare i_line_count integer;
+declare i_debit_amount numeric(38,2);
+declare i_line_count_13000 integer;
+declare i_debit_amount_13000 numeric(38,2);
+
+
+
+
+
+BEGIN
+
+-- create tasks table the first time
+CREATE TABLE IF NOT EXISTS npsp_reporting.tasks_gl_download (
+	subledger_run_id CHARACTER VARYING(75) ENCODE lzo NULL,
+	gl_process_id CHARACTER VARYING(75) ENCODE lzo NULL,
+	gl_file_date CHARACTER VARYING(75) ENCODE lzo NULL,
+	line_count INTEGER   ENCODE az64,
+	debit_amount NUMERIC(23,6)   ENCODE az64,
+	gl_rerun_process_id CHARACTER VARYING(75) ENCODE lzo NULL,
+	time_stamp TIMESTAMP WITHOUT TIME ZONE ENCODE az64 NULL
+)
+DISTSTYLE AUTO;
+ 
+ -- i_fiscal_year = (select p.subledger_fiscal_year from npsp_reporting.nightly_subledger_parameters p);
+ -- i_min_fiscal_month = (select p.subledger_min_fiscal_month from npsp_reporting.nightly_subledger_parameters p);
+   
+
+-- create table of transactions eligble for gl from subledger
+DROP TABLE npsp_reporting.ppfa_nightly_subledger_for_gl CASCADE;
+CREATE TABLE IF NOT EXISTS npsp_reporting.ppfa_nightly_subledger_for_gl
+(
+	opportunity_etl_id VARCHAR(100)   ENCODE lzo
+	,seq INTEGER   ENCODE az64
+	,giving_id VARCHAR(54)   ENCODE lzo
+	,transaction_id VARCHAR(54)   ENCODE lzo
+	,financial_site VARCHAR(240)   ENCODE lzo
+	,deposit_date TIMESTAMP WITHOUT TIME ZONE   ENCODE az64
+	,gau_1 VARCHAR(240)   ENCODE lzo
+	,gau_2 VARCHAR(240)   ENCODE lzo
+	,gl_account_credit VARCHAR(240)   ENCODE lzo
+	,gl_account_debit VARCHAR(240)   ENCODE lzo
+	,resource_id VARCHAR(60)   ENCODE lzo
+	,gau_project VARCHAR(12)   ENCODE lzo
+	,gau_department VARCHAR(12)   ENCODE lzo
+	,fund VARCHAR(240)   ENCODE lzo
+	,geo_area VARCHAR(12)   ENCODE lzo
+	,description VARCHAR(20)   ENCODE lzo
+	,business_partner_id VARCHAR(1)   ENCODE lzo
+	,amount NUMERIC(23,6)   ENCODE az64
+	,subledger_run_id VARCHAR(75)   ENCODE lzo
+	,process_id VARCHAR(300)   ENCODE lzo
+	,document_number VARCHAR(300)   ENCODE lzo
+	,deposit_ref_number VARCHAR(300)   ENCODE lzo
+	,insertdate TIMESTAMP WITHOUT TIME ZONE   ENCODE az64
+)
+DISTSTYLE KEY
+ DISTKEY (opportunity_etl_id)
+;
+
+
+
+
+ 
+ 
+insert into npsp_reporting.ppfa_nightly_subledger_for_gl
+(select subledger.opportunity_etl_id,	
+		 subledger.seq,						
+		 subledger.giving_id,					
+	     subledger.transaction_ID,				
+		 isnull(subledger.Financial_Site, subledger.GAU_1)	AS financial_site, 
+         subledger.Deposit_Date AS deposit_date,							   
+         subledger.GAU_1 AS gau_1,				
+         subledger.GAU_2 AS gau_2,				
+         CASE WHEN subledger.Amount < 0 		
+		   and subledger.gl_account_credit not in ('20000','20009')	
+           THEN subledger.GL_Account_Debit		
+            ELSE subledger.GL_Account_Credit	
+        	END AS gl_account_credit,			
+         CASE WHEN subledger.Amount < 0		
+		   and subledger.gl_account_credit not in ('20000','20009')		
+           THEN subledger.GL_Account_Credit		
+           ELSE subledger.GL_Account_Debit		
+			END AS gl_account_debit,	
+      -- 4/27/26 no longer want hard coded c3/c4 resource ids 				
+		 CASE -- WHEN substring(subledger.GAU_1, 8, 2) = 'TR'	
+         -- AND substring(subledger.GAU_1, 1, 2) = 'C3'		
+         --    AND subledger.Resource_ID is null							
+         --    THEN 'U00000'								
+			   --  WHEN substring(subledger.GAU_1, 8, 2) = 'TR'		
+         --    AND substring(subledger.GAU_1, 1, 2) = 'C4'		
+         --   AND subledger.Resource_ID is null							
+			   --    THEN 'C40000'				
+           WHEN substring(subledger.GAU_1, 8, 2) = 'TR'			
+            AND substring(subledger.GAU_1, 1, 2) = 'PC'			
+            AND subledger.Resource_ID is null							
+            THEN '100018' -- 'P40000'	-- 4/27/26 updated										
+           WHEN substring(subledger.GAU_1, 8, 2) = 'TR'			
+        	 AND substring(subledger.GAU_1, 1, 2) = 'PV'			
+             AND subledger.Resource_ID is null								
+           THEN '100020' -- 'V40000'	-- 4/27/26 updated									
+           ELSE subledger.Resource_ID										
+          END AS resource_id,												
+		 CASE WHEN subledger.gl_account_credit in ('13000','20000','20009')	
+           THEN substring(subledger.GAU_2, 13, 3)														
+            ELSE isnull(subledger.GAU_Project, substring(subledger.GAU_1, 13, 3))									
+		   END   AS gau_project,																			
+		 CASE WHEN subledger.gl_account_credit in ('13000','20000','20009')	
+           THEN substring(subledger.GAU_2, 10, 3)										
+            ELSE isnull(subledger.GAU_Department,substring(subledger.GAU_1, 10, 3))	
+		  END   AS gau_department,													
+		 CASE WHEN subledger.gl_account_credit in ('13000','20000','20009')	
+           THEN substring(subledger.GAU_2, 8, 2)														
+            ELSE isnull(subledger.Fund, substring(subledger.GAU_1, 8, 2))		
+		   END   AS fund,															
+         subledger.Geo_Area AS geo_area,									
+		 isnull(npsp_reporting.fn_gl_deposit_origin(
+                                 subledger.GAU_Debit_Desc,					
+                                 subledger.Subledger_Universe,				
+                                 subledger.Adjusted,						
+                                 subledger.Bookable,						
+								 subledger.adjustment_type,
+								 subledger.payment_method,
+                                 subledger.external_processor_name),'MISSIN')||				
+          						  '-'||						
+          isnull(npsp_reporting.fn_gl_merchant_processor(subledger.Campaign_Channel,				
+                                     subledger.GAU_Debit_Desc,				
+                                     subledger.Payment_Method,
+                                     subledger.external_processor_name),'MISS')||			
+        						  '-'||					
+          isnull(npsp_reporting.fn_gl_payment_source(subledger.Payment_Method, subledger.card_issuer,subledger.external_processor_name),'MISS')||					
+        						  '-'||					
+          isnull(npsp_reporting.fn_gl_entry_type(subledger.Subledger_Universe,subledger.adjustment_type),'MIS') AS description,	
+          null AS business_partner_id,		
+		 subledger.Amount AS amount,
+		subledger.subledger_run_id,
+		v_process_id,
+		 case when isnull(subledger.Financial_Site, subledger.GAU_1) = 'PPFAH' then 'DVP'
+             when isnull(subledger.Financial_Site, subledger.GAU_1) = 'AFPPF' then 'DVA'
+             when isnull(subledger.Financial_Site, subledger.GAU_1) = 'PPGHQ' then 'DVG'
+             when isnull(subledger.Financial_Site, subledger.GAU_1) = 'VOTES' then 'DVV'
+             when isnull(subledger.Financial_Site, subledger.GAU_1) = 'PPGKE' then 'DVK'
+             when isnull(subledger.Financial_Site, subledger.GAU_1) = 'PACAF' then 'DVC'
+             when isnull(subledger.Financial_Site, subledger.GAU_1) = 'COG01' then 'DVO'
+             when isnull(subledger.Financial_Site, subledger.GAU_1) = 'PPMIA' then 'DVM'
+			 end||to_char(sysdate, 'YYYYMMDDHHMISS')||to_char(subledger.Deposit_Date,'MMDD') as document_number,
+		subledger.deposit_ref_number as deposit_ref_number,	 
+		subledger.insertdate	
+		FROM npsp_reporting.subledger subledger 					
+		WHERE 1 = 1						
+		AND subledger.gl_eligible = 'Y'		
+		AND substring(subledger.GAU_1, 1, 2) IN ('C3','C4','PC','PV') 	
+		AND LENGTH(isnull(subledger.process_id,'')) = 0
+		and npsp_reporting.fn_ppfa_fiscal_year(subledger.deposit_date) = i_fiscal_year
+		and npsp_reporting.fn_ppfa_fiscal_month(subledger.deposit_date) >=  i_min_fiscal_month
+    AND SUBLEDGER_RUN_ID <> '20241207083307' --- CB 8/29/25  hard coded exclusion for old subledger run somehow having deposit dates for 11-07-25. These get pulled into GL as FY values are "2026" "05" and blow up procedure- This line can be removed after that month is closed
+		and substring(subledger.Campaign_Code,2,1) = 'N');
+	
+
+-- create aggregated view of the eligble transactions	
+CREATE OR REPLACE VIEW npsp_reporting.v_subledger_for_gl
+AS SELECT 
+financial_site, 
+deposit_date, 
+gau_1, 
+gau_2, 
+gl_account_credit, 
+gl_account_debit, 
+resource_id, 
+gau_project, 
+gau_department, 
+fund, 
+geo_area, 
+description, 
+business_partner_id, 
+document_number,
+sum(amount) AS amount
+FROM npsp_reporting.ppfa_nightly_subledger_for_gl
+GROUP BY financial_site, deposit_date, gau_1, gau_2, gl_account_credit, gl_account_debit, resource_id, gau_project, gau_department, fund, geo_area, description, business_partner_id,document_number
+with no schema binding; 
+
+
+i_subledger_run_id =  (select listagg(distinct subledger_run_id,', ') from npsp_reporting.ppfa_nightly_subledger_for_gl); 
+i_gl_file_date = (select listagg(distinct trunc(insertdate),', ') from npsp_reporting.ppfa_nightly_subledger_for_gl);
+	
+ 
+-- create a table in the special format needed for the finance system
+DROP TABLE npsp_reporting.ppfa_gl_download_regular CASCADE;
+CREATE TABLE IF NOT EXISTS npsp_reporting.ppfa_gl_download_regular
+(
+	deposit_group VARCHAR(300)   ENCODE lzo
+	,orig_field2 VARCHAR(300)   ENCODE lzo
+	,field1 VARCHAR(300)   ENCODE lzo
+	,field2 VARCHAR(300)   ENCODE lzo
+	,field3 VARCHAR(300)   ENCODE lzo
+	,field4 VARCHAR(300)   ENCODE lzo
+	,field5 VARCHAR(300)   ENCODE lzo
+	,field6 VARCHAR(300)   ENCODE lzo
+	,field7 VARCHAR(300)   ENCODE lzo
+	,field8 VARCHAR(300)   ENCODE lzo
+	,field9 VARCHAR(300)   ENCODE lzo
+	,field10 VARCHAR(300)   ENCODE lzo
+	,field11 VARCHAR(300)   ENCODE lzo
+	,field12 VARCHAR(300)   ENCODE lzo
+	,field13 VARCHAR(300)   ENCODE lzo
+	,field14 VARCHAR(300)   ENCODE lzo
+	,field15 VARCHAR(300)   ENCODE lzo
+	,field16 VARCHAR(300)   ENCODE lzo
+	,field17 VARCHAR(300)   ENCODE lzo
+	,field18 VARCHAR(300)   ENCODE lzo
+	,field19 VARCHAR(300)   ENCODE lzo
+	,field20 VARCHAR(300)   ENCODE lzo
+	,field21 VARCHAR(300)   ENCODE lzo
+	,field22 VARCHAR(300)   ENCODE lzo
+	,field23 VARCHAR(300)   ENCODE lzo
+)
+DISTSTYLE AUTO
+;
+    
+     
+insert into npsp_reporting.ppfa_gl_download_regular(
+select 
+deposit_group
+,field2 as Orig_field2
+,field1
+,case when field1 = 'A' then '1' else field2 end field2
+,field3
+,field4
+,field5
+,field6
+,field7
+,field8
+,field9
+,field10
+,field11
+,field12
+,field13
+,field14
+,field15
+,field16
+,field17
+,field18
+,field19
+,field20
+,field21
+,field22
+,field23
+from(
+
+
+select 
+row_number() OVER 
+  (ORDER BY  replace(trunc(deposit_date),'-','')|| financial_site ) 	AS deposit_group
+,to_char(deposit_date,'YYYYMMDD')||financial_site						as deposit_date_site
+,'G'                                                                    AS field1
+,'DEV'                                                                  AS field2
+,null									                         		AS depsite	
+,x.document_number														AS field3
+,x.Financial_Site                                                     	AS field4
+,'DEV'                                                             		AS field5
+,to_char(x.Deposit_Date,'YYYYMMDD')                               		AS field6
+,v_process_id 													 		AS field7
+,'USD'                                                             		AS field8
+,'STDCO'                                                           		AS field9
+,null							                                    	AS field10
+,null							                                     	AS field11
+,null							                                     	AS field12
+,null							                                     	AS field13
+,null							                                     	AS field14
+,null							                                     	AS field15
+,null							                                     	AS field16
+,null                                                              		AS field17            
+,null							                                     	AS field18
+,null							                                     	AS field19
+,null							                                     	AS field20
+,null							                                     	AS field21
+,null							                                     	AS field22
+,null                                                              		AS debit_credit 
+,null																	AS field23
+FROM (SELECT * 
+      FROM npsp_reporting.v_subledger_for_gl
+      ORDER BY Deposit_Date, financial_site ASC
+     ) x
+
+group by deposit_date, financial_site,document_number
+UNION
+
+SELECT deposit_group.deposit_group      
+     
+     ,to_char(deposit_date,'YYYYMMDD')||financial_site					 AS deposit_date_site 
+      ,'D'                                                               AS field1
+,row_number() over
+     (partition by replace(trunc(deposit_date),'-','')|| financial_site
+       ORDER BY y.Deposit_Date asc, y.financial_site asc, y.amount asc, y.description asc,y.gau_1 asc, y.debit_credit desc):: varchar(300) AS field2
+      ,to_char(deposit_date,'YYYYMMDD')||financial_site AS depsite
+      ,'1'									                             AS field3
+,row_number() over
+     (partition by replace(trunc(deposit_date),'-','')|| financial_site
+       ORDER BY y.Deposit_Date asc, y.financial_site asc, y.amount asc, y.description asc,y.gau_1 asc, y.debit_credit desc):: varchar(300) AS field4
+      ,y.Financial_Site              				                     AS field5 
+	  
+	  
+      ,case when y.gl_account_credit = '13000' and y.debit_credit = 'CREDIT' then 'XXD001'	
+			when y.gl_account_debit = '13000' and y.debit_credit = 'DEBIT' then 'XXD001'
+			when y.gl_account_credit in ('20000','20001') and y.debit_credit = 'CREDIT' then 'XXP001' 
+			else null 
+	   end								                                 AS field6 
+
+	  
+	  
+      ,CASE WHEN y.debit_credit='DEBIT' and y.gl_account_debit = '10010' THEN '12615'
+			WHEN y.debit_credit='DEBIT' and y.gl_account_debit = '10015' THEN '12610'
+			WHEN y.debit_credit='DEBIT' and y.gl_account_debit = '10205' THEN '12625'
+			WHEN y.debit_credit='DEBIT' and y.gl_account_debit = '10210' THEN '12620'
+			WHEN y.debit_credit='DEBIT' and y.gl_account_debit = '10260' THEN '12640'
+			WHEN y.debit_credit='DEBIT' and y.gl_account_debit = '10240' THEN '12630'
+			WHEN y.debit_credit='DEBIT' and y.gl_account_debit = '10150' THEN '12660'
+			WHEN y.debit_credit='DEBIT' and y.gl_account_debit 
+            not in ('10010','10015','10205','10210','10260','10240','10150') THEN gl_account_debit	
+
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit = '10010' THEN '12615'
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit = '10015' THEN '12610'
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit = '10205' THEN '12625'
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit = '10210' THEN '12620'
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit = '10260' THEN '12640'
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit = '10240' THEN '12630'
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit = '10150' THEN '12660'
+			WHEN y.debit_credit='CREDIT' and y.gl_account_credit 
+            not in ('10010'
+                    ,'10015'
+                    ,'10205'
+                    ,'10210'
+                    ,'10260'
+                    ,'10240'
+                    ,'10150') THEN gl_account_credit
+       END                                                              AS field7
+	  
+      ,case when y.gl_account_credit = '13000' and y.debit_credit = 'CREDIT' then 'XXD001' 
+	  
+			when y.gl_account_debit = '13000' and y.debit_credit = 'DEBIT' then 'XXD001'
+			when y.gl_account_credit in ('20000','20001') and y.debit_credit = 'CREDIT' then 'XXP001' 
+			else null 
+	   end   									                        AS field8
+      ,description								                        AS field9
+      ,CASE WHEN y.debit_credit='DEBIT' THEN 1			   
+            WHEN y.debit_credit='CREDIT' THEN -1
+       END ::varchar(300)     								                        AS field10
+      ,ABS(amount)::varchar(300)	                                                    AS field11
+      ,'USD'									                        AS field12
+      ,resource_id								                        AS field13
+      ,NULL                                                             AS field14
+      ,NULL       								                        AS field15
+      ,NULL  									                        AS field16
+      ,NULL      								                        AS field17
+      ,null									                            AS field18
+      ,null									                            AS field19
+      ,null									                            AS field20
+      ,null									                            AS field21
+      ,null									                            AS field22
+	  ,null 															as debit_credit
+	  ,null 															as field23
+      FROM(
+           SELECT 'DEBIT' debit_credit, d.* FROM npsp_reporting.v_subledger_for_gl  d 
+           UNION 
+           SELECT 'CREDIT' debit_credit, c.* FROM npsp_reporting.v_subledger_for_gl  c
+           ORDER BY Deposit_Date, financial_site, amount, description ASC
+     ) y 
+    left join (select row_number() over
+            (order by b.deposit_date_site asc) deposit_group
+            ,b.*
+            from
+            (select distinct to_char(deposit_date,'YYYYMMDD')||financial_site as deposit_date_site
+            from npsp_reporting.v_subledger_for_gl
+            order by Deposit_Date, financial_site, amount, description ASC
+            ) b
+            ) deposit_group on to_char(y.deposit_date,'YYYYMMDD')||y.financial_site = deposit_group.deposit_date_site
+
+UNION
+SELECT deposit_group.deposit_group  
+      ,to_char(deposit_date,'YYYYMMDD')||financial_site AS deposit_date_site
+      ,'A'                                                                         AS field1
+	  
+       ,row_number() over
+     (partition by replace(trunc(deposit_date),'-','')|| financial_site
+      ORDER BY y.Deposit_Date asc, y.financial_site asc, y.amount asc, y.description asc,y.gau_1 asc, y.debit_credit desc)::varchar(300)  AS field2
+	  ,to_char(deposit_date,'YYYYMMDD')||financial_site							   AS depsite
+      ,'100'									                                   AS field3
+      ,fund                            				                               AS field4
+	
+      ,'200'                               				                           AS field5
+      ,GAU_Department      					                                       AS field6
+      ,'201'                                                              	       AS field7
+      ,NULL                                       				                   AS field8
+      ,'300'									                                   AS field9
+      ,GAU_Project                                                                 AS field10
+      ,'301'									                                   AS field11
+      ,NULL                                                                        AS field12
+      ,'302'      								                                   AS field13
+      ,NULL									                                       AS field14
+      ,'400'      								                                   AS field15
+      ,resource_id								                                   AS field16
+      ,'500'									                                   AS field17
+      ,geo_area									                                   AS field18
+      ,'600'									                                   AS field19
+      ,null									                                       AS field20
+      ,'0'									                                       AS field21
+      ,ABS(amount)::varchar(300)								                   AS field22
+	  ,null                                                                        AS debit_credit
+	  ,null 																	   AS field23
+      FROM (
+           SELECT 'DEBIT' debit_credit, d.* FROM npsp_reporting.v_subledger_for_gl d
+           UNION 
+           SELECT 'CREDIT' debit_credit, c.* FROM npsp_reporting.v_subledger_for_gl c
+           ORDER BY Deposit_Date, financial_site, amount, description ASC
+     ) y 
+	 left join (select row_number() over
+            (order by b.deposit_date_site asc) deposit_group
+            ,b.*
+            from
+            (select distinct to_char(deposit_date,'YYYYMMDD')||financial_site as deposit_date_site
+            from npsp_reporting.v_subledger_for_gl
+            ) b
+            ) deposit_group on to_char(y.deposit_date,'YYYYMMDD')||y.financial_site = deposit_group.deposit_date_site
+) h
+
+order by deposit_group asc
+        ,cast(case when field2 = 'DEV' then '0'  else field2 end as integer) asc
+        ,field1 desc
+);
+
+
+
+CREATE OR REPLACE VIEW npsp_reporting.v_ppfa_gl_download_regular
+AS SELECT field1,
+          field2, 
+		  field3, 
+		  field4, 
+		  field5, 
+		  field6, 
+		  field7, 
+		  field8, 
+		  field9, 
+		  field10,
+		  field11, 
+		  field12, 
+		  field13, 
+		  field14, 
+		  field15, 
+		  field16, 
+		  field17, 
+		  field18, 
+		  field19, 
+		  field20, 
+		  field21, 
+		  field22,
+		  field23
+   FROM npsp_reporting.ppfa_gl_download_regular
+   ORDER BY deposit_group::integer, 
+        CASE
+            WHEN orig_field2::text = 'DEV'::text THEN '0'::character varying
+            ELSE orig_field2
+        END::integer, field1 DESC;
+		
+	
+-- update subledger and sf update tables 
+update npsp_reporting.subledger s 
+set process_id = v_process_id,
+document_number = t.document_number
+from npsp_reporting.ppfa_nightly_subledger_for_gl t
+where s.opportunity_etl_id = t.opportunity_etl_id
+and LENGTH(isnull(s.process_id,'')) = 0;
+
+update npsp_reporting.gl_opportunity_update u
+set process_id = v_process_id,
+journal_entry = t.document_number
+from npsp_reporting.ppfa_nightly_subledger_for_gl t
+where u.opportunity_id = t.opportunity_etl_id
+and LENGTH(isnull(u.process_id,'')) = 0;
+
+update npsp_reporting.gl_opppayment_update u
+set process_id = v_process_id,
+journal_entry = t.document_number
+from npsp_reporting.ppfa_nightly_subledger_for_gl t
+where u.payment_id = t.opportunity_etl_id
+and LENGTH(isnull(u.process_id,'')) = 0;
+ 
+i_line_count = 0;
+i_debit_amount = 0;
+
+
+
+i_line_count = (select isnull(count(field1),0) from npsp_reporting.ppfa_gl_download_regular where field1 = 'D');
+
+
+i_debit_amount = (select isnull(sum(field11) ,0) from npsp_reporting.ppfa_gl_download_regular where field1 = 'D' and field10 = '1');
+
+
+
+
+
+insert into npsp_reporting.tasks_gl_download values(i_subledger_run_id,v_process_id,i_gl_file_date, i_line_count, i_debit_amount,NULL, sysdate);      
+ 
+-- create a table and view of today's gl "file"  
+if i_line_count > 0
+	then 
+execute 'drop table if exists npsp_reporting.ppfa_gl_download_regular_'||i_subledger_run_id||' CASCADE';
+execute 'create table npsp_reporting.ppfa_gl_download_regular_'||i_subledger_run_id
+	|| ' as select * from npsp_reporting.ppfa_gl_download_regular where 1=2;';       
+
+
+execute 'insert into npsp_reporting.ppfa_gl_download_regular_'||i_subledger_run_id
+|| ' select * from npsp_reporting.ppfa_gl_download_regular;';
+
+
+execute 'create or replace view npsp_reporting.v_ppfa_gl_download_regular_'||i_subledger_run_id
+||' as '
+||' select field1 '
+||' ,field2 '
+||' ,field3 '
+||' ,field4 '
+||' ,field5 ' 
+||' ,field6 '
+||' ,field7 '
+||' ,field8 '
+||' ,field9 '
+||' ,field10 '
+||' ,field11 '
+||' ,field12 '
+||' ,field13 '
+||' ,field14 '
+||' ,field15 '
+||' ,field16 '
+||' ,field17 '
+||' ,field18 '
+||' ,field19 '
+||' ,field20 '
+||' ,field21 '
+||' ,field22 '
+||' ,field23 '
+||' from  npsp_reporting.ppfa_gl_download_regular_'||i_subledger_run_id 
+||' ORDER BY deposit_group::integer, ' 
+||'       CASE '
+||'          WHEN orig_field2::text = '||quote_literal('DEV')||'::text THEN '||quote_literal('0')||'::character varying '
+||'          ELSE orig_field2 '
+||'          END::integer, field1 DESC; ';
+
+end if;
+
+
+
+END;
+
+$$
+;
+
+**/
